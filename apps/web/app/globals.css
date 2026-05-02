@@ -25,3 +25,51 @@ input {
 .lk-video-conference {
   height: 100%;
 }
+
+.lk-room-container,
+.lk-video-conference,
+.lk-video-conference-inner {
+  min-height: 0;
+  height: 100%;
+  background: #0a0a0a;
+  color: #ffffff;
+}
+
+.lk-grid-layout {
+  display: grid;
+  min-height: 0;
+  height: 100%;
+  gap: 0.75rem;
+  padding: 0.75rem;
+}
+
+.lk-participant-tile {
+  overflow: hidden;
+  border: 1px solid #262626;
+  border-radius: 0.5rem;
+  background: #171717;
+}
+
+.lk-participant-media-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.lk-control-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  border-top: 1px solid #262626;
+  background: #0a0a0a;
+  padding: 0.75rem;
+}
+
+.lk-button {
+  border: 1px solid #404040;
+  border-radius: 0.375rem;
+  background: #171717;
+  color: #ffffff;
+  padding: 0.625rem 0.875rem;
+}

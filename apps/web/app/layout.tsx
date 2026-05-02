@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import "@livekit/components-styles/dist/general/index.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
