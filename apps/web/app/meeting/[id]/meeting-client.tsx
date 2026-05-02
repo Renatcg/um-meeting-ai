@@ -1,7 +1,15 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { LiveKitRoom, VideoConference } from "@livekit/components-react";
+import {
+  ControlBar,
+  GridLayout,
+  LiveKitRoom,
+  ParticipantTile,
+  RoomAudioRenderer,
+  useTracks,
+} from "@livekit/components-react";
+import { Track } from "livekit-client";
 import { useRouter } from "next/navigation";
 
 type Step = "lobby" | "room";
@@ -75,6 +83,75 @@ function roleLabel(role: ParticipantRole) {
   }
 
   return "Participante";
+}
+
+function MeetingGrid({ meetingId }: { meetingId: string }) {
+  const [clock, setClock] = useState("");
+  const tracks = useTracks(
+    [
+      { source: Track.Source.ScreenShare, withPlaceholder: false },
+      { source: Track.Source.Camera, withPlaceholder: true },
+    ],
+    { onlySubscribed: false },
+  );
+
+  useEffect(() => {
+    function updateClock() {
+      setClock(
+        new Date().toLocaleTimeString("pt-BR", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      );
+    }
+
+    updateClock();
+    const interval = window.setInterval(updateClock, 30000);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-neutral-950">
+      <div className="min-h-0 flex-1 px-4 pb-3 pt-16 sm:px-6 sm:pt-20">
+        <GridLayout
+          tracks={tracks}
+          className="um-meeting-grid h-full min-h-0"
+        >
+          <ParticipantTile />
+        </GridLayout>
+      </div>
+
+      <footer className="um-meeting-footer grid min-h-24 shrink-0 grid-cols-1 items-center gap-4 border-t border-white/10 bg-neutral-950 px-4 py-4 text-white md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:px-6">
+        <div className="hidden min-w-0 md:block">
+          <p className="truncate font-mono text-sm text-neutral-300">
+            {clock || "--:--"} | {meetingId}
+          </p>
+        </div>
+
+        <div className="um-meeting-controls min-w-0">
+          <ControlBar
+            controls={{
+              microphone: true,
+              camera: true,
+              screenShare: true,
+              chat: false,
+              leave: true,
+              settings: false,
+            }}
+          />
+        </div>
+
+        <div className="hidden justify-end gap-3 md:flex">
+          <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-2 text-xs text-neutral-300">
+            Grid
+          </span>
+        </div>
+      </footer>
+
+      <RoomAudioRenderer />
+    </div>
+  );
 }
 
 export default function MeetingClient({ meetingId }: { meetingId: string }) {
@@ -335,13 +412,13 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
             serverUrl={connection.url}
             data-lk-theme="default"
             className="h-full min-h-0 overflow-hidden"
-            onDisconnected={() => setStep("lobby")}
+            onDisconnected={leaveMeeting}
           >
-            <VideoConference />
+            <MeetingGrid meetingId={meetingId} />
           </LiveKitRoom>
         </section>
 
-        <aside className="flex h-full min-h-0 flex-col overflow-hidden border-l border-neutral-800 bg-neutral-950 text-white">
+        <aside className="hidden h-full min-h-0 flex-col overflow-hidden border-l border-neutral-800 bg-neutral-950 text-white lg:flex">
           <div className="border-b border-neutral-800 px-5 py-4">
             <p className="text-xs font-medium uppercase tracking-wide text-teal-300">
               Conversa
