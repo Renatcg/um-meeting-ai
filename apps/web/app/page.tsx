@@ -116,7 +116,7 @@ export default function HomePage() {
 
         <div className="hidden lg:block">
           <p className="font-mono text-xs uppercase text-nmdi-gold">Dashboard</p>
-          <p className="mt-1 text-sm text-nmdi-muted">Videochamadas com UM Copilot</p>
+          <p className="mt-1 text-sm text-nmdi-muted">Videochamadas com Jarvis</p>
         </div>
 
         <div className="ml-auto flex items-center gap-3 sm:gap-5">
@@ -176,7 +176,7 @@ export default function HomePage() {
 
         <div className="absolute bottom-5 left-5 right-5 rounded-lg border border-white/10 bg-white/[0.04] p-4">
           <p className="font-mono text-xs uppercase text-nmdi-gold">Status</p>
-          <p className="mt-2 text-sm font-medium text-nmdi-ivory">Copilot pronto</p>
+          <p className="mt-2 text-sm font-medium text-nmdi-ivory">Jarvis pronto</p>
           <p className="mt-1 text-xs leading-5 text-nmdi-muted">
             LiveKit, API e agente conectados para testes.
           </p>

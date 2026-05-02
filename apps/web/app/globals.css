@@ -167,6 +167,32 @@ input {
   backdrop-filter: none;
 }
 
+.um-meeting-controls .lk-button-group {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #2f3338;
+}
+
+.um-meeting-controls .lk-button-group > .lk-button {
+  border-radius: 999px 0 0 999px;
+}
+
+.um-meeting-controls .lk-button-group-menu {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.um-meeting-controls .lk-button-group-menu .lk-button {
+  width: 2.25rem;
+  min-width: 2.25rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0 999px 999px 0;
+}
+
 .lk-button {
   min-width: 2.75rem;
   min-height: 2.5rem;
@@ -193,7 +219,6 @@ input {
   border-radius: 999px;
   background: #2f3338;
   padding: 0;
-  font-size: 0;
   box-shadow: none;
   white-space: nowrap;
 }
@@ -224,6 +249,8 @@ input {
 }
 
 .um-meeting-controls .lk-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(200, 164, 93, 0.55);
   background: #3b4047;
 }
 
@@ -234,8 +261,8 @@ input {
 }
 
 .um-meeting-controls .lk-disconnect-button {
-  width: 4.75rem;
-  min-width: 4.75rem;
+  width: 3.75rem;
+  min-width: 3.75rem;
   border-color: rgba(239, 68, 68, 0.7);
   background: #dc4b3f;
 }
@@ -271,7 +298,12 @@ input {
   }
 
   .um-meeting-controls .lk-disconnect-button {
-    width: 4rem;
-    min-width: 4rem;
+    width: 3.5rem;
+    min-width: 3.5rem;
+  }
+
+  .um-meeting-controls .lk-button-group-menu .lk-button {
+    width: 2rem;
+    min-width: 2rem;
   }
 }

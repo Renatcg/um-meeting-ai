@@ -25,10 +25,10 @@ load_dotenv(".env")
 
 logger = logging.getLogger(__name__)
 
-AGENT_NAME = os.getenv("COPILOT_AGENT_NAME", "um-copilot")
-DISPLAY_NAME = os.getenv("COPILOT_DISPLAY_NAME", "UM Copilot")
+AGENT_NAME = os.getenv("JARVIS_AGENT_NAME", "jarvis")
+DISPLAY_NAME = os.getenv("JARVIS_DISPLAY_NAME", "Jarvis")
 OPENAI_REALTIME_MODEL = os.getenv("OPENAI_REALTIME_MODEL", "gpt-realtime")
-OPENAI_REALTIME_VOICE = os.getenv("OPENAI_REALTIME_VOICE", "marin")
+OPENAI_REALTIME_VOICE = os.getenv("OPENAI_REALTIME_VOICE", "cedar")
 OPENAI_TRANSCRIPTION_MODEL = os.getenv(
     "OPENAI_TRANSCRIPTION_MODEL",
     "gpt-4o-mini-transcribe",
@@ -36,6 +36,9 @@ OPENAI_TRANSCRIPTION_MODEL = os.getenv(
 API_URL = os.getenv("API_URL", "http://localhost:8000").rstrip("/")
 AGENT_API_KEY = os.getenv("AGENT_API_KEY")
 KNOWLEDGE_MIN_SCORE = float(os.getenv("KNOWLEDGE_MIN_SCORE", "0.25"))
+WAKE_WORDS = ("jarvis",)
+INITIAL_ACTIVE_LISTEN_SECONDS = 15.0
+FOLLOW_UP_SILENCE_SECONDS = 5.0
 
 
 @function_tool(
@@ -91,7 +94,7 @@ async def search_knowledge_base(query: str) -> str:
     return "\n\n---\n\n".join(formatted_results)
 
 
-class UMCopilot(Agent):
+class JarvisAgent(Agent):
     def __init__(self) -> None:
         super().__init__(
             instructions=SYSTEM_PROMPT,
@@ -159,9 +162,10 @@ def log_task_failure(task: asyncio.Task[None]) -> None:
 
 
 @server.rtc_session(agent_name=AGENT_NAME)
-async def um_copilot(ctx: agents.JobContext):
+async def jarvis(ctx: agents.JobContext):
     meeting_id = get_meeting_id(ctx)
     started_at = time.monotonic()
+    active_until = 0.0
 
     session = AgentSession(
         llm=openai.realtime.RealtimeModel(
@@ -180,31 +184,47 @@ async def um_copilot(ctx: agents.JobContext):
 
     @session.on("user_input_transcribed")
     def on_user_input_transcribed(event: UserInputTranscribedEvent) -> None:
+        nonlocal active_until
+
         if not event.is_final:
             return
 
         transcript = event.transcript.strip()
-        if transcript:
-            timestamp_seconds = time.monotonic() - started_at
-            speaker_name = get_speaker_name(ctx, event.speaker_id)
-            task = asyncio.create_task(
-                save_transcript_segment(
-                    meeting_id=meeting_id,
-                    speaker_name=speaker_name,
-                    timestamp_seconds=timestamp_seconds,
-                    content=transcript,
-                )
-            )
-            task.add_done_callback(log_task_failure)
-
-        if "copilot" not in transcript.lower():
+        if not transcript:
             return
+
+        timestamp_seconds = time.monotonic() - started_at
+        speaker_name = get_speaker_name(ctx, event.speaker_id)
+        task = asyncio.create_task(
+            save_transcript_segment(
+                meeting_id=meeting_id,
+                speaker_name=speaker_name,
+                timestamp_seconds=timestamp_seconds,
+                content=transcript,
+            )
+        )
+        task.add_done_callback(log_task_failure)
+
+        normalized_transcript = transcript.lower()
+        now = time.monotonic()
+        was_called = any(wake_word in normalized_transcript for wake_word in WAKE_WORDS)
+        is_active_follow_up = now <= active_until
+
+        if not was_called and not is_active_follow_up:
+            return
+
+        active_until = now + (
+            INITIAL_ACTIVE_LISTEN_SECONDS if was_called else FOLLOW_UP_SILENCE_SECONDS
+        )
 
         session.generate_reply(
             user_input=transcript,
             instructions=(
-                "Responda ao chamado do participante. Seja breve, em portugues "
-                "do Brasil. Se a pergunta depender de informacao documental, "
+                "Voce e Jarvis. Responda ao participante de forma breve, em "
+                "portugues do Brasil e com tom masculino, calmo e profissional. "
+                "Depois de ser chamado por Jarvis, trate falas subsequentes como "
+                "continuidade da conversa enquanto a janela ativa estiver aberta. "
+                "Se a pergunta depender de informacao documental, "
                 "consulte a ferramenta search_knowledge_base antes de responder. "
                 "Se a ferramenta retornar NO_MATCH, diga que nao encontrou "
                 "informacao suficiente."
@@ -213,7 +233,7 @@ async def um_copilot(ctx: agents.JobContext):
 
     await session.start(
         room=ctx.room,
-        agent=UMCopilot(),
+        agent=JarvisAgent(),
         room_options=room_io.RoomOptions(
             audio_input=room_io.AudioInputOptions(),
             audio_output=room_io.AudioOutputOptions(),

@@ -6,7 +6,7 @@ Backend do UM Meeting AI.
 
 - Autenticacao e autorizacao.
 - Criacao e gerenciamento de reunioes.
-- Geracao de tokens LiveKit para participantes e para o UM Copilot.
+- Geracao de tokens LiveKit para participantes e para o Jarvis.
 - Persistencia de transcricoes, notas, dicas e resumos.
 - Orquestracao de jobs com Redis.
 - Integracao com storage S3/R2 para gravacoes.

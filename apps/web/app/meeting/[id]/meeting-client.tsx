@@ -131,6 +131,8 @@ function MeetingGrid({ meetingId }: { meetingId: string }) {
 
         <div className="um-meeting-controls min-w-0">
           <ControlBar
+            variation="minimal"
+            saveUserChoices
             controls={{
               microphone: true,
               camera: true,

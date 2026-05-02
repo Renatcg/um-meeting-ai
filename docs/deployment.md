@@ -36,10 +36,10 @@ Agent:
 
 ```bash
 API_URL=https://your-api.example.com
-COPILOT_AGENT_NAME=um-copilot
-COPILOT_DISPLAY_NAME=UM Copilot
+JARVIS_AGENT_NAME=jarvis
+JARVIS_DISPLAY_NAME=Jarvis
 OPENAI_REALTIME_MODEL=gpt-realtime
-OPENAI_REALTIME_VOICE=marin
+OPENAI_REALTIME_VOICE=cedar
 OPENAI_TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe
 ```
 
@@ -67,7 +67,7 @@ The API folder includes `requirements.txt` and `Procfile` for this mode.
 
 Use `apps/agent/Dockerfile`.
 
-The agent does not need to expose an HTTP port. It must keep running so LiveKit can dispatch the `um-copilot` worker into rooms.
+The agent does not need to expose an HTTP port. It must keep running so LiveKit can dispatch the `jarvis` worker into rooms.
 
 ## Database
 

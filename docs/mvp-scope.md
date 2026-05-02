@@ -5,11 +5,11 @@
 - Criar uma reuniao.
 - Entrar em uma sala LiveKit.
 - Gerar token de participante pelo backend.
-- Adicionar UM Copilot como participante da sala.
+- Adicionar Jarvis como participante da sala.
 - Transcrever a reuniao.
 - Exibir transcricao ao vivo.
 - Gerar notas e resumo final.
-- Permitir que o UM Copilot responda quando chamado.
+- Permitir que o Jarvis responda quando chamado.
 - Enviar dicas privadas para um usuario marcado como comercial.
 
 ## Pode esperar

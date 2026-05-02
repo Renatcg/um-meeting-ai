@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     hosted_web_origin: str = "https://um-copilot.vercel.app"
     agent_api_key: str | None = None
-    copilot_agent_name: str = "um-copilot"
+    jarvis_agent_name: str = "jarvis"
     copilot_auto_dispatch: bool = True
     copilot_dispatch_timeout_seconds: float = 5.0
 

@@ -2,7 +2,7 @@
 
 ## Visao geral
 
-O UM Meeting AI e uma plataforma de reunioes em que participantes humanos entram em uma sala LiveKit e um agente de IA, o **UM Copilot**, participa como mais um membro da chamada.
+O UM Meeting AI e uma plataforma de reunioes em que participantes humanos entram em uma sala LiveKit e um agente de IA, o **Jarvis**, participa como mais um membro da chamada.
 
 O frontend cria a experiencia da reuniao, o backend controla identidade, permissoes e tokens, e o agente executa a inteligencia em tempo real.
 
@@ -33,7 +33,7 @@ Aplicacao Next.js responsavel pela interface do usuario:
 - painel de transcricao;
 - painel de notas;
 - dicas privadas para o comercial;
-- estado visual do UM Copilot.
+- estado visual do Jarvis.
 
 ### apps/api
 
@@ -49,7 +49,7 @@ API FastAPI responsavel por regras de negocio e integracoes server-side:
 
 ### apps/agent
 
-Worker do UM Copilot:
+Worker do Jarvis:
 
 - conecta em salas LiveKit;
 - recebe audio e eventos da sala;
@@ -80,7 +80,7 @@ Entidades iniciais provaveis:
 2. Frontend chama a API para criar a sessao e obter token LiveKit.
 3. API gera token LiveKit com permissoes adequadas.
 4. Participante entra na sala LiveKit.
-5. API agenda ou aciona o UM Copilot para entrar na mesma sala.
+5. API agenda ou aciona o Jarvis para entrar na mesma sala.
 6. Agente entra como participante LiveKit.
 7. Agente escuta audio, transcreve e envia eventos estruturados.
 8. API persiste transcricao, notas e mensagens relevantes.
@@ -89,7 +89,7 @@ Entidades iniciais provaveis:
 
 ## Transcricao da Sprint 3
 
-Na Sprint 3, o UM Copilot usa o audio recebido via LiveKit Agents e a transcricao do OpenAI Realtime para gerar trechos finais de conversa.
+Na Sprint 3, o Jarvis usa o audio recebido via LiveKit Agents e a transcricao do OpenAI Realtime para gerar trechos finais de conversa.
 
 Cada trecho e enviado para a API e salvo em PostgreSQL na tabela `transcript_segments` com:
 
@@ -140,7 +140,7 @@ Tabelas:
 
 O endpoint `POST /knowledge/search` gera embedding para a consulta e retorna os chunks mais similares.
 
-O UM Copilot tem a ferramenta `search_knowledge_base`. Quando for chamado e a pergunta depender de documentos, ele deve consultar a base. Se a busca nao retornar informacao suficiente, o Copilot deve dizer isso claramente ao participante.
+O Jarvis tem a ferramenta `search_knowledge_base`. Quando for chamado e a pergunta depender de documentos, ele deve consultar a base. Se a busca nao retornar informacao suficiente, Jarvis deve dizer isso claramente ao participante.
 
 ## Dados em tempo real
 
@@ -156,7 +156,7 @@ A decisao final deve ser tomada quando o MVP definir quais eventos precisam ser 
 
 O MVP precisa tratar separadamente:
 
-- mensagens publicas do UM Copilot na reuniao;
+- mensagens publicas do Jarvis na reuniao;
 - respostas por voz audiveis por todos;
 - dicas privadas visiveis apenas para o comercial;
 - transcricoes e gravacoes com acesso controlado.

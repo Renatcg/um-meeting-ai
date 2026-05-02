@@ -1,6 +1,6 @@
 # apps/agent
 
-Agente de IA do UM Meeting AI: **UM Copilot**.
+Agente de IA do UM Meeting AI: **Jarvis**.
 
 ## Responsabilidades
 
@@ -17,17 +17,17 @@ Agente de IA do UM Meeting AI: **UM Copilot**.
 
 ## Sprint 2
 
-Implementa o primeiro worker do **UM Copilot** com LiveKit Agents.
+Implementa o primeiro worker do **Jarvis** com LiveKit Agents.
 
 O agente:
 
-- registra o agent name `um-copilot`;
+- registra o agent name `jarvis`;
 - entra na sala quando o backend cria um dispatch;
-- aparece conceitualmente como UM Copilot;
+- aparece conceitualmente como Jarvis;
 - escuta audio da reuniao;
 - usa OpenAI Realtime para responder por voz;
 - transcreve a fala de entrada para detectar chamadas;
-- gera resposta apenas quando a transcricao final contem "Copilot" ou "UM Copilot".
+- gera resposta apenas quando a transcricao final contem "Jarvis".
 - envia cada trecho final transcrito para a API salvar no PostgreSQL.
 - consulta a base de conhecimento pela ferramenta `search_knowledge_base` quando a pergunta depende de documentos.
 
@@ -57,4 +57,4 @@ pip install -e .
 python agent.py dev
 ```
 
-Em outro terminal, rode a API e o frontend. Ao entrar em uma reuniao, o backend tentara despachar o agente `um-copilot` para a mesma sala.
+Em outro terminal, rode a API e o frontend. Ao entrar em uma reuniao, o backend tentara despachar o agente `jarvis` para a mesma sala.
