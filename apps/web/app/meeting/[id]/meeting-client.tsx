@@ -1,9 +1,9 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { LiveKitRoom, VideoConference } from "@livekit/components-react";
 
-type Step = "profile" | "consent" | "room";
+type Step = "lobby" | "room";
 type ParticipantRole = "host" | "commercial" | "client" | "observer";
 type SidePanelTab = "transcript" | "sales";
 
@@ -43,6 +43,7 @@ type SalesRecommendation = {
 };
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const commercialUserEmails = new Set(["renato@coevo.ai", "marina@coevo.ai"]);
 
 function formatTimestamp(seconds: number) {
   const totalSeconds = Math.max(0, Math.floor(seconds));
@@ -51,8 +52,32 @@ function formatTimestamp(seconds: number) {
   return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
 }
 
+function inferParticipantRole(email: string, isHostCreator: boolean): ParticipantRole {
+  if (isHostCreator) {
+    return "host";
+  }
+
+  if (commercialUserEmails.has(email.trim().toLowerCase())) {
+    return "commercial";
+  }
+
+  return "client";
+}
+
+function roleLabel(role: ParticipantRole) {
+  if (role === "host") {
+    return "Host";
+  }
+
+  if (role === "commercial") {
+    return "Comercial";
+  }
+
+  return "Participante";
+}
+
 export default function MeetingClient({ meetingId }: { meetingId: string }) {
-  const [step, setStep] = useState<Step>("profile");
+  const [step, setStep] = useState<Step>("lobby");
   const [participant, setParticipant] = useState<Participant>({
     name: "",
     email: "",
@@ -67,9 +92,73 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
   const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>("transcript");
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isHostCreator, setIsHostCreator] = useState(false);
+  const [inviteLink, setInviteLink] = useState("");
+  const [copiedInviteLink, setCopiedInviteLink] = useState(false);
+  const [cameraError, setCameraError] = useState(false);
+  const previewVideoRef = useRef<HTMLVideoElement | null>(null);
+  const previewStreamRef = useRef<MediaStream | null>(null);
+
+  const inferredRole = inferParticipantRole(participant.email, isHostCreator);
 
   const canViewSalesPanel =
     connection?.role === "host" || connection?.role === "commercial";
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    setIsHostCreator(params.get("host") === "1");
+    setInviteLink(`${window.location.origin}/meeting/${meetingId}`);
+  }, [meetingId]);
+
+  useEffect(() => {
+    setParticipant((current) => ({
+      ...current,
+      role: inferParticipantRole(current.email, isHostCreator),
+    }));
+  }, [isHostCreator, participant.email]);
+
+  useEffect(() => {
+    if (step !== "lobby") {
+      return;
+    }
+
+    let active = true;
+
+    async function startPreview() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+
+        if (!active) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        previewStreamRef.current = stream;
+        if (previewVideoRef.current) {
+          previewVideoRef.current.srcObject = stream;
+        }
+      } catch {
+        if (active) {
+          setCameraError(true);
+        }
+      }
+    }
+
+    startPreview();
+
+    return () => {
+      active = false;
+      previewStreamRef.current?.getTracks().forEach((track) => track.stop());
+      previewStreamRef.current = null;
+    };
+  }, [step]);
 
   useEffect(() => {
     if (step !== "room") {
@@ -144,12 +233,6 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
     };
   }, [canViewSalesPanel, connection, meetingId, step]);
 
-  function submitProfile(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
-    setStep("consent");
-  }
-
   async function joinMeeting(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -168,7 +251,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
         body: JSON.stringify({
           name: participant.name,
           email: participant.email,
-          role: participant.role,
+          role: inferredRole,
           lgpd_accepted: acceptedLgpd,
         }),
       });
@@ -181,12 +264,26 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
       }
 
       const tokenResponse = (await response.json()) as TokenResponse;
+      previewStreamRef.current?.getTracks().forEach((track) => track.stop());
+      previewStreamRef.current = null;
       setConnection(tokenResponse);
       setStep("room");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro inesperado.");
     } finally {
       setIsJoining(false);
+    }
+  }
+
+  async function copyInviteLink() {
+    setCopiedInviteLink(false);
+
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      setCopiedInviteLink(true);
+      window.setTimeout(() => setCopiedInviteLink(false), 1800);
+    } catch {
+      setError("Nao foi possivel copiar o link automaticamente.");
     }
   }
 
@@ -201,7 +298,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
             serverUrl={connection.url}
             data-lk-theme="default"
             className="h-full"
-            onDisconnected={() => setStep("profile")}
+            onDisconnected={() => setStep("lobby")}
           >
             <VideoConference />
           </LiveKitRoom>
@@ -308,145 +405,143 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-6 py-10">
-      <section className="w-full max-w-2xl">
-        <div className="mb-8">
-          <p className="mb-3 text-sm font-medium uppercase tracking-wide text-brand">
-            Sala {meetingId}
-          </p>
-          <h1 className="text-4xl font-semibold text-ink">
-            Entre na reuniao com audio e video.
-          </h1>
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-nmdi-ink px-5 py-10 text-nmdi-ivory">
+      <video
+        ref={previewVideoRef}
+        autoPlay
+        muted
+        playsInline
+        className="absolute inset-0 h-full w-full scale-x-[-1] object-cover opacity-70"
+      />
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(11,13,18,0.88),rgba(11,13,18,0.38)),radial-gradient(circle_at_50%_0%,rgba(200,164,93,0.18),transparent_35%)]" />
+
+      {cameraError ? (
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.035)_1px,transparent_1px)] bg-[length:42px_42px]" />
+      ) : null}
+
+      <form
+        onSubmit={joinMeeting}
+        className="relative z-10 w-full max-w-xl rounded-lg border border-white/10 bg-nmdi-ink/[0.82] p-6 shadow-nmdi-deep backdrop-blur-xl sm:p-8"
+      >
+        <p className="mb-3 inline-flex rounded-full border border-nmdi-gold/30 bg-nmdi-gold/10 px-3 py-1 font-mono text-xs uppercase text-nmdi-gold">
+          Sala {meetingId}
+        </p>
+        <h1 className="font-display text-3xl font-semibold leading-tight text-nmdi-ivory">
+          Antes de entrar, identifique-se.
+        </h1>
+        <p className="mt-2 text-sm leading-6 text-nmdi-muted">
+          Sua camera ja esta em preview. O link abaixo pode ser enviado para os
+          convidados entrarem como participantes.
+        </p>
+
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
+              Nome
+            </span>
+            <input
+              className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-nmdi-ivory outline-none transition placeholder:text-nmdi-muted focus:border-nmdi-gold/70 focus:ring-2 focus:ring-nmdi-gold/20"
+              value={participant.name}
+              onChange={(event) =>
+                setParticipant((current) => ({
+                  ...current,
+                  name: event.target.value,
+                }))
+              }
+              minLength={2}
+              placeholder="Seu nome"
+              required
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
+              E-mail
+            </span>
+            <input
+              className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-nmdi-ivory outline-none transition placeholder:text-nmdi-muted focus:border-nmdi-gold/70 focus:ring-2 focus:ring-nmdi-gold/20"
+              type="email"
+              value={participant.email}
+              onChange={(event) =>
+                setParticipant((current) => ({
+                  ...current,
+                  email: event.target.value,
+                }))
+              }
+              placeholder="voce@empresa.com"
+              required
+            />
+          </label>
         </div>
 
-        {step === "profile" ? (
-          <form
-            onSubmit={submitProfile}
-            className="rounded-lg border border-line bg-white p-6 shadow-sm"
-          >
-            <h2 className="text-xl font-semibold text-ink">Seus dados</h2>
-            <p className="mt-2 text-sm leading-6 text-neutral-600">
-              Informe nome e e-mail para identificacao na sala.
-            </p>
-
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium text-ink">
-                  Nome
-                </span>
-                <input
-                  className="w-full rounded-md border border-line px-4 py-3 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-                  value={participant.name}
-                  onChange={(event) =>
-                    setParticipant((current) => ({
-                      ...current,
-                      name: event.target.value,
-                    }))
-                  }
-                  minLength={2}
-                  required
-                />
-              </label>
-
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium text-ink">
-                  E-mail
-                </span>
-                <input
-                  className="w-full rounded-md border border-line px-4 py-3 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-                  type="email"
-                  value={participant.email}
-                  onChange={(event) =>
-                    setParticipant((current) => ({
-                      ...current,
-                      email: event.target.value,
-                    }))
-                  }
-                  required
-                />
-              </label>
+        <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.04] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-mono text-xs uppercase text-nmdi-gold">
+                Papel automatico
+              </p>
+              <p className="mt-1 text-sm text-nmdi-muted">
+                Host para quem criou a sala; Comercial pelo cadastro; demais
+                entram como Participante.
+              </p>
             </div>
+            <span className="rounded-full border border-nmdi-gold/30 bg-nmdi-gold/10 px-3 py-1 font-mono text-xs uppercase text-nmdi-gold">
+              {roleLabel(inferredRole)}
+            </span>
+          </div>
+        </div>
 
-            <label className="mt-4 block">
-              <span className="mb-2 block text-sm font-medium text-ink">
-                Papel na reuniao
-              </span>
-              <select
-                className="w-full rounded-md border border-line bg-white px-4 py-3 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
-                value={participant.role}
-                onChange={(event) =>
-                  setParticipant((current) => ({
-                    ...current,
-                    role: event.target.value as ParticipantRole,
-                  }))
-                }
-              >
-                <option value="client">Cliente</option>
-                <option value="commercial">Comercial</option>
-                <option value="host">Host</option>
-                <option value="observer">Observador</option>
-              </select>
-            </label>
-
-            <div className="mt-6 flex justify-end">
-              <button
-                className="rounded-md bg-brand px-5 py-3 font-medium text-white transition hover:bg-teal-800"
-                type="submit"
-              >
-                Continuar
-              </button>
-            </div>
-          </form>
-        ) : null}
-
-        {step === "consent" ? (
-          <form
-            onSubmit={joinMeeting}
-            className="rounded-lg border border-line bg-white p-6 shadow-sm"
-          >
-            <h2 className="text-xl font-semibold text-ink">
-              Aceite LGPD obrigatorio
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-neutral-600">
-              Para entrar, voce concorda com o tratamento dos seus dados de
-              identificacao e midia da reuniao para viabilizar a chamada,
-              transcricao futura, seguranca e melhoria do servico.
-            </p>
-
-            <label className="mt-6 flex gap-3 rounded-md border border-line bg-mist p-4 text-sm leading-6 text-neutral-700">
+        <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.04] p-4">
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
+              Link para convidar
+            </span>
+            <div className="flex flex-col gap-3 sm:flex-row">
               <input
-                className="mt-1 h-4 w-4 accent-brand"
-                type="checkbox"
-                checked={acceptedLgpd}
-                onChange={(event) => setAcceptedLgpd(event.target.checked)}
+                className="min-w-0 flex-1 rounded-lg border border-white/10 bg-nmdi-ink/70 px-4 py-3 text-sm text-nmdi-muted outline-none"
+                value={inviteLink}
+                readOnly
               />
-              <span>
-                Li e aceito o tratamento de dados conforme a LGPD para participar
-                desta reuniao.
-              </span>
-            </label>
-
-            {error ? <p className="mt-4 text-sm text-red-700">{error}</p> : null}
-
-            <div className="mt-6 flex flex-wrap justify-between gap-3">
               <button
-                className="rounded-md border border-line px-5 py-3 font-medium text-ink transition hover:bg-mist"
+                className="rounded-lg border border-nmdi-gold/40 px-4 py-3 text-sm font-semibold text-nmdi-gold transition hover:bg-nmdi-gold/10"
                 type="button"
-                onClick={() => setStep("profile")}
+                onClick={copyInviteLink}
               >
-                Voltar
-              </button>
-              <button
-                className="rounded-md bg-brand px-5 py-3 font-medium text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={isJoining || !acceptedLgpd}
-                type="submit"
-              >
-                {isJoining ? "Entrando..." : "Entrar na sala"}
+                {copiedInviteLink ? "Copiado" : "Copiar link"}
               </button>
             </div>
-          </form>
+          </label>
+        </div>
+
+        <label className="mt-4 flex gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-4 text-sm leading-6 text-nmdi-muted">
+          <input
+            className="mt-1 h-4 w-4 accent-nmdi-gold"
+            type="checkbox"
+            checked={acceptedLgpd}
+            onChange={(event) => setAcceptedLgpd(event.target.checked)}
+          />
+          <span>
+            Li e aceito o tratamento de dados conforme a LGPD para participar
+            desta reuniao.
+          </span>
+        </label>
+
+        {error ? (
+          <p className="mt-4 rounded-lg border border-nmdi-red/25 bg-nmdi-red/10 px-4 py-3 text-sm text-red-200">
+            {error}
+          </p>
         ) : null}
-      </section>
+
+        <div className="mt-6 flex justify-end">
+          <button
+            className="rounded-lg bg-gradient-to-r from-nmdi-gold to-nmdi-amber px-6 py-3 font-bold text-nmdi-ink shadow-nmdi-glow transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={isJoining || !acceptedLgpd}
+            type="submit"
+          >
+            {isJoining ? "Entrando..." : "Entrar na sala"}
+          </button>
+        </div>
+      </form>
     </main>
   );
 }

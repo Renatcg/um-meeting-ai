@@ -39,7 +39,7 @@ const scheduledMeetings: ScheduledMeeting[] = [
     title: "Alinhamento de implantacao",
     host: "Time Coevo",
     startsAt: "Segunda, 11:00",
-    invitedAs: "Observador",
+    invitedAs: "Participante",
   },
 ];
 
@@ -76,7 +76,7 @@ export default function HomePage() {
       }
 
       const meeting = (await response.json()) as { id: string };
-      router.push(`/meeting/${meeting.id}`);
+      router.push(`/meeting/${meeting.id}?host=1`);
     } catch (err) {
       setFeedback(err instanceof Error ? err.message : "Erro inesperado.");
       setIsCreating(false);
