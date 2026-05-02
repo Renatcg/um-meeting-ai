@@ -55,6 +55,14 @@ Use `apps/api/Dockerfile`.
 
 The API must be publicly reachable by the web app and the agent.
 
+On Railway, if Docker builds are slow or stuck while pulling `python:3.12-slim`, use the native builder instead:
+
+- Root Directory: `apps/api`
+- Builder: Nixpacks
+- Start Command: `uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}`
+
+The API folder includes `requirements.txt` and `Procfile` for this mode.
+
 ## Agent worker
 
 Use `apps/agent/Dockerfile`.
