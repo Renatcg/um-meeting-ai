@@ -1,0 +1,370 @@
+from collections.abc import Sequence
+
+import psycopg
+from psycopg.rows import dict_row
+
+from app.config import Settings
+from app.models import (
+    KnowledgeDocument,
+    KnowledgeSearchResult,
+    SalesRecommendation,
+    TranscriptSegment,
+    TranscriptSegmentCreate,
+)
+from app.sales_coach_service import RecommendationDraft
+
+
+CREATE_TRANSCRIPT_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS transcript_segments (
+    id BIGSERIAL PRIMARY KEY,
+    meeting_id TEXT NOT NULL,
+    speaker_name TEXT NOT NULL,
+    timestamp_seconds DOUBLE PRECISION NOT NULL,
+    content TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
+
+CREATE_TRANSCRIPT_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_transcript_segments_meeting_time
+ON transcript_segments (meeting_id, timestamp_seconds, id);
+"""
+
+CREATE_RECOMMENDATIONS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS sales_recommendations (
+    id BIGSERIAL PRIMARY KEY,
+    meeting_id TEXT NOT NULL,
+    transcript_segment_id BIGINT NOT NULL REFERENCES transcript_segments(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('objection', 'risk', 'opportunity')),
+    severity TEXT NOT NULL CHECK (severity IN ('low', 'medium', 'high')),
+    title TEXT NOT NULL,
+    recommendation TEXT NOT NULL,
+    evidence TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
+
+CREATE_RECOMMENDATIONS_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_sales_recommendations_meeting_created
+ON sales_recommendations (meeting_id, created_at, id);
+"""
+
+CREATE_VECTOR_EXTENSION_SQL = "CREATE EXTENSION IF NOT EXISTS vector;"
+
+CREATE_KNOWLEDGE_DOCUMENTS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS knowledge_documents (
+    id BIGSERIAL PRIMARY KEY,
+    filename TEXT NOT NULL,
+    content_type TEXT NOT NULL,
+    size_bytes BIGINT NOT NULL,
+    chunk_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
+
+CREATE_KNOWLEDGE_CHUNKS_TABLE_SQL_TEMPLATE = """
+CREATE TABLE IF NOT EXISTS knowledge_chunks (
+    id BIGSERIAL PRIMARY KEY,
+    document_id BIGINT NOT NULL REFERENCES knowledge_documents(id) ON DELETE CASCADE,
+    chunk_index INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    embedding vector({dimensions}) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
+
+CREATE_KNOWLEDGE_CHUNKS_DOCUMENT_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_document
+ON knowledge_chunks (document_id, chunk_index);
+"""
+
+CREATE_KNOWLEDGE_CHUNKS_VECTOR_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_embedding
+ON knowledge_chunks USING hnsw (embedding vector_cosine_ops);
+"""
+
+
+async def init_database(settings: Settings) -> None:
+    async with await psycopg.AsyncConnection.connect(settings.database_url) as conn:
+        await conn.execute(CREATE_VECTOR_EXTENSION_SQL)
+        await conn.execute(CREATE_TRANSCRIPT_TABLE_SQL)
+        await conn.execute(CREATE_TRANSCRIPT_INDEX_SQL)
+        await conn.execute(CREATE_RECOMMENDATIONS_TABLE_SQL)
+        await conn.execute(CREATE_RECOMMENDATIONS_INDEX_SQL)
+        await conn.execute(CREATE_KNOWLEDGE_DOCUMENTS_TABLE_SQL)
+        await conn.execute(
+            CREATE_KNOWLEDGE_CHUNKS_TABLE_SQL_TEMPLATE.format(
+                dimensions=settings.openai_embedding_dimensions,
+            )
+        )
+        await conn.execute(CREATE_KNOWLEDGE_CHUNKS_DOCUMENT_INDEX_SQL)
+        await conn.execute(CREATE_KNOWLEDGE_CHUNKS_VECTOR_INDEX_SQL)
+
+
+async def insert_transcript_segment(
+    *,
+    settings: Settings,
+    meeting_id: str,
+    segment: TranscriptSegmentCreate,
+) -> TranscriptSegment:
+    query = """
+    INSERT INTO transcript_segments (
+        meeting_id,
+        speaker_name,
+        timestamp_seconds,
+        content
+    )
+    VALUES (%s, %s, %s, %s)
+    RETURNING id, meeting_id, speaker_name, timestamp_seconds, content, created_at;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                query,
+                (
+                    meeting_id,
+                    segment.speaker_name,
+                    segment.timestamp_seconds,
+                    segment.content,
+                ),
+            )
+            row = await cur.fetchone()
+
+    if row is None:
+        raise RuntimeError("Transcript segment insert did not return a row.")
+
+    return TranscriptSegment.model_validate(row)
+
+
+async def list_transcript_segments(
+    *,
+    settings: Settings,
+    meeting_id: str,
+) -> Sequence[TranscriptSegment]:
+    query = """
+    SELECT id, meeting_id, speaker_name, timestamp_seconds, content, created_at
+    FROM transcript_segments
+    WHERE meeting_id = %s
+    ORDER BY timestamp_seconds ASC, id ASC;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (meeting_id,))
+            rows = await cur.fetchall()
+
+    return [TranscriptSegment.model_validate(row) for row in rows]
+
+
+async def insert_sales_recommendations(
+    *,
+    settings: Settings,
+    meeting_id: str,
+    transcript_segment_id: int,
+    drafts: Sequence[RecommendationDraft],
+) -> Sequence[SalesRecommendation]:
+    if not drafts:
+        return []
+
+    query = """
+    INSERT INTO sales_recommendations (
+        meeting_id,
+        transcript_segment_id,
+        kind,
+        severity,
+        title,
+        recommendation,
+        evidence
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s)
+    RETURNING
+        id,
+        meeting_id,
+        transcript_segment_id,
+        kind,
+        severity,
+        title,
+        recommendation,
+        evidence,
+        created_at;
+    """
+
+    inserted: list[SalesRecommendation] = []
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            for draft in drafts:
+                await cur.execute(
+                    query,
+                    (
+                        meeting_id,
+                        transcript_segment_id,
+                        draft.kind,
+                        draft.severity,
+                        draft.title,
+                        draft.recommendation,
+                        draft.evidence,
+                    ),
+                )
+                row = await cur.fetchone()
+                if row is not None:
+                    inserted.append(SalesRecommendation.model_validate(row))
+
+    return inserted
+
+
+async def list_sales_recommendations(
+    *,
+    settings: Settings,
+    meeting_id: str,
+) -> Sequence[SalesRecommendation]:
+    query = """
+    SELECT
+        id,
+        meeting_id,
+        transcript_segment_id,
+        kind,
+        severity,
+        title,
+        recommendation,
+        evidence,
+        created_at
+    FROM sales_recommendations
+    WHERE meeting_id = %s
+    ORDER BY created_at ASC, id ASC;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (meeting_id,))
+            rows = await cur.fetchall()
+
+    return [SalesRecommendation.model_validate(row) for row in rows]
+
+
+def vector_literal(values: Sequence[float]) -> str:
+    return "[" + ",".join(f"{value:.8f}" for value in values) + "]"
+
+
+async def insert_knowledge_document(
+    *,
+    settings: Settings,
+    filename: str,
+    content_type: str,
+    size_bytes: int,
+) -> KnowledgeDocument:
+    query = """
+    INSERT INTO knowledge_documents (filename, content_type, size_bytes)
+    VALUES (%s, %s, %s)
+    RETURNING id, filename, content_type, size_bytes, chunk_count, created_at;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (filename, content_type, size_bytes))
+            row = await cur.fetchone()
+
+    if row is None:
+        raise RuntimeError("Knowledge document insert did not return a row.")
+
+    return KnowledgeDocument.model_validate(row)
+
+
+async def insert_knowledge_chunks(
+    *,
+    settings: Settings,
+    document_id: int,
+    chunks: Sequence[str],
+    embeddings: Sequence[Sequence[float]],
+) -> None:
+    insert_query = """
+    INSERT INTO knowledge_chunks (document_id, chunk_index, content, embedding)
+    VALUES (%s, %s, %s, %s::vector);
+    """
+    update_query = """
+    UPDATE knowledge_documents
+    SET chunk_count = %s
+    WHERE id = %s;
+    """
+
+    async with await psycopg.AsyncConnection.connect(settings.database_url) as conn:
+        async with conn.cursor() as cur:
+            for index, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+                await cur.execute(
+                    insert_query,
+                    (document_id, index, chunk, vector_literal(embedding)),
+                )
+            await cur.execute(update_query, (len(chunks), document_id))
+
+
+async def get_knowledge_document(
+    *,
+    settings: Settings,
+    document_id: int,
+) -> KnowledgeDocument:
+    query = """
+    SELECT id, filename, content_type, size_bytes, chunk_count, created_at
+    FROM knowledge_documents
+    WHERE id = %s;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (document_id,))
+            row = await cur.fetchone()
+
+    if row is None:
+        raise RuntimeError("Knowledge document was not found after ingest.")
+
+    return KnowledgeDocument.model_validate(row)
+
+
+async def search_knowledge_chunks(
+    *,
+    settings: Settings,
+    query_embedding: Sequence[float],
+    top_k: int,
+) -> Sequence[KnowledgeSearchResult]:
+    query = """
+    SELECT
+        kc.id AS chunk_id,
+        kc.document_id,
+        kd.filename,
+        kc.chunk_index,
+        kc.content,
+        1 - (kc.embedding <=> %s::vector) AS score
+    FROM knowledge_chunks kc
+    JOIN knowledge_documents kd ON kd.id = kc.document_id
+    ORDER BY kc.embedding <=> %s::vector
+    LIMIT %s;
+    """
+    embedding = vector_literal(query_embedding)
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (embedding, embedding, top_k))
+            rows = await cur.fetchall()
+
+    return [KnowledgeSearchResult.model_validate(row) for row in rows]

@@ -1,0 +1,21 @@
+[project]
+name = "um-meeting-ai-api"
+version = "0.1.0"
+description = "FastAPI backend for UM Meeting AI Sprint 1"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.34.0",
+  "pydantic[email]>=2.10.0",
+  "pydantic-settings>=2.8.0",
+  "livekit-api>=0.8.2",
+  "openai>=2.0.0",
+  "pypdf>=5.0.0",
+  "python-docx>=1.1.2",
+  "python-multipart>=0.0.12",
+  "PyJWT>=2.12.0",
+  "psycopg[binary]>=3.2.0"
+]
+
+[tool.uvicorn]
+factory = false

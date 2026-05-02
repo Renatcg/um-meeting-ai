@@ -1,0 +1,7 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "apps/agent/Dockerfile"
+
+[deploy]
+startCommand = "python agent.py start"
+restartPolicyType = "ON_FAILURE"
