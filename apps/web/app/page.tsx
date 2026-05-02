@@ -5,43 +5,22 @@ import { useEffect, useState } from "react";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-type ScheduledMeeting = {
+type MeetingListItem = {
   id: string;
   title: string;
-  host: string;
-  startsAt: string;
-  invitedAs: string;
+  owner: string;
+  dateLabel: string;
+  role: string;
 };
 
-const currentUser = {
-  name: "Renato Guimaraes",
-  email: "renato@coevo.ai",
-  role: "Host",
+const sessionUser = {
+  name: "Acesso local",
+  email: "Login pendente",
+  initials: "CO",
 };
 
-const scheduledMeetings: ScheduledMeeting[] = [
-  {
-    id: "meeting-demo-discovery",
-    title: "Discovery com cliente piloto",
-    host: "Marina Costa",
-    startsAt: "Hoje, 14:30",
-    invitedAs: "Comercial",
-  },
-  {
-    id: "meeting-demo-follow-up",
-    title: "Follow-up proposta Coevo",
-    host: "Renato Guimaraes",
-    startsAt: "Amanha, 09:00",
-    invitedAs: "Host",
-  },
-  {
-    id: "meeting-demo-implementation",
-    title: "Alinhamento de implantacao",
-    host: "Time Coevo",
-    startsAt: "Segunda, 11:00",
-    invitedAs: "Participante",
-  },
-];
+const invitedMeetings: MeetingListItem[] = [];
+const meetingHistory: MeetingListItem[] = [];
 
 export default function HomePage() {
   const router = useRouter();
@@ -122,11 +101,11 @@ export default function HomePage() {
         <div className="ml-auto flex items-center gap-3 sm:gap-5">
           <p className="hidden font-mono text-xs text-[#73736B] sm:block">{currentDate}</p>
           <div className="hidden text-right sm:block">
-            <p className="text-sm font-semibold text-[#11110F]">{currentUser.name}</p>
-            <p className="text-xs text-[#73736B]">{currentUser.email}</p>
+            <p className="text-sm font-semibold text-[#11110F]">{sessionUser.name}</p>
+            <p className="text-xs text-[#73736B]">{sessionUser.email}</p>
           </div>
           <div className="flex h-11 w-11 items-center justify-center rounded-full border border-[#FDBA74] bg-[#FFF3EA] text-sm font-bold text-[#F97316] shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
-            RG
+            {sessionUser.initials}
           </div>
         </div>
       </header>
@@ -233,12 +212,24 @@ export default function HomePage() {
                 Reunioes para as quais voce foi convidado
               </h2>
               <p className="font-mono text-xs uppercase text-[#73736B]">
-                {scheduledMeetings.length} convites
+                {invitedMeetings.length} convites
               </p>
             </div>
 
             <div className="overflow-hidden rounded-lg border border-[#E7E7E2] bg-white shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
-              {scheduledMeetings.map((meeting, index) => (
+              {invitedMeetings.length === 0 ? (
+                <div className="px-5 py-7 text-center">
+                  <p className="text-sm font-semibold text-[#11110F]">
+                    Nenhum convite encontrado
+                  </p>
+                  <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#73736B]">
+                    Quando voce for convidado para uma reuniao, ela aparecera aqui
+                    com o link direto de entrada.
+                  </p>
+                </div>
+              ) : null}
+
+              {invitedMeetings.map((meeting, index) => (
                 <button
                   className={`flex w-full items-center justify-between gap-5 px-5 py-4 text-left transition hover:bg-[#F8F8F6] ${
                     index > 0 ? "border-t border-[#E7E7E2]" : ""
@@ -252,15 +243,68 @@ export default function HomePage() {
                       {meeting.title}
                     </p>
                     <p className="mt-1 text-sm text-[#73736B]">
-                      Organizador: {meeting.host}
+                      Organizador: {meeting.owner}
                     </p>
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="text-sm font-semibold text-[#11110F]">
-                      {meeting.startsAt}
+                      {meeting.dateLabel}
                     </p>
                     <p className="mt-2 inline-flex rounded-full border border-[#FDBA74] bg-[#FFF3EA] px-3 py-1 font-mono text-[11px] uppercase text-[#F97316]">
-                      {meeting.invitedAs}
+                      {meeting.role}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="mx-auto mt-8 max-w-3xl text-left">
+            <div className="mb-4 flex items-center justify-between gap-4">
+              <h2 className="font-display text-xl font-semibold text-[#11110F]">
+                Historico das reunioes que participou
+              </h2>
+              <p className="font-mono text-xs uppercase text-[#73736B]">
+                Mais recentes primeiro
+              </p>
+            </div>
+
+            <div className="overflow-hidden rounded-lg border border-[#E7E7E2] bg-white shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+              {meetingHistory.length === 0 ? (
+                <div className="px-5 py-7 text-center">
+                  <p className="text-sm font-semibold text-[#11110F]">
+                    Nenhuma reuniao no historico
+                  </p>
+                  <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#73736B]">
+                    As reunioes encerradas em que voce participou serao listadas
+                    aqui em ordem decrescente.
+                  </p>
+                </div>
+              ) : null}
+
+              {meetingHistory.map((meeting, index) => (
+                <button
+                  className={`flex w-full items-center justify-between gap-5 px-5 py-4 text-left transition hover:bg-[#F8F8F6] ${
+                    index > 0 ? "border-t border-[#E7E7E2]" : ""
+                  }`}
+                  key={meeting.id}
+                  onClick={() => router.push(`/meeting/${meeting.id}`)}
+                  type="button"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-base font-semibold text-[#11110F]">
+                      {meeting.title}
+                    </p>
+                    <p className="mt-1 text-sm text-[#73736B]">
+                      Organizador: {meeting.owner}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-sm font-semibold text-[#11110F]">
+                      {meeting.dateLabel}
+                    </p>
+                    <p className="mt-2 inline-flex rounded-full border border-[#E7E7E2] bg-[#FCFCFB] px-3 py-1 font-mono text-[11px] uppercase text-[#73736B]">
+                      {meeting.role}
                     </p>
                   </div>
                 </button>

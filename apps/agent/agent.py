@@ -43,6 +43,11 @@ WAKE_WORDS = ("jarvis", "jervis", "jarves", "javes", "jarviz", "jarvys")
 INITIAL_ACTIVE_LISTEN_SECONDS = 15.0
 POST_REPLY_ACTIVE_SECONDS = 10.0
 FOLLOW_UP_SILENCE_SECONDS = 5.0
+VAD_THRESHOLD = float(os.getenv("JARVIS_VAD_THRESHOLD", "0.72"))
+VAD_PREFIX_PADDING_MS = int(os.getenv("JARVIS_VAD_PREFIX_PADDING_MS", "300"))
+VAD_SILENCE_DURATION_MS = int(os.getenv("JARVIS_VAD_SILENCE_DURATION_MS", "900"))
+MIN_TRANSCRIPT_CHARS = int(os.getenv("JARVIS_MIN_TRANSCRIPT_CHARS", "8"))
+MIN_TRANSCRIPT_WORDS = int(os.getenv("JARVIS_MIN_TRANSCRIPT_WORDS", "2"))
 current_meeting_id: contextvars.ContextVar[str] = contextvars.ContextVar(
     "current_meeting_id",
     default="unknown-meeting",
@@ -64,6 +69,18 @@ def contains_wake_word(value: str) -> bool:
         return True
 
     return any(wake_word in normalized for wake_word in WAKE_WORDS)
+
+
+def is_meaningful_transcript(value: str) -> bool:
+    normalized = normalize_text(value)
+    words = normalized.split()
+    if contains_wake_word(value):
+        return True
+
+    if len(normalized.replace(" ", "")) < MIN_TRANSCRIPT_CHARS:
+        return False
+
+    return len(words) >= MIN_TRANSCRIPT_WORDS
 
 
 @function_tool(
@@ -202,9 +219,9 @@ async def jarvis(ctx: agents.JobContext):
             ),
             turn_detection=TurnDetection(
                 type="server_vad",
-                threshold=0.4,
-                prefix_padding_ms=500,
-                silence_duration_ms=550,
+                threshold=VAD_THRESHOLD,
+                prefix_padding_ms=VAD_PREFIX_PADDING_MS,
+                silence_duration_ms=VAD_SILENCE_DURATION_MS,
                 create_response=False,
                 interrupt_response=True,
             ),
@@ -220,6 +237,9 @@ async def jarvis(ctx: agents.JobContext):
 
         transcript = event.transcript.strip()
         if not transcript:
+            return
+
+        if not is_meaningful_transcript(transcript):
             return
 
         timestamp_seconds = time.monotonic() - started_at
