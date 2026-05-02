@@ -7,6 +7,7 @@ import {
   ParticipantTile,
   RoomAudioRenderer,
   useLocalParticipant,
+  useParticipants,
   useRoomContext,
   useTracks,
 } from "@livekit/components-react";
@@ -51,6 +52,7 @@ type MeetingSummary = {
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const CHAT_TOPIC = "um-meeting-chat";
+const agentNameMatchers = ["jarvis", "um copilot", "copilot"];
 const commercialUserEmails = new Set(["renato@coevo.ai", "marina@coevo.ai"]);
 
 function inferParticipantRole(email: string, isHostCreator: boolean): ParticipantRole {
@@ -75,6 +77,53 @@ function roleLabel(role: ParticipantRole) {
   }
 
   return "Participante";
+}
+
+function AgentOrb({ isSpeaking }: { isSpeaking: boolean }) {
+  return (
+    <div
+      className={`um-agent-orb ${isSpeaking ? "is-speaking" : ""}`}
+      aria-label={isSpeaking ? "Jarvis esta falando" : "Jarvis esta ouvindo"}
+    >
+      <span className="um-agent-orb-ring" />
+      <span className="um-agent-orb-ring" />
+      <span className="um-agent-orb-core">
+        <span className="um-agent-orb-bars">
+          <span />
+          <span />
+          <span />
+        </span>
+      </span>
+    </div>
+  );
+}
+
+function JarvisPresence() {
+  const participants = useParticipants();
+  const agent = participants.find((roomParticipant) => {
+    const label = `${roomParticipant.name ?? ""} ${roomParticipant.identity ?? ""}`
+      .toLowerCase()
+      .trim();
+    return agentNameMatchers.some((matcher) => label.includes(matcher));
+  });
+
+  if (!agent) {
+    return null;
+  }
+
+  return (
+    <div className="absolute right-4 top-16 z-10 rounded-2xl border border-[#E7E7E2] bg-white/92 px-4 py-3 shadow-[0_18px_70px_rgba(17,17,15,0.12)] backdrop-blur-xl sm:right-6 sm:top-20">
+      <div className="flex items-center gap-3">
+        <AgentOrb isSpeaking={Boolean(agent.isSpeaking)} />
+        <div>
+          <p className="text-sm font-semibold text-[#11110F]">Jarvis</p>
+          <p className="text-xs text-[#73736B]">
+            {agent.isSpeaking ? "Falando agora" : "Ouvindo a reuniao"}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function MeetingGrid({ meetingId }: { meetingId: string }) {
@@ -106,6 +155,7 @@ function MeetingGrid({ meetingId }: { meetingId: string }) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
       <div className="min-h-0 flex-1 px-4 pb-3 pt-16 sm:px-6 sm:pt-20">
+        <JarvisPresence />
         <GridLayout
           tracks={tracks}
           className="um-meeting-grid h-full min-h-0"
@@ -375,24 +425,43 @@ function MeetingChatPanel({ participantName }: { participantName: string }) {
 
 function MeetingSidePanel({
   canViewSalesPanel,
+  isOpen,
+  onClose,
   participantName,
   recommendations,
   sidePanelTab,
   setSidePanelTab,
 }: {
   canViewSalesPanel: boolean;
+  isOpen: boolean;
+  onClose: () => void;
   participantName: string;
   recommendations: SalesRecommendation[];
   sidePanelTab: SidePanelTab;
   setSidePanelTab: (tab: SidePanelTab) => void;
 }) {
   return (
-    <aside className="hidden h-full min-h-0 flex-col overflow-hidden border-l border-[#E7E7E2] bg-[#FCFCFB] text-[#11110F] lg:flex">
+    <aside
+      className={`fixed inset-y-0 right-0 z-40 flex h-full w-full max-w-[360px] min-h-0 flex-col overflow-hidden border-l border-[#E7E7E2] bg-[#FCFCFB] text-[#11110F] shadow-[0_24px_90px_rgba(17,17,15,0.18)] transition-transform duration-200 lg:static lg:z-auto lg:flex lg:w-auto lg:max-w-none lg:translate-x-0 lg:shadow-none ${
+        isOpen ? "translate-x-0" : "translate-x-full"
+      }`}
+    >
       <div className="border-b border-[#E7E7E2] bg-white px-5 py-4">
-        <p className="text-xs font-medium uppercase tracking-wide text-[#F97316]">
-          Conversa
-        </p>
-        <h2 className="mt-1 text-lg font-semibold">Chat da reuniao</h2>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-[#F97316]">
+              Conversa
+            </p>
+            <h2 className="mt-1 text-lg font-semibold">Chat da reuniao</h2>
+          </div>
+          <button
+            className="rounded-lg border border-[#E7E7E2] bg-white px-3 py-2 text-sm font-semibold text-[#11110F] transition hover:border-[#F97316] hover:bg-[#FFF3EA] lg:hidden"
+            type="button"
+            onClick={onClose}
+          >
+            Fechar
+          </button>
+        </div>
       </div>
 
       <div className="flex border-b border-[#E7E7E2] bg-white">
@@ -476,6 +545,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
     [],
   );
   const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>("chat");
+  const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isHostCreator, setIsHostCreator] = useState<boolean | null>(null);
@@ -776,14 +846,13 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
 
   if (step === "room" && connection) {
     return (
-      <main className="grid h-screen overflow-hidden bg-white text-[#11110F] [height:100dvh] lg:grid-cols-[minmax(0,1fr)_360px]">
         <LiveKitRoom
           audio
           video
           token={connection.token}
           serverUrl={connection.url}
           data-lk-theme="default"
-          className="contents"
+          className="um-room-shell h-screen overflow-hidden bg-white text-[#11110F] [height:100dvh]"
           onDisconnected={leaveMeeting}
         >
           <section className="relative min-h-0 overflow-hidden">
@@ -794,18 +863,26 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
             >
               Sair
             </button>
+            <button
+              className="absolute right-4 top-4 z-20 rounded-lg border border-[#E7E7E2] bg-white/90 px-4 py-2 text-sm font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-[#F97316] hover:bg-[#FFF3EA] lg:hidden"
+              type="button"
+              onClick={() => setIsSidePanelOpen(true)}
+            >
+              Chat
+            </button>
             <MeetingGrid meetingId={meetingId} />
           </section>
 
           <MeetingSidePanel
             canViewSalesPanel={canViewSalesPanel}
+            isOpen={isSidePanelOpen}
+            onClose={() => setIsSidePanelOpen(false)}
             participantName={participant.name}
             recommendations={recommendations}
             sidePanelTab={sidePanelTab}
             setSidePanelTab={setSidePanelTab}
           />
         </LiveKitRoom>
-      </main>
     );
   }
 

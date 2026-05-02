@@ -46,6 +46,18 @@ select {
   position: relative;
 }
 
+.lk-room-container.um-room-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+}
+
+@media (min-width: 1024px) {
+  .lk-room-container.um-room-shell {
+    grid-template-columns: minmax(0, 1fr) 360px;
+  }
+}
+
 .lk-grid-layout {
   display: grid;
   flex: 1 1 auto;
@@ -90,6 +102,121 @@ select {
   padding: 0.375rem 0.625rem;
   font-size: 0.8125rem;
   backdrop-filter: blur(14px);
+}
+
+.um-agent-orb {
+  position: relative;
+  display: grid;
+  width: 3.25rem;
+  height: 3.25rem;
+  place-items: center;
+  border-radius: 999px;
+  background: #fff3ea;
+  color: #f97316;
+}
+
+.um-agent-orb-ring {
+  position: absolute;
+  inset: 0.25rem;
+  border: 1px solid rgba(249, 115, 22, 0.36);
+  border-radius: 999px;
+  animation: um-agent-orb-pulse 2.4s ease-out infinite;
+}
+
+.um-agent-orb-ring:nth-child(2) {
+  inset: 0.05rem;
+  animation-delay: 0.75s;
+}
+
+.um-agent-orb-core {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 2.2rem;
+  height: 2.2rem;
+  place-items: center;
+  border-radius: 999px;
+  background: #11110f;
+  box-shadow: 0 14px 45px rgba(249, 115, 22, 0.25);
+}
+
+.um-agent-orb-bars {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  height: 1rem;
+}
+
+.um-agent-orb-bars span {
+  display: block;
+  width: 0.18rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: #fdba74;
+  animation: um-agent-bar-listen 1.25s ease-in-out infinite;
+}
+
+.um-agent-orb-bars span:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.um-agent-orb-bars span:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+.um-agent-orb.is-speaking {
+  background: #f97316;
+}
+
+.um-agent-orb.is-speaking .um-agent-orb-ring {
+  border-color: rgba(249, 115, 22, 0.72);
+  animation-duration: 1s;
+}
+
+.um-agent-orb.is-speaking .um-agent-orb-core {
+  background: #f97316;
+  box-shadow: 0 18px 60px rgba(249, 115, 22, 0.42);
+}
+
+.um-agent-orb.is-speaking .um-agent-orb-bars span {
+  background: #ffffff;
+  animation-name: um-agent-bar-speaking;
+  animation-duration: 0.55s;
+}
+
+@keyframes um-agent-orb-pulse {
+  0% {
+    opacity: 0.82;
+    transform: scale(0.86);
+  }
+  70% {
+    opacity: 0.12;
+    transform: scale(1.46);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.58);
+  }
+}
+
+@keyframes um-agent-bar-listen {
+  0%,
+  100% {
+    height: 0.42rem;
+  }
+  50% {
+    height: 0.85rem;
+  }
+}
+
+@keyframes um-agent-bar-speaking {
+  0%,
+  100% {
+    height: 0.55rem;
+  }
+  50% {
+    height: 1.05rem;
+  }
 }
 
 .lk-focus-layout,
