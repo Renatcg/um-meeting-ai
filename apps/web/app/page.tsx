@@ -166,11 +166,10 @@ export default function HomePage() {
             Reunioes Coevo
           </p>
           <h1 className="mx-auto max-w-3xl text-5xl font-medium leading-tight text-ink">
-            Videochamadas com Copilot para vender melhor
+            Videochamadas Assistidas
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-neutral-600">
-            Entre em reunioes com transcricao, base de conhecimento e painel privado
-            para o time comercial.
+            Grupo Coevo
           </p>
 
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
