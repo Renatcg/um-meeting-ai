@@ -38,7 +38,11 @@ from app.models import (
     TranscriptSegment,
     TranscriptSegmentCreate,
 )
-from app.knowledge_service import ingest_knowledge_document, search_knowledge
+from app.knowledge_service import (
+    ingest_knowledge_document,
+    ingest_knowledge_media,
+    search_knowledge,
+)
 from app.sales_coach_service import analyze_segment
 from app.store import meeting_store
 
@@ -75,6 +79,40 @@ async def upload_knowledge_document(
     return await ingest_knowledge_document(settings=settings, file=file)
 
 
+@app.post(
+    "/meetings/{meeting_id}/knowledge/documents",
+    response_model=KnowledgeUploadResponse,
+    status_code=201,
+)
+async def upload_meeting_knowledge_document(
+    meeting_id: str,
+    file: UploadFile = File(...),
+) -> KnowledgeUploadResponse:
+    await ensure_meeting(settings=settings, meeting_id=meeting_id)
+    return await ingest_knowledge_document(
+        settings=settings,
+        file=file,
+        meeting_id=meeting_id,
+    )
+
+
+@app.post(
+    "/meetings/{meeting_id}/knowledge/media",
+    response_model=KnowledgeUploadResponse,
+    status_code=201,
+)
+async def upload_meeting_knowledge_media(
+    meeting_id: str,
+    file: UploadFile = File(...),
+) -> KnowledgeUploadResponse:
+    await ensure_meeting(settings=settings, meeting_id=meeting_id)
+    return await ingest_knowledge_media(
+        settings=settings,
+        file=file,
+        meeting_id=meeting_id,
+    )
+
+
 @app.post("/knowledge/search", response_model=KnowledgeSearchResponse)
 async def search_knowledge_base(
     payload: KnowledgeSearchRequest,
@@ -83,6 +121,23 @@ async def search_knowledge_base(
         settings=settings,
         query=payload.query,
         top_k=payload.top_k,
+    )
+
+
+@app.post(
+    "/meetings/{meeting_id}/knowledge/search",
+    response_model=KnowledgeSearchResponse,
+)
+async def search_meeting_knowledge_base(
+    meeting_id: str,
+    payload: KnowledgeSearchRequest,
+) -> KnowledgeSearchResponse:
+    await ensure_meeting(settings=settings, meeting_id=meeting_id)
+    return await search_knowledge(
+        settings=settings,
+        query=payload.query,
+        top_k=payload.top_k,
+        meeting_id=meeting_id,
     )
 
 

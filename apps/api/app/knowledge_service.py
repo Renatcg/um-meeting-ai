@@ -3,7 +3,7 @@ from pathlib import Path
 
 from docx import Document
 from fastapi import HTTPException, UploadFile, status
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, OpenAIError
 from pypdf import PdfReader
 
 from app.config import Settings
@@ -19,6 +19,16 @@ from app.models import (
 )
 
 SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
+SUPPORTED_MEDIA_EXTENSIONS = {
+    ".mp3",
+    ".mp4",
+    ".mpeg",
+    ".mpga",
+    ".m4a",
+    ".wav",
+    ".webm",
+    ".mov",
+}
 CHUNK_SIZE = 1200
 CHUNK_OVERLAP = 180
 
@@ -102,14 +112,15 @@ async def embed_texts(
     return [item.embedding for item in response.data]
 
 
-async def ingest_knowledge_document(
+async def ingest_text_content(
     *,
     settings: Settings,
-    file: UploadFile,
+    meeting_id: str | None,
+    filename: str,
+    content_type: str,
+    size_bytes: int,
+    text: str,
 ) -> KnowledgeUploadResponse:
-    filename = file.filename or "document.txt"
-    content = await file.read()
-    text = extract_text(filename, content)
     chunks = chunk_text(text)
 
     if not chunks:
@@ -121,9 +132,10 @@ async def ingest_knowledge_document(
     embeddings = await embed_texts(settings=settings, texts=chunks)
     document = await insert_knowledge_document(
         settings=settings,
+        meeting_id=meeting_id,
         filename=filename,
-        content_type=file.content_type or "application/octet-stream",
-        size_bytes=len(content),
+        content_type=content_type,
+        size_bytes=size_bytes,
     )
     await insert_knowledge_chunks(
         settings=settings,
@@ -135,16 +147,90 @@ async def ingest_knowledge_document(
     return KnowledgeUploadResponse(document=document)
 
 
+async def ingest_knowledge_document(
+    *,
+    settings: Settings,
+    file: UploadFile,
+    meeting_id: str | None = None,
+) -> KnowledgeUploadResponse:
+    filename = file.filename or "document.txt"
+    content = await file.read()
+    text = extract_text(filename, content)
+    return await ingest_text_content(
+        settings=settings,
+        meeting_id=meeting_id,
+        filename=filename,
+        content_type=file.content_type or "application/octet-stream",
+        size_bytes=len(content),
+        text=text,
+    )
+
+
+async def transcribe_media_content(
+    *,
+    settings: Settings,
+    filename: str,
+    content: bytes,
+) -> str:
+    ensure_openai_configured(settings)
+    extension = get_extension(filename)
+    if extension not in SUPPORTED_MEDIA_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Supported media files are MP3, MP4, MPEG, MPGA, M4A, WAV, WEBM and MOV.",
+        )
+
+    media_file = BytesIO(content)
+    media_file.name = filename
+    client = AsyncOpenAI(api_key=settings.openai_api_key)
+    try:
+        transcription = await client.audio.transcriptions.create(
+            model=settings.openai_media_transcription_model,
+            file=media_file,
+        )
+    except OpenAIError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Nao foi possivel transcrever a midia enviada.",
+        ) from exc
+    return transcription.text
+
+
+async def ingest_knowledge_media(
+    *,
+    settings: Settings,
+    file: UploadFile,
+    meeting_id: str | None = None,
+) -> KnowledgeUploadResponse:
+    filename = file.filename or "media.mp3"
+    content = await file.read()
+    transcript = await transcribe_media_content(
+        settings=settings,
+        filename=filename,
+        content=content,
+    )
+    return await ingest_text_content(
+        settings=settings,
+        meeting_id=meeting_id,
+        filename=f"{filename}.transcript.txt",
+        content_type="text/plain",
+        size_bytes=len(content),
+        text=transcript,
+    )
+
+
 async def search_knowledge(
     *,
     settings: Settings,
     query: str,
     top_k: int,
+    meeting_id: str | None = None,
 ) -> KnowledgeSearchResponse:
     embeddings = await embed_texts(settings=settings, texts=[query])
     results = await search_knowledge_chunks(
         settings=settings,
         query_embedding=embeddings[0],
         top_k=top_k,
+        meeting_id=meeting_id,
     )
     return KnowledgeSearchResponse(results=list(results))

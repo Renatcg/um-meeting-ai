@@ -55,12 +55,23 @@ CREATE_VECTOR_EXTENSION_SQL = "CREATE EXTENSION IF NOT EXISTS vector;"
 CREATE_KNOWLEDGE_DOCUMENTS_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS knowledge_documents (
     id BIGSERIAL PRIMARY KEY,
+    meeting_id TEXT,
     filename TEXT NOT NULL,
     content_type TEXT NOT NULL,
     size_bytes BIGINT NOT NULL,
     chunk_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+"""
+
+ALTER_KNOWLEDGE_DOCUMENTS_MEETING_SQL = """
+ALTER TABLE knowledge_documents
+ADD COLUMN IF NOT EXISTS meeting_id TEXT;
+"""
+
+CREATE_KNOWLEDGE_DOCUMENTS_MEETING_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_knowledge_documents_meeting
+ON knowledge_documents (meeting_id, id);
 """
 
 CREATE_KNOWLEDGE_CHUNKS_TABLE_SQL_TEMPLATE = """
@@ -124,6 +135,8 @@ async def init_database(settings: Settings) -> None:
         await conn.execute(CREATE_RECOMMENDATIONS_TABLE_SQL)
         await conn.execute(CREATE_RECOMMENDATIONS_INDEX_SQL)
         await conn.execute(CREATE_KNOWLEDGE_DOCUMENTS_TABLE_SQL)
+        await conn.execute(ALTER_KNOWLEDGE_DOCUMENTS_MEETING_SQL)
+        await conn.execute(CREATE_KNOWLEDGE_DOCUMENTS_MEETING_INDEX_SQL)
         await conn.execute(
             CREATE_KNOWLEDGE_CHUNKS_TABLE_SQL_TEMPLATE.format(
                 dimensions=settings.openai_embedding_dimensions,
@@ -434,13 +447,14 @@ def vector_literal(values: Sequence[float]) -> str:
 async def insert_knowledge_document(
     *,
     settings: Settings,
+    meeting_id: str | None,
     filename: str,
     content_type: str,
     size_bytes: int,
 ) -> KnowledgeDocument:
     query = """
-    INSERT INTO knowledge_documents (filename, content_type, size_bytes)
-    VALUES (%s, %s, %s)
+    INSERT INTO knowledge_documents (meeting_id, filename, content_type, size_bytes)
+    VALUES (%s, %s, %s, %s)
     RETURNING id, filename, content_type, size_bytes, chunk_count, created_at;
     """
 
@@ -449,7 +463,7 @@ async def insert_knowledge_document(
         row_factory=dict_row,
     ) as conn:
         async with conn.cursor() as cur:
-            await cur.execute(query, (filename, content_type, size_bytes))
+            await cur.execute(query, (meeting_id, filename, content_type, size_bytes))
             row = await cur.fetchone()
 
     if row is None:
@@ -515,8 +529,10 @@ async def search_knowledge_chunks(
     settings: Settings,
     query_embedding: Sequence[float],
     top_k: int,
+    meeting_id: str | None = None,
 ) -> Sequence[KnowledgeSearchResult]:
-    query = """
+    meeting_filter = "WHERE kd.meeting_id = %s" if meeting_id else ""
+    query = f"""
     SELECT
         kc.id AS chunk_id,
         kc.document_id,
@@ -526,17 +542,23 @@ async def search_knowledge_chunks(
         1 - (kc.embedding <=> %s::vector) AS score
     FROM knowledge_chunks kc
     JOIN knowledge_documents kd ON kd.id = kc.document_id
+    {meeting_filter}
     ORDER BY kc.embedding <=> %s::vector
     LIMIT %s;
     """
     embedding = vector_literal(query_embedding)
+    params = (
+        (embedding, meeting_id, embedding, top_k)
+        if meeting_id
+        else (embedding, embedding, top_k)
+    )
 
     async with await psycopg.AsyncConnection.connect(
         settings.database_url,
         row_factory=dict_row,
     ) as conn:
         async with conn.cursor() as cur:
-            await cur.execute(query, (embedding, embedding, top_k))
+            await cur.execute(query, params)
             rows = await cur.fetchall()
 
     return [KnowledgeSearchResult.model_validate(row) for row in rows]

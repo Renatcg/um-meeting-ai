@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     openai_embedding_model: str = "text-embedding-3-small"
     openai_embedding_dimensions: int = 1536
+    openai_media_transcription_model: str = "gpt-4o-mini-transcribe"
     cors_origins: str = "http://localhost:3000"
     hosted_web_origin: str = "https://um-copilot.vercel.app"
     agent_api_key: str | None = None

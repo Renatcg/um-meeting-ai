@@ -1,4 +1,5 @@
 import asyncio
+import contextvars
 import logging
 import os
 import re
@@ -42,6 +43,10 @@ WAKE_WORDS = ("jarvis", "jervis", "jarves", "javes", "jarviz", "jarvys")
 INITIAL_ACTIVE_LISTEN_SECONDS = 15.0
 POST_REPLY_ACTIVE_SECONDS = 10.0
 FOLLOW_UP_SILENCE_SECONDS = 5.0
+current_meeting_id: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "current_meeting_id",
+    default="unknown-meeting",
+)
 
 
 def normalize_text(value: str) -> str:
@@ -63,9 +68,9 @@ def contains_wake_word(value: str) -> bool:
 
 @function_tool(
     description=(
-        "Busca informacoes na base de conhecimento carregada por PDF, DOCX, "
-        "TXT e MD. Use quando o participante perguntar algo que possa estar "
-        "em documentos da empresa."
+        "Busca informacoes somente na base de conhecimento submetida para a "
+        "reuniao atual. Use quando o participante perguntar algo que possa estar "
+        "nos documentos, midias ou links enviados antes da chamada."
     )
 )
 async def search_knowledge_base(query: str) -> str:
@@ -75,7 +80,7 @@ async def search_knowledge_base(query: str) -> str:
 
     async with aiohttp.ClientSession() as http:
         async with http.post(
-            f"{API_URL}/knowledge/search",
+            f"{API_URL}/meetings/{current_meeting_id.get()}/knowledge/search",
             headers=headers,
             json={"query": query, "top_k": 5},
             timeout=aiohttp.ClientTimeout(total=10),
@@ -184,6 +189,7 @@ def log_task_failure(task: asyncio.Task[None]) -> None:
 @server.rtc_session(agent_name=AGENT_NAME)
 async def jarvis(ctx: agents.JobContext):
     meeting_id = get_meeting_id(ctx)
+    current_meeting_id.set(meeting_id)
     started_at = time.monotonic()
     active_until = 0.0
 

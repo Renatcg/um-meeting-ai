@@ -89,95 +89,95 @@ export default function HomePage() {
   }
 
   return (
-    <main className="min-h-screen overflow-hidden bg-nmdi-ink text-nmdi-ivory">
+    <main className="min-h-screen overflow-hidden bg-white text-[#11110F]">
       <div
-        className="pointer-events-none fixed inset-0 opacity-70"
+        className="pointer-events-none fixed inset-0 opacity-60"
         style={{
           backgroundImage:
-            "linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px)",
+            "linear-gradient(rgba(17,17,15,.055) 1px, transparent 1px), linear-gradient(90deg, rgba(17,17,15,.055) 1px, transparent 1px)",
           backgroundSize: "42px 42px",
         }}
       />
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(200,164,93,0.18),transparent_34%),linear-gradient(180deg,rgba(11,13,18,0.18),#0B0D12_74%)]" />
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_70%_0%,rgba(249,115,22,0.12),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.86),#FFFFFF_72%)]" />
 
-      <header className="fixed left-0 right-0 top-0 z-20 flex min-h-20 items-center justify-between border-b border-white/10 bg-nmdi-ink/80 px-4 py-4 backdrop-blur-xl lg:left-72 lg:px-8">
+      <header className="fixed left-0 right-0 top-0 z-20 flex min-h-20 items-center justify-between border-b border-[#E7E7E2] bg-white/85 px-4 py-4 backdrop-blur-xl lg:left-72 lg:px-8">
         <div className="flex items-center gap-4 lg:hidden">
           <button
             aria-label="Abrir menu"
-            className="flex h-10 w-10 flex-col items-center justify-center gap-1 rounded-full border border-white/10 bg-white/5 transition hover:border-nmdi-gold/50"
+            className="flex h-10 w-10 flex-col items-center justify-center gap-1 rounded-full border border-[#E7E7E2] bg-white transition hover:border-[#F97316]"
             type="button"
           >
-            <span className="h-0.5 w-5 rounded-full bg-nmdi-ivory" />
-            <span className="h-0.5 w-5 rounded-full bg-nmdi-ivory" />
-            <span className="h-0.5 w-5 rounded-full bg-nmdi-ivory" />
+            <span className="h-0.5 w-5 rounded-full bg-[#11110F]" />
+            <span className="h-0.5 w-5 rounded-full bg-[#11110F]" />
+            <span className="h-0.5 w-5 rounded-full bg-[#11110F]" />
           </button>
           <p className="font-display text-lg font-semibold">Coevo</p>
         </div>
 
         <div className="hidden lg:block">
-          <p className="font-mono text-xs uppercase text-nmdi-gold">Dashboard</p>
-          <p className="mt-1 text-sm text-nmdi-muted">Videochamadas com Jarvis</p>
+          <p className="font-mono text-xs uppercase text-[#F97316]">Dashboard</p>
+          <p className="mt-1 text-sm text-[#73736B]">Videochamadas com Jarvis</p>
         </div>
 
         <div className="ml-auto flex items-center gap-3 sm:gap-5">
-          <p className="hidden font-mono text-xs text-nmdi-muted sm:block">{currentDate}</p>
+          <p className="hidden font-mono text-xs text-[#73736B] sm:block">{currentDate}</p>
           <div className="hidden text-right sm:block">
-            <p className="text-sm font-semibold text-nmdi-ivory">{currentUser.name}</p>
-            <p className="text-xs text-nmdi-muted">{currentUser.email}</p>
+            <p className="text-sm font-semibold text-[#11110F]">{currentUser.name}</p>
+            <p className="text-xs text-[#73736B]">{currentUser.email}</p>
           </div>
-          <div className="flex h-11 w-11 items-center justify-center rounded-full border border-nmdi-gold/70 bg-nmdi-gold text-sm font-bold text-nmdi-ink shadow-nmdi-glow">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full border border-[#FDBA74] bg-[#FFF3EA] text-sm font-bold text-[#F97316] shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
             RG
           </div>
         </div>
       </header>
 
-      <aside className="fixed bottom-0 left-0 top-0 z-30 hidden w-72 border-r border-white/10 bg-nmdi-ink/95 p-5 backdrop-blur-xl lg:block">
-        <div className="flex items-center gap-3 border-b border-white/10 pb-7">
-          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-nmdi-amber to-nmdi-gold font-display text-xl font-bold text-nmdi-ink shadow-nmdi-glow">
+      <aside className="fixed bottom-0 left-0 top-0 z-30 hidden w-72 border-r border-[#E7E7E2] bg-white/90 p-5 backdrop-blur-xl lg:block">
+        <div className="flex items-center gap-3 border-b border-[#E7E7E2] pb-7">
+          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#11110F] font-display text-xl font-bold text-white shadow-[0_20px_80px_rgba(249,115,22,0.22)]">
             C
           </div>
           <div>
-            <p className="font-display text-xl font-semibold leading-tight text-nmdi-ivory">
+            <p className="font-display text-xl font-semibold leading-tight text-[#11110F]">
               Coevo
             </p>
-            <p className="font-mono text-xs uppercase text-nmdi-gold">Grupo Coevo</p>
+            <p className="font-mono text-xs uppercase text-[#F97316]">Grupo Coevo</p>
           </div>
         </div>
 
         <nav className="mt-7 space-y-2">
           <a
-            className="flex items-center gap-4 rounded-lg border border-nmdi-gold/30 bg-nmdi-gold/10 px-4 py-3 text-sm font-semibold text-nmdi-ivory shadow-nmdi-card"
+            className="flex items-center gap-4 rounded-lg border border-[#FDBA74] bg-[#FFF3EA] px-4 py-3 text-sm font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)]"
             href="#meetings"
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-nmdi-gold font-mono text-xs font-bold text-nmdi-ink">
+            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-[#F97316] font-mono text-xs font-bold text-white">
               M
             </span>
             Reunioes
           </a>
           <a
-            className="flex items-center gap-4 rounded-lg px-4 py-3 text-sm font-medium text-nmdi-muted transition hover:bg-white/5 hover:text-nmdi-ivory"
+            className="flex items-center gap-4 rounded-lg px-4 py-3 text-sm font-medium text-[#73736B] transition hover:bg-[#F8F8F6] hover:text-[#11110F]"
             href="#calls"
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-md border border-white/10 font-mono text-xs">
+            <span className="flex h-8 w-8 items-center justify-center rounded-md border border-[#E7E7E2] font-mono text-xs">
               L
             </span>
             Ligacoes
           </a>
           <a
-            className="flex items-center gap-4 rounded-lg px-4 py-3 text-sm font-medium text-nmdi-muted transition hover:bg-white/5 hover:text-nmdi-ivory"
+            className="flex items-center gap-4 rounded-lg px-4 py-3 text-sm font-medium text-[#73736B] transition hover:bg-[#F8F8F6] hover:text-[#11110F]"
             href="#knowledge"
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-md border border-white/10 font-mono text-xs">
+            <span className="flex h-8 w-8 items-center justify-center rounded-md border border-[#E7E7E2] font-mono text-xs">
               B
             </span>
             Base de conhecimento
           </a>
         </nav>
 
-        <div className="absolute bottom-5 left-5 right-5 rounded-lg border border-white/10 bg-white/[0.04] p-4">
-          <p className="font-mono text-xs uppercase text-nmdi-gold">Status</p>
-          <p className="mt-2 text-sm font-medium text-nmdi-ivory">Jarvis pronto</p>
-          <p className="mt-1 text-xs leading-5 text-nmdi-muted">
+        <div className="absolute bottom-5 left-5 right-5 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">
+          <p className="font-mono text-xs uppercase text-[#F97316]">Status</p>
+          <p className="mt-2 text-sm font-medium text-[#11110F]">Jarvis pronto</p>
+          <p className="mt-1 text-xs leading-5 text-[#73736B]">
             LiveKit, API e agente conectados para testes.
           </p>
         </div>
@@ -188,19 +188,19 @@ export default function HomePage() {
         id="meetings"
       >
         <div className="w-full max-w-5xl text-center">
-          <p className="mx-auto mb-5 inline-flex rounded-full border border-nmdi-gold/30 bg-nmdi-gold/10 px-4 py-2 font-mono text-xs uppercase text-nmdi-gold">
+          <p className="mx-auto mb-5 inline-flex rounded-full border border-[#FDBA74] bg-[#FFF3EA] px-4 py-2 font-mono text-xs uppercase text-[#F97316]">
             Reunioes Coevo
           </p>
-          <h1 className="mx-auto max-w-4xl font-display text-5xl font-semibold leading-tight text-nmdi-ivory md:text-6xl">
+          <h1 className="mx-auto max-w-4xl font-display text-5xl font-semibold leading-tight text-[#11110F] md:text-6xl">
             Videochamadas Assistidas
           </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-nmdi-muted">
+          <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-[#73736B]">
             Grupo Coevo
           </p>
 
           <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <button
-              className="relative overflow-hidden rounded-lg bg-gradient-to-r from-nmdi-gold to-nmdi-amber px-7 py-4 text-base font-bold text-nmdi-ink shadow-nmdi-glow transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60"
+              className="relative overflow-hidden rounded-lg bg-[#11110F] px-7 py-4 text-base font-bold text-white shadow-[0_20px_80px_rgba(249,115,22,0.22)] transition hover:translate-y-[-1px] hover:bg-[#F97316] disabled:cursor-not-allowed disabled:opacity-60"
               disabled={isCreating}
               onClick={createInstantMeeting}
               type="button"
@@ -211,7 +211,7 @@ export default function HomePage() {
               </span>
             </button>
             <button
-              className="rounded-lg border border-white/10 bg-white/[0.06] px-7 py-4 text-base font-semibold text-nmdi-ivory backdrop-blur transition hover:border-nmdi-gold/60 hover:bg-white/[0.09]"
+              className="rounded-lg border border-[#E7E7E2] bg-white px-7 py-4 text-base font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] transition hover:border-[#F97316] hover:bg-[#FFF3EA]"
               onClick={scheduleMeeting}
               type="button"
             >
@@ -220,46 +220,46 @@ export default function HomePage() {
           </div>
 
           {feedback ? (
-            <p className="mx-auto mt-5 max-w-xl rounded-lg border border-nmdi-red/25 bg-nmdi-red/10 px-4 py-3 text-sm text-red-200">
+            <p className="mx-auto mt-5 max-w-xl rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {feedback}
             </p>
           ) : null}
 
-          <div className="mx-auto mt-12 h-px max-w-3xl bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+          <div className="mx-auto mt-12 h-px max-w-3xl bg-gradient-to-r from-transparent via-[#E7E7E2] to-transparent" />
 
           <section className="mx-auto mt-10 max-w-3xl text-left">
             <div className="mb-4 flex items-center justify-between gap-4">
-              <h2 className="font-display text-xl font-semibold text-nmdi-ivory">
+              <h2 className="font-display text-xl font-semibold text-[#11110F]">
                 Reunioes para as quais voce foi convidado
               </h2>
-              <p className="font-mono text-xs uppercase text-nmdi-muted">
+              <p className="font-mono text-xs uppercase text-[#73736B]">
                 {scheduledMeetings.length} convites
               </p>
             </div>
 
-            <div className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.045] shadow-nmdi-deep backdrop-blur-xl">
+            <div className="overflow-hidden rounded-lg border border-[#E7E7E2] bg-white shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
               {scheduledMeetings.map((meeting, index) => (
                 <button
-                  className={`flex w-full items-center justify-between gap-5 px-5 py-4 text-left transition hover:bg-white/[0.075] ${
-                    index > 0 ? "border-t border-white/10" : ""
+                  className={`flex w-full items-center justify-between gap-5 px-5 py-4 text-left transition hover:bg-[#F8F8F6] ${
+                    index > 0 ? "border-t border-[#E7E7E2]" : ""
                   }`}
                   key={meeting.id}
                   onClick={() => router.push(`/meeting/${meeting.id}`)}
                   type="button"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-base font-semibold text-nmdi-ivory">
+                    <p className="truncate text-base font-semibold text-[#11110F]">
                       {meeting.title}
                     </p>
-                    <p className="mt-1 text-sm text-nmdi-muted">
+                    <p className="mt-1 text-sm text-[#73736B]">
                       Organizador: {meeting.host}
                     </p>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="text-sm font-semibold text-nmdi-ivory">
+                    <p className="text-sm font-semibold text-[#11110F]">
                       {meeting.startsAt}
                     </p>
-                    <p className="mt-2 inline-flex rounded-full border border-nmdi-gold/25 bg-nmdi-gold/10 px-3 py-1 font-mono text-[11px] uppercase text-nmdi-gold">
+                    <p className="mt-2 inline-flex rounded-full border border-[#FDBA74] bg-[#FFF3EA] px-3 py-1 font-mono text-[11px] uppercase text-[#F97316]">
                       {meeting.invitedAs}
                     </p>
                   </div>

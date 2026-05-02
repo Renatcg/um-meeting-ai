@@ -119,7 +119,7 @@ function MeetingGrid({ meetingId }: { meetingId: string }) {
   }, []);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-neutral-950">
+    <div className="flex h-full min-h-0 flex-col bg-white">
       <div className="min-h-0 flex-1 px-4 pb-3 pt-16 sm:px-6 sm:pt-20">
         <GridLayout
           tracks={tracks}
@@ -129,9 +129,9 @@ function MeetingGrid({ meetingId }: { meetingId: string }) {
         </GridLayout>
       </div>
 
-      <footer className="um-meeting-footer grid min-h-24 shrink-0 grid-cols-1 items-center gap-4 border-t border-white/10 bg-neutral-950 px-4 py-4 text-white md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:px-6">
+      <footer className="um-meeting-footer grid min-h-24 shrink-0 grid-cols-1 items-center gap-4 border-t border-[#E7E7E2] bg-white px-4 py-4 text-[#11110F] md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:px-6">
         <div className="hidden min-w-0 md:block">
-          <p className="truncate font-mono text-sm text-neutral-300">
+          <p className="truncate font-mono text-sm text-[#73736B]">
             {clock || "--:--"} | {meetingId}
           </p>
         </div>
@@ -139,7 +139,7 @@ function MeetingGrid({ meetingId }: { meetingId: string }) {
         <MeetingControls />
 
         <div className="hidden justify-end gap-3 md:flex">
-          <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-2 text-xs text-neutral-300">
+          <span className="rounded-full border border-[#E7E7E2] bg-[#FCFCFB] px-3 py-2 text-xs text-[#73736B]">
             Grid
           </span>
         </div>
@@ -227,6 +227,10 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
   const [cameraError, setCameraError] = useState(false);
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
   const previewStreamRef = useRef<MediaStream | null>(null);
+  const knowledgeDocumentsRef = useRef<HTMLInputElement | null>(null);
+  const knowledgeMediaRef = useRef<HTMLInputElement | null>(null);
+  const knowledgeLinkRef = useRef<HTMLTextAreaElement | null>(null);
+  const knowledgeTranscriptRef = useRef<HTMLTextAreaElement | null>(null);
 
   const entryContextReady = isHostCreator !== null;
   const inferredRole = inferParticipantRole(
@@ -414,6 +418,10 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
     setIsJoining(true);
 
     try {
+      if (inferredRole === "host") {
+        await uploadMeetingKnowledge();
+      }
+
       const response = await fetch(`${apiUrl}/meetings/${meetingId}/token`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -441,6 +449,74 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
       setError(err instanceof Error ? err.message : "Erro inesperado.");
     } finally {
       setIsJoining(false);
+    }
+  }
+
+  async function uploadKnowledgeText(filename: string, content: string) {
+    const trimmedContent = content.trim();
+    if (!trimmedContent) {
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append(
+      "file",
+      new File([trimmedContent], filename, { type: "text/plain" }),
+    );
+
+    const response = await fetch(
+      `${apiUrl}/meetings/${meetingId}/knowledge/documents`,
+      {
+        method: "POST",
+        body: formData,
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error("Nao foi possivel enviar a base de conhecimento.");
+    }
+  }
+
+  async function uploadMeetingKnowledge() {
+    const documents = Array.from(knowledgeDocumentsRef.current?.files ?? []);
+
+    for (const file of documents) {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetch(
+        `${apiUrl}/meetings/${meetingId}/knowledge/documents`,
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error("Nao foi possivel enviar a base de conhecimento.");
+      }
+    }
+
+    const link = knowledgeLinkRef.current?.value ?? "";
+    await uploadKnowledgeText("links-da-reuniao.txt", link);
+
+    const transcript = knowledgeTranscriptRef.current?.value ?? "";
+    await uploadKnowledgeText("contexto-da-reuniao.txt", transcript);
+
+    const mediaFiles = Array.from(knowledgeMediaRef.current?.files ?? []);
+    for (const file of mediaFiles) {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetch(
+        `${apiUrl}/meetings/${meetingId}/knowledge/media`,
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error("Nao foi possivel transcrever a midia enviada.");
+      }
     }
   }
 
@@ -474,10 +550,10 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
 
   if (step === "room" && connection) {
     return (
-      <main className="grid h-screen overflow-hidden bg-neutral-950 [height:100dvh] lg:grid-cols-[minmax(0,1fr)_360px]">
+      <main className="grid h-screen overflow-hidden bg-white text-[#11110F] [height:100dvh] lg:grid-cols-[minmax(0,1fr)_360px]">
         <section className="relative min-h-0 overflow-hidden">
           <button
-            className="absolute left-4 top-4 z-20 rounded-lg border border-white/10 bg-neutral-950/80 px-4 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-nmdi-gold/50 hover:bg-neutral-900"
+            className="absolute left-4 top-4 z-20 rounded-lg border border-[#E7E7E2] bg-white/90 px-4 py-2 text-sm font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-[#F97316] hover:bg-[#FFF3EA]"
             type="button"
             onClick={leaveMeeting}
           >
@@ -496,20 +572,20 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
           </LiveKitRoom>
         </section>
 
-        <aside className="hidden h-full min-h-0 flex-col overflow-hidden border-l border-neutral-800 bg-neutral-950 text-white lg:flex">
-          <div className="border-b border-neutral-800 px-5 py-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-teal-300">
+        <aside className="hidden h-full min-h-0 flex-col overflow-hidden border-l border-[#E7E7E2] bg-[#FCFCFB] text-[#11110F] lg:flex">
+          <div className="border-b border-[#E7E7E2] bg-white px-5 py-4">
+            <p className="text-xs font-medium uppercase tracking-wide text-[#F97316]">
               Conversa
             </p>
-          <h2 className="mt-1 text-lg font-semibold">Transcricao ao vivo</h2>
+            <h2 className="mt-1 text-lg font-semibold">Transcricao ao vivo</h2>
           </div>
 
-          <div className="flex border-b border-neutral-800">
+          <div className="flex border-b border-[#E7E7E2] bg-white">
             <button
               className={`border-b-2 px-5 py-3 text-sm font-medium ${
                 sidePanelTab === "transcript"
-                  ? "border-teal-300 text-teal-100"
-                  : "border-transparent text-neutral-400 hover:text-white"
+                  ? "border-[#F97316] text-[#11110F]"
+                  : "border-transparent text-[#73736B] hover:text-[#11110F]"
               }`}
               type="button"
               onClick={() => setSidePanelTab("transcript")}
@@ -520,8 +596,8 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
               <button
                 className={`border-b-2 px-5 py-3 text-sm font-medium ${
                   sidePanelTab === "sales"
-                    ? "border-amber-300 text-amber-100"
-                    : "border-transparent text-neutral-400 hover:text-white"
+                    ? "border-[#F97316] text-[#11110F]"
+                    : "border-transparent text-[#73736B] hover:text-[#11110F]"
                 }`}
                 type="button"
                 onClick={() => setSidePanelTab("sales")}
@@ -533,7 +609,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
 
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
             {sidePanelTab === "transcript" && transcript.length === 0 ? (
-              <p className="text-sm leading-6 text-neutral-400">
+              <p className="text-sm leading-6 text-[#73736B]">
                 A transcricao aparecera aqui quando os participantes comecarem a
                 falar.
               </p>
@@ -542,18 +618,18 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
             {sidePanelTab === "transcript" ? (
               transcript.map((segment) => (
                 <article
-                  className="rounded-md border border-neutral-800 bg-neutral-900 px-4 py-3"
+                  className="rounded-md border border-[#E7E7E2] bg-white px-4 py-3 shadow-[0_18px_70px_rgba(17,17,15,0.04)]"
                   key={segment.id}
                 >
                   <div className="mb-2 flex items-center justify-between gap-3">
-                    <p className="truncate text-sm font-medium text-white">
+                    <p className="truncate text-sm font-medium text-[#11110F]">
                       {segment.speaker_name}
                     </p>
-                    <time className="shrink-0 text-xs text-neutral-400">
+                    <time className="shrink-0 text-xs text-[#73736B]">
                       {formatTimestamp(segment.timestamp_seconds)}
                     </time>
                   </div>
-                  <p className="text-sm leading-6 text-neutral-200">
+                  <p className="text-sm leading-6 text-[#383832]">
                     {segment.content}
                   </p>
                 </article>
@@ -562,28 +638,28 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
 
             {sidePanelTab === "sales" && canViewSalesPanel ? (
               recommendations.length === 0 ? (
-                <p className="text-sm leading-6 text-neutral-400">
+                <p className="text-sm leading-6 text-[#73736B]">
                   Cards privados aparecerao aqui quando houver objecao, risco ou
                   oportunidade.
                 </p>
               ) : (
                 recommendations.map((card) => (
                   <article
-                    className="rounded-md border border-amber-400/30 bg-amber-950/40 px-4 py-3"
+                    className="rounded-md border border-[#FDBA74] bg-[#FFF3EA] px-4 py-3"
                     key={card.id}
                   >
                     <div className="mb-2 flex items-center justify-between gap-3">
-                      <p className="text-sm font-semibold text-amber-100">
+                      <p className="text-sm font-semibold text-[#11110F]">
                         {card.title}
                       </p>
-                      <span className="shrink-0 rounded-sm bg-amber-300 px-2 py-1 text-xs font-medium text-neutral-950">
+                      <span className="shrink-0 rounded-sm bg-[#F97316] px-2 py-1 text-xs font-medium text-white">
                         {card.kind}
                       </span>
                     </div>
-                    <p className="text-sm leading-6 text-neutral-100">
+                    <p className="text-sm leading-6 text-[#383832]">
                       {card.recommendation}
                     </p>
-                    <p className="mt-3 border-l-2 border-amber-300/60 pl-3 text-xs leading-5 text-neutral-300">
+                    <p className="mt-3 border-l-2 border-[#F97316]/60 pl-3 text-xs leading-5 text-[#73736B]">
                       {card.evidence}
                     </p>
                   </article>
@@ -744,6 +820,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
                   Documentos
                 </span>
                 <input
+                  ref={knowledgeDocumentsRef}
                   className="w-full rounded-lg border border-[#E7E7E2] bg-white px-4 py-3 text-sm text-[#73736B] file:mr-3 file:rounded-md file:border-0 file:bg-[#11110F] file:px-3 file:py-2 file:text-sm file:font-bold file:text-white"
                   type="file"
                   multiple
@@ -755,10 +832,10 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
                 <span className="mb-2 block text-sm font-medium text-[#11110F]">
                   Links da web
                 </span>
-                <input
-                  className="w-full rounded-lg border border-[#E7E7E2] bg-white px-4 py-3 text-sm text-[#11110F] outline-none transition placeholder:text-[#73736B] focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/15"
-                  type="url"
-                  placeholder="https://..."
+                <textarea
+                  ref={knowledgeLinkRef}
+                  className="h-24 w-full resize-none rounded-lg border border-[#E7E7E2] bg-white px-4 py-3 text-sm text-[#11110F] outline-none transition placeholder:text-[#73736B] focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/15"
+                  placeholder="Cole um ou mais links, um por linha."
                 />
               </label>
             </div>
@@ -769,6 +846,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
                   Audios e videos
                 </span>
                 <input
+                  ref={knowledgeMediaRef}
                   className="w-full rounded-lg border border-[#E7E7E2] bg-white px-4 py-3 text-sm text-[#73736B] file:mr-3 file:rounded-md file:border-0 file:bg-[#F8F8F6] file:px-3 file:py-2 file:text-sm file:font-bold file:text-[#11110F]"
                   type="file"
                   multiple
@@ -781,6 +859,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
                   Transcricoes
                 </span>
                 <textarea
+                  ref={knowledgeTranscriptRef}
                   className="h-24 w-full resize-none rounded-lg border border-[#E7E7E2] bg-white px-4 py-3 text-sm text-[#11110F] outline-none transition placeholder:text-[#73736B] focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/15"
                   placeholder="Cole uma transcricao, briefing ou contexto da reuniao."
                 />
