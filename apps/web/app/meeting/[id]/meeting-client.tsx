@@ -578,7 +578,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
 
       <form
         onSubmit={joinMeeting}
-        className="relative z-10 w-full max-w-xl rounded-lg border border-white/10 bg-nmdi-ink/[0.82] p-6 shadow-nmdi-deep backdrop-blur-xl sm:p-8"
+        className="relative z-10 max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-lg border border-white/10 bg-nmdi-ink/[0.82] p-6 shadow-nmdi-deep backdrop-blur-xl sm:p-8"
       >
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <p className="inline-flex rounded-full border border-nmdi-gold/30 bg-nmdi-gold/10 px-3 py-1 font-mono text-xs uppercase text-nmdi-gold">
@@ -678,6 +678,117 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
             </div>
           </label>
         </div>
+
+        <section className="mt-4 rounded-lg border border-white/10 bg-white/[0.04] p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-mono text-xs uppercase text-nmdi-gold">
+                Base de conhecimento
+              </p>
+              <p className="mt-1 text-sm text-nmdi-muted">
+                Apenas o Host pode alimentar a base antes da reuniao.
+              </p>
+            </div>
+            <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 font-mono text-xs uppercase text-nmdi-muted">
+              {inferredRole === "host" ? "Host liberado" : "Somente Host"}
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
+                Documentos
+              </span>
+              <input
+                className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-nmdi-muted file:mr-3 file:rounded-md file:border-0 file:bg-nmdi-gold file:px-3 file:py-2 file:text-sm file:font-bold file:text-nmdi-ink disabled:cursor-not-allowed disabled:opacity-50"
+                type="file"
+                multiple
+                accept=".pdf,.doc,.docx,.txt,.md"
+                disabled={inferredRole !== "host"}
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
+                Links da web
+              </span>
+              <input
+                className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-nmdi-ivory outline-none transition placeholder:text-nmdi-muted focus:border-nmdi-gold/70 focus:ring-2 focus:ring-nmdi-gold/20 disabled:cursor-not-allowed disabled:opacity-50"
+                type="url"
+                placeholder="https://..."
+                disabled={inferredRole !== "host"}
+              />
+            </label>
+          </div>
+
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
+                Audios e videos
+              </span>
+              <input
+                className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-nmdi-muted file:mr-3 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:font-bold file:text-nmdi-ivory disabled:cursor-not-allowed disabled:opacity-50"
+                type="file"
+                multiple
+                accept="audio/*,video/*"
+                disabled={inferredRole !== "host"}
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
+                Transcricoes
+              </span>
+              <textarea
+                className="h-24 w-full resize-none rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-nmdi-ivory outline-none transition placeholder:text-nmdi-muted focus:border-nmdi-gold/70 focus:ring-2 focus:ring-nmdi-gold/20 disabled:cursor-not-allowed disabled:opacity-50"
+                placeholder="Cole uma transcricao, briefing ou contexto da reuniao."
+                disabled={inferredRole !== "host"}
+              />
+            </label>
+          </div>
+        </section>
+
+        <section className="mt-4 rounded-lg border border-white/10 bg-white/[0.035] p-4 opacity-70">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-mono text-xs uppercase text-nmdi-gold">
+                Traducao simultanea
+              </p>
+              <p className="mt-1 text-sm text-nmdi-muted">
+                Funcao planejada: cada participante fala e ouve na propria lingua.
+              </p>
+            </div>
+            <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 font-mono text-xs uppercase text-nmdi-muted">
+              Em breve
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-[1fr_2fr]">
+            <label className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-4 text-sm text-nmdi-muted">
+              <input className="h-4 w-4" type="checkbox" disabled />
+              Preciso de traducao simultanea
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
+                Lingua desejada
+              </span>
+              <select
+                className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-nmdi-muted outline-none disabled:cursor-not-allowed"
+                disabled
+                defaultValue=""
+              >
+                <option value="">Selecione uma lingua</option>
+                <option value="pt-BR">Portugues do Brasil</option>
+                <option value="en-US">Ingles</option>
+                <option value="es-ES">Espanhol</option>
+                <option value="fr-FR">Frances</option>
+                <option value="de-DE">Alemao</option>
+                <option value="it-IT">Italiano</option>
+              </select>
+            </label>
+          </div>
+        </section>
 
         <label className="mt-4 flex gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-4 text-sm leading-6 text-nmdi-muted">
           <input
