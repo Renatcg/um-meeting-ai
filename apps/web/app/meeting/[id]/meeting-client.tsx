@@ -10,12 +10,12 @@ import {
   useRoomContext,
   useTracks,
 } from "@livekit/components-react";
-import { Track } from "livekit-client";
+import { RoomEvent, Track } from "livekit-client";
 import { useRouter } from "next/navigation";
 
 type Step = "lobby" | "room";
 type ParticipantRole = "host" | "commercial" | "client" | "observer";
-type SidePanelTab = "transcript" | "sales";
+type SidePanelTab = "chat" | "sales";
 
 type Participant = {
   name: string;
@@ -29,15 +29,6 @@ type TokenResponse = {
   room: string;
   role: ParticipantRole;
   participant_access_token: string;
-};
-
-type TranscriptSegment = {
-  id: number;
-  meeting_id: string;
-  speaker_name: string;
-  timestamp_seconds: number;
-  content: string;
-  created_at: string;
 };
 
 type SalesRecommendation = {
@@ -59,14 +50,8 @@ type MeetingSummary = {
 };
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const CHAT_TOPIC = "um-meeting-chat";
 const commercialUserEmails = new Set(["renato@coevo.ai", "marina@coevo.ai"]);
-
-function formatTimestamp(seconds: number) {
-  const totalSeconds = Math.max(0, Math.floor(seconds));
-  const minutes = Math.floor(totalSeconds / 60);
-  const remainingSeconds = totalSeconds % 60;
-  return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
-}
 
 function inferParticipantRole(email: string, isHostCreator: boolean): ParticipantRole {
   if (isHostCreator) {
@@ -203,6 +188,280 @@ function MeetingControls() {
   );
 }
 
+type ChatMessage = {
+  id: string;
+  sender: string;
+  content: string;
+  createdAt: string;
+  isLocal: boolean;
+};
+
+type ChatPayload = {
+  type: "chat";
+  id: string;
+  sender: string;
+  content: string;
+  createdAt: string;
+};
+
+function MeetingChatPanel({ participantName }: { participantName: string }) {
+  const room = useRoomContext();
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [draft, setDraft] = useState("");
+  const [sendError, setSendError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const decoder = new TextDecoder();
+
+    function handleDataReceived(...args: unknown[]) {
+      const payload = args[0] as Uint8Array;
+      const participant = args[1] as
+        | { identity?: string; name?: string }
+        | undefined;
+      const topic = typeof args[3] === "string" ? args[3] : undefined;
+
+      if (topic && topic !== CHAT_TOPIC) {
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(decoder.decode(payload)) as ChatPayload;
+        if (parsed.type !== "chat") {
+          return;
+        }
+
+        setMessages((current) => {
+          if (current.some((message) => message.id === parsed.id)) {
+            return current;
+          }
+
+          return [
+            ...current,
+            {
+              id: parsed.id,
+              sender: parsed.sender || participant?.name || "Participante",
+              content: parsed.content,
+              createdAt: parsed.createdAt,
+              isLocal: participant?.identity === room.localParticipant.identity,
+            },
+          ];
+        });
+      } catch {
+        // Ignore data messages that are not part of the meeting chat.
+      }
+    }
+
+    room.on(RoomEvent.DataReceived, handleDataReceived);
+
+    return () => {
+      room.off(RoomEvent.DataReceived, handleDataReceived);
+    };
+  }, [room]);
+
+  async function sendMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSendError(null);
+
+    const content = draft.trim();
+    if (!content) {
+      return;
+    }
+
+    const message: ChatPayload = {
+      type: "chat",
+      id: crypto.randomUUID(),
+      sender: participantName || room.localParticipant.name || "Participante",
+      content,
+      createdAt: new Date().toISOString(),
+    };
+
+    setMessages((current) => [
+      ...current,
+      {
+        id: message.id,
+        sender: message.sender,
+        content: message.content,
+        createdAt: message.createdAt,
+        isLocal: true,
+      },
+    ]);
+    setDraft("");
+
+    try {
+      const payload = new TextEncoder().encode(JSON.stringify(message));
+      const publisher = room.localParticipant as unknown as {
+        publishData: (
+          data: Uint8Array,
+          options?: { reliable?: boolean; topic?: string },
+        ) => Promise<void> | void;
+      };
+      await publisher.publishData(payload, {
+        reliable: true,
+        topic: CHAT_TOPIC,
+      });
+    } catch {
+      setSendError("Nao foi possivel enviar a mensagem.");
+    }
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
+        {messages.length === 0 ? (
+          <p className="text-sm leading-6 text-[#73736B]">
+            Use o chat para mensagens escritas durante a reuniao. A transcricao
+            continua sendo processada em segundo plano pelo Jarvis.
+          </p>
+        ) : null}
+
+        {messages.map((message) => (
+          <article
+            className={`rounded-lg border px-4 py-3 ${
+              message.isLocal
+                ? "border-[#FDBA74] bg-[#FFF3EA]"
+                : "border-[#E7E7E2] bg-white"
+            }`}
+            key={message.id}
+          >
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <p className="truncate text-sm font-semibold text-[#11110F]">
+                {message.sender}
+              </p>
+              <time className="shrink-0 text-xs text-[#73736B]">
+                {new Date(message.createdAt).toLocaleTimeString("pt-BR", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </time>
+            </div>
+            <p className="whitespace-pre-wrap text-sm leading-6 text-[#383832]">
+              {message.content}
+            </p>
+          </article>
+        ))}
+      </div>
+
+      <form
+        className="border-t border-[#E7E7E2] bg-white p-4"
+        onSubmit={sendMessage}
+      >
+        {sendError ? (
+          <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            {sendError}
+          </p>
+        ) : null}
+        <label className="block">
+          <span className="sr-only">Mensagem</span>
+          <textarea
+            className="h-24 w-full resize-none rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm text-[#11110F] outline-none transition placeholder:text-[#73736B] focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/15"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder="Escreva uma mensagem..."
+          />
+        </label>
+        <div className="mt-3 flex justify-end">
+          <button
+            className="rounded-lg bg-[#11110F] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#F97316] disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!draft.trim()}
+            type="submit"
+          >
+            Enviar
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function MeetingSidePanel({
+  canViewSalesPanel,
+  participantName,
+  recommendations,
+  sidePanelTab,
+  setSidePanelTab,
+}: {
+  canViewSalesPanel: boolean;
+  participantName: string;
+  recommendations: SalesRecommendation[];
+  sidePanelTab: SidePanelTab;
+  setSidePanelTab: (tab: SidePanelTab) => void;
+}) {
+  return (
+    <aside className="hidden h-full min-h-0 flex-col overflow-hidden border-l border-[#E7E7E2] bg-[#FCFCFB] text-[#11110F] lg:flex">
+      <div className="border-b border-[#E7E7E2] bg-white px-5 py-4">
+        <p className="text-xs font-medium uppercase tracking-wide text-[#F97316]">
+          Conversa
+        </p>
+        <h2 className="mt-1 text-lg font-semibold">Chat da reuniao</h2>
+      </div>
+
+      <div className="flex border-b border-[#E7E7E2] bg-white">
+        <button
+          className={`border-b-2 px-5 py-3 text-sm font-medium ${
+            sidePanelTab === "chat"
+              ? "border-[#F97316] text-[#11110F]"
+              : "border-transparent text-[#73736B] hover:text-[#11110F]"
+          }`}
+          type="button"
+          onClick={() => setSidePanelTab("chat")}
+        >
+          Chat
+        </button>
+        {canViewSalesPanel ? (
+          <button
+            className={`border-b-2 px-5 py-3 text-sm font-medium ${
+              sidePanelTab === "sales"
+                ? "border-[#F97316] text-[#11110F]"
+                : "border-transparent text-[#73736B] hover:text-[#11110F]"
+            }`}
+            type="button"
+            onClick={() => setSidePanelTab("sales")}
+          >
+            Comercial
+          </button>
+        ) : null}
+      </div>
+
+      {sidePanelTab === "chat" ? (
+        <MeetingChatPanel participantName={participantName} />
+      ) : null}
+
+      {sidePanelTab === "sales" && canViewSalesPanel ? (
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+          {recommendations.length === 0 ? (
+            <p className="text-sm leading-6 text-[#73736B]">
+              Cards privados aparecerao aqui quando houver objecao, risco ou
+              oportunidade.
+            </p>
+          ) : (
+            recommendations.map((card) => (
+              <article
+                className="rounded-md border border-[#FDBA74] bg-[#FFF3EA] px-4 py-3"
+                key={card.id}
+              >
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-[#11110F]">
+                    {card.title}
+                  </p>
+                  <span className="shrink-0 rounded-sm bg-[#F97316] px-2 py-1 text-xs font-medium text-white">
+                    {card.kind}
+                  </span>
+                </div>
+                <p className="text-sm leading-6 text-[#383832]">
+                  {card.recommendation}
+                </p>
+                <p className="mt-3 border-l-2 border-[#F97316]/60 pl-3 text-xs leading-5 text-[#73736B]">
+                  {card.evidence}
+                </p>
+              </article>
+            ))
+          )}
+        </div>
+      ) : null}
+    </aside>
+  );
+}
+
 export default function MeetingClient({ meetingId }: { meetingId: string }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("lobby");
@@ -213,11 +472,10 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
   });
   const [acceptedLgpd, setAcceptedLgpd] = useState(false);
   const [connection, setConnection] = useState<TokenResponse | null>(null);
-  const [transcript, setTranscript] = useState<TranscriptSegment[]>([]);
   const [recommendations, setRecommendations] = useState<SalesRecommendation[]>(
     [],
   );
-  const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>("transcript");
+  const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>("chat");
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isHostCreator, setIsHostCreator] = useState<boolean | null>(null);
@@ -327,38 +585,6 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
       previewStreamRef.current = null;
     };
   }, [step]);
-
-  useEffect(() => {
-    if (step !== "room") {
-      return;
-    }
-
-    let cancelled = false;
-
-    async function loadTranscript() {
-      try {
-        const response = await fetch(`${apiUrl}/meetings/${meetingId}/transcript`);
-        if (!response.ok) {
-          return;
-        }
-
-        const segments = (await response.json()) as TranscriptSegment[];
-        if (!cancelled) {
-          setTranscript(segments);
-        }
-      } catch {
-        // Keep the meeting experience running even if transcript polling fails.
-      }
-    }
-
-    loadTranscript();
-    const interval = window.setInterval(loadTranscript, 2500);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [meetingId, step]);
 
   useEffect(() => {
     if (step !== "room" || !connection || !canViewSalesPanel) {
@@ -551,123 +777,34 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
   if (step === "room" && connection) {
     return (
       <main className="grid h-screen overflow-hidden bg-white text-[#11110F] [height:100dvh] lg:grid-cols-[minmax(0,1fr)_360px]">
-        <section className="relative min-h-0 overflow-hidden">
-          <button
-            className="absolute left-4 top-4 z-20 rounded-lg border border-[#E7E7E2] bg-white/90 px-4 py-2 text-sm font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-[#F97316] hover:bg-[#FFF3EA]"
-            type="button"
-            onClick={leaveMeeting}
-          >
-            Sair
-          </button>
-          <LiveKitRoom
-            audio
-            video
-            token={connection.token}
-            serverUrl={connection.url}
-            data-lk-theme="default"
-            className="h-full min-h-0 overflow-hidden"
-            onDisconnected={leaveMeeting}
-          >
-            <MeetingGrid meetingId={meetingId} />
-          </LiveKitRoom>
-        </section>
-
-        <aside className="hidden h-full min-h-0 flex-col overflow-hidden border-l border-[#E7E7E2] bg-[#FCFCFB] text-[#11110F] lg:flex">
-          <div className="border-b border-[#E7E7E2] bg-white px-5 py-4">
-            <p className="text-xs font-medium uppercase tracking-wide text-[#F97316]">
-              Conversa
-            </p>
-            <h2 className="mt-1 text-lg font-semibold">Transcricao ao vivo</h2>
-          </div>
-
-          <div className="flex border-b border-[#E7E7E2] bg-white">
+        <LiveKitRoom
+          audio
+          video
+          token={connection.token}
+          serverUrl={connection.url}
+          data-lk-theme="default"
+          className="contents"
+          onDisconnected={leaveMeeting}
+        >
+          <section className="relative min-h-0 overflow-hidden">
             <button
-              className={`border-b-2 px-5 py-3 text-sm font-medium ${
-                sidePanelTab === "transcript"
-                  ? "border-[#F97316] text-[#11110F]"
-                  : "border-transparent text-[#73736B] hover:text-[#11110F]"
-              }`}
+              className="absolute left-4 top-4 z-20 rounded-lg border border-[#E7E7E2] bg-white/90 px-4 py-2 text-sm font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-[#F97316] hover:bg-[#FFF3EA]"
               type="button"
-              onClick={() => setSidePanelTab("transcript")}
+              onClick={leaveMeeting}
             >
-              Transcricao
+              Sair
             </button>
-            {canViewSalesPanel ? (
-              <button
-                className={`border-b-2 px-5 py-3 text-sm font-medium ${
-                  sidePanelTab === "sales"
-                    ? "border-[#F97316] text-[#11110F]"
-                    : "border-transparent text-[#73736B] hover:text-[#11110F]"
-                }`}
-                type="button"
-                onClick={() => setSidePanelTab("sales")}
-              >
-                Comercial
-              </button>
-            ) : null}
-          </div>
+            <MeetingGrid meetingId={meetingId} />
+          </section>
 
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
-            {sidePanelTab === "transcript" && transcript.length === 0 ? (
-              <p className="text-sm leading-6 text-[#73736B]">
-                A transcricao aparecera aqui quando os participantes comecarem a
-                falar.
-              </p>
-            ) : null}
-
-            {sidePanelTab === "transcript" ? (
-              transcript.map((segment) => (
-                <article
-                  className="rounded-md border border-[#E7E7E2] bg-white px-4 py-3 shadow-[0_18px_70px_rgba(17,17,15,0.04)]"
-                  key={segment.id}
-                >
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <p className="truncate text-sm font-medium text-[#11110F]">
-                      {segment.speaker_name}
-                    </p>
-                    <time className="shrink-0 text-xs text-[#73736B]">
-                      {formatTimestamp(segment.timestamp_seconds)}
-                    </time>
-                  </div>
-                  <p className="text-sm leading-6 text-[#383832]">
-                    {segment.content}
-                  </p>
-                </article>
-              ))
-            ) : null}
-
-            {sidePanelTab === "sales" && canViewSalesPanel ? (
-              recommendations.length === 0 ? (
-                <p className="text-sm leading-6 text-[#73736B]">
-                  Cards privados aparecerao aqui quando houver objecao, risco ou
-                  oportunidade.
-                </p>
-              ) : (
-                recommendations.map((card) => (
-                  <article
-                    className="rounded-md border border-[#FDBA74] bg-[#FFF3EA] px-4 py-3"
-                    key={card.id}
-                  >
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <p className="text-sm font-semibold text-[#11110F]">
-                        {card.title}
-                      </p>
-                      <span className="shrink-0 rounded-sm bg-[#F97316] px-2 py-1 text-xs font-medium text-white">
-                        {card.kind}
-                      </span>
-                    </div>
-                    <p className="text-sm leading-6 text-[#383832]">
-                      {card.recommendation}
-                    </p>
-                    <p className="mt-3 border-l-2 border-[#F97316]/60 pl-3 text-xs leading-5 text-[#73736B]">
-                      {card.evidence}
-                    </p>
-                  </article>
-                ))
-              )
-            ) : null}
-          </div>
-        </aside>
+          <MeetingSidePanel
+            canViewSalesPanel={canViewSalesPanel}
+            participantName={participant.name}
+            recommendations={recommendations}
+            sidePanelTab={sidePanelTab}
+            setSidePanelTab={setSidePanelTab}
+          />
+        </LiveKitRoom>
       </main>
     );
   }
