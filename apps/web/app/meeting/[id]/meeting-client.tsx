@@ -109,6 +109,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
     }
 
     let cancelled = false;
+    const participantAccessToken = connection.participant_access_token;
 
     async function loadRecommendations() {
       try {
@@ -116,7 +117,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
           `${apiUrl}/meetings/${meetingId}/sales-recommendations`,
           {
             headers: {
-              Authorization: `Bearer ${connection.participant_access_token}`,
+              Authorization: `Bearer ${participantAccessToken}`,
             },
           },
         );
