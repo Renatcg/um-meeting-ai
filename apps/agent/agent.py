@@ -1,7 +1,9 @@
 import asyncio
 import logging
 import os
+import re
 import time
+import unicodedata
 
 import aiohttp
 from dotenv import load_dotenv
@@ -28,17 +30,35 @@ logger = logging.getLogger(__name__)
 AGENT_NAME = os.getenv("JARVIS_AGENT_NAME", "jarvis")
 DISPLAY_NAME = os.getenv("JARVIS_DISPLAY_NAME", "Jarvis")
 OPENAI_REALTIME_MODEL = os.getenv("OPENAI_REALTIME_MODEL", "gpt-realtime")
-OPENAI_REALTIME_VOICE = os.getenv("OPENAI_REALTIME_VOICE", "cedar")
+OPENAI_REALTIME_VOICE = os.getenv("OPENAI_REALTIME_VOICE", "ash")
 OPENAI_TRANSCRIPTION_MODEL = os.getenv(
     "OPENAI_TRANSCRIPTION_MODEL",
-    "gpt-4o-mini-transcribe",
+    "gpt-4o-transcribe",
 )
 API_URL = os.getenv("API_URL", "http://localhost:8000").rstrip("/")
 AGENT_API_KEY = os.getenv("AGENT_API_KEY")
 KNOWLEDGE_MIN_SCORE = float(os.getenv("KNOWLEDGE_MIN_SCORE", "0.25"))
-WAKE_WORDS = ("jarvis",)
+WAKE_WORDS = ("jarvis", "jervis", "jarves", "javes", "jarviz", "jarvys")
 INITIAL_ACTIVE_LISTEN_SECONDS = 15.0
+POST_REPLY_ACTIVE_SECONDS = 10.0
 FOLLOW_UP_SILENCE_SECONDS = 5.0
+
+
+def normalize_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFD", value.lower())
+    without_accents = "".join(
+        character for character in normalized if unicodedata.category(character) != "Mn"
+    )
+    return re.sub(r"[^a-z0-9 ]+", " ", without_accents)
+
+
+def contains_wake_word(value: str) -> bool:
+    normalized = normalize_text(value)
+    words = set(normalized.split())
+    if words.intersection(WAKE_WORDS):
+        return True
+
+    return any(wake_word in normalized for wake_word in WAKE_WORDS)
 
 
 @function_tool(
@@ -175,7 +195,10 @@ async def jarvis(ctx: agents.JobContext):
                 model=OPENAI_TRANSCRIPTION_MODEL,
             ),
             turn_detection=TurnDetection(
-                type="semantic_vad",
+                type="server_vad",
+                threshold=0.4,
+                prefix_padding_ms=500,
+                silence_duration_ms=550,
                 create_response=False,
                 interrupt_response=True,
             ),
@@ -205,9 +228,8 @@ async def jarvis(ctx: agents.JobContext):
         )
         task.add_done_callback(log_task_failure)
 
-        normalized_transcript = transcript.lower()
         now = time.monotonic()
-        was_called = any(wake_word in normalized_transcript for wake_word in WAKE_WORDS)
+        was_called = contains_wake_word(transcript)
         is_active_follow_up = now <= active_until
 
         if not was_called and not is_active_follow_up:
@@ -221,15 +243,26 @@ async def jarvis(ctx: agents.JobContext):
             user_input=transcript,
             instructions=(
                 "Voce e Jarvis. Responda ao participante de forma breve, em "
-                "portugues do Brasil e com tom masculino, calmo e profissional. "
+                "portugues do Brasil e com voz/tom masculino, calmo e profissional. "
                 "Depois de ser chamado por Jarvis, trate falas subsequentes como "
-                "continuidade da conversa enquanto a janela ativa estiver aberta. "
+                "continuidade da conversa por ate 10 segundos apos a sua resposta "
+                "e enquanto a janela ativa estiver aberta. "
                 "Se a pergunta depender de informacao documental, "
                 "consulte a ferramenta search_knowledge_base antes de responder. "
                 "Se a ferramenta retornar NO_MATCH, diga que nao encontrou "
                 "informacao suficiente."
             ),
         )
+
+    @session.on("agent_state_changed")
+    def on_agent_state_changed(event) -> None:
+        nonlocal active_until
+
+        if (
+            getattr(event, "old_state", None) == "speaking"
+            and getattr(event, "new_state", None) == "listening"
+        ):
+            active_until = time.monotonic() + POST_REPLY_ACTIVE_SECONDS
 
     await session.start(
         room=ctx.room,

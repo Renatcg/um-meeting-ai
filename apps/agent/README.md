@@ -27,7 +27,8 @@ O agente:
 - escuta audio da reuniao;
 - usa OpenAI Realtime para responder por voz;
 - transcreve a fala de entrada para detectar chamadas;
-- gera resposta apenas quando a transcricao final contem "Jarvis".
+- gera resposta quando a transcricao final contem "Jarvis" ou uma variante comum da transcricao.
+- depois de responder, mantem uma janela curta de acompanhamento sem exigir novo chamado.
 - envia cada trecho final transcrito para a API salvar no PostgreSQL.
 - consulta a base de conhecimento pela ferramenta `search_knowledge_base` quando a pergunta depende de documentos.
 

@@ -2,11 +2,12 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import {
-  ControlBar,
   GridLayout,
   LiveKitRoom,
   ParticipantTile,
   RoomAudioRenderer,
+  useLocalParticipant,
+  useRoomContext,
   useTracks,
 } from "@livekit/components-react";
 import { Track } from "livekit-client";
@@ -129,20 +130,7 @@ function MeetingGrid({ meetingId }: { meetingId: string }) {
           </p>
         </div>
 
-        <div className="um-meeting-controls min-w-0">
-          <ControlBar
-            variation="minimal"
-            saveUserChoices
-            controls={{
-              microphone: true,
-              camera: true,
-              screenShare: true,
-              chat: false,
-              leave: true,
-              settings: false,
-            }}
-          />
-        </div>
+        <MeetingControls />
 
         <div className="hidden justify-end gap-3 md:flex">
           <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-2 text-xs text-neutral-300">
@@ -152,6 +140,59 @@ function MeetingGrid({ meetingId }: { meetingId: string }) {
       </footer>
 
       <RoomAudioRenderer />
+    </div>
+  );
+}
+
+function MeetingControls() {
+  const room = useRoomContext();
+  const {
+    isMicrophoneEnabled,
+    isCameraEnabled,
+    isScreenShareEnabled,
+    localParticipant,
+  } = useLocalParticipant();
+
+  return (
+    <div className="um-meeting-controls min-w-0" aria-label="Controles da reuniao">
+      <button
+        className={`um-control-button ${isMicrophoneEnabled ? "" : "is-off"}`}
+        type="button"
+        aria-label={isMicrophoneEnabled ? "Desligar microfone" : "Ligar microfone"}
+        title={isMicrophoneEnabled ? "Desligar microfone" : "Ligar microfone"}
+        onClick={() => localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}
+      >
+        <span aria-hidden="true">Mic</span>
+      </button>
+      <button
+        className={`um-control-button ${isCameraEnabled ? "" : "is-off"}`}
+        type="button"
+        aria-label={isCameraEnabled ? "Desligar camera" : "Ligar camera"}
+        title={isCameraEnabled ? "Desligar camera" : "Ligar camera"}
+        onClick={() => localParticipant.setCameraEnabled(!isCameraEnabled)}
+      >
+        <span aria-hidden="true">Cam</span>
+      </button>
+      <button
+        className={`um-control-button ${isScreenShareEnabled ? "is-on" : ""}`}
+        type="button"
+        aria-label={
+          isScreenShareEnabled ? "Parar compartilhamento" : "Compartilhar tela"
+        }
+        title={isScreenShareEnabled ? "Parar compartilhamento" : "Compartilhar tela"}
+        onClick={() => localParticipant.setScreenShareEnabled(!isScreenShareEnabled)}
+      >
+        <span aria-hidden="true">Tela</span>
+      </button>
+      <button
+        className="um-control-button is-leave"
+        type="button"
+        aria-label="Sair da reuniao"
+        title="Sair da reuniao"
+        onClick={() => room.disconnect()}
+      >
+        Sair
+      </button>
     </div>
   );
 }

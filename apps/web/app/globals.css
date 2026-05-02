@@ -144,53 +144,9 @@ input {
   min-width: 0;
   justify-content: center;
   overflow-x: auto;
+  align-items: center;
+  gap: 0.75rem;
   padding: 0.125rem;
-}
-
-.um-meeting-controls .lk-control-bar {
-  position: static;
-  right: auto;
-  bottom: auto;
-  left: auto;
-  display: flex;
-  width: max-content;
-  max-width: 100%;
-  flex-wrap: nowrap;
-  align-items: center;
-  justify-content: center;
-  gap: 0.625rem;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  box-shadow: none;
-  padding: 0;
-  backdrop-filter: none;
-}
-
-.um-meeting-controls .lk-button-group {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #2f3338;
-}
-
-.um-meeting-controls .lk-button-group > .lk-button {
-  border-radius: 999px 0 0 999px;
-}
-
-.um-meeting-controls .lk-button-group-menu {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-}
-
-.um-meeting-controls .lk-button-group-menu .lk-button {
-  width: 2.25rem;
-  min-width: 2.25rem;
-  border-left: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 0 999px 999px 0;
 }
 
 .lk-button {
@@ -208,7 +164,7 @@ input {
     color 180ms ease;
 }
 
-.um-meeting-controls .lk-button {
+.um-control-button {
   display: inline-flex;
   width: 3.5rem;
   height: 3.5rem;
@@ -216,58 +172,52 @@ input {
   min-height: 3.5rem;
   align-items: center;
   justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 999px;
   background: #2f3338;
+  color: #ffffff;
   padding: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
   box-shadow: none;
   white-space: nowrap;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease,
+    color 180ms ease;
 }
 
-.um-meeting-controls .lk-button svg {
-  width: 1.35rem;
-  height: 1.35rem;
-}
-
-.lk-button:hover {
-  transform: translateY(-1px);
-  border-color: rgba(200, 164, 93, 0.55);
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.lk-button:active {
-  transform: translateY(0);
-}
-
-.lk-button[aria-pressed="true"],
-.lk-button.lk-button-menu {
-  border-color: rgba(200, 164, 93, 0.45);
-}
-
-.lk-disconnect-button {
-  border-color: rgba(239, 68, 68, 0.45);
-  background: rgba(239, 68, 68, 0.16);
-}
-
-.um-meeting-controls .lk-button:hover {
+.um-control-button:hover {
   transform: translateY(-1px);
   border-color: rgba(200, 164, 93, 0.55);
   background: #3b4047;
 }
 
-.um-meeting-controls .lk-button[aria-pressed="true"] {
-  border-color: rgba(245, 199, 107, 0.5);
+.um-control-button:active {
+  transform: translateY(0);
+}
+
+.um-control-button.is-off {
+  border-color: rgba(239, 68, 68, 0.55);
+  background: rgba(239, 68, 68, 0.18);
+  color: #fecaca;
+}
+
+.um-control-button.is-on {
+  border-color: rgba(245, 199, 107, 0.55);
   background: rgba(200, 164, 93, 0.22);
   color: #f5c76b;
 }
 
-.um-meeting-controls .lk-disconnect-button {
-  width: 3.75rem;
-  min-width: 3.75rem;
+.um-control-button.is-leave {
+  width: 5rem;
+  min-width: 5rem;
   border-color: rgba(239, 68, 68, 0.7);
   background: #dc4b3f;
 }
 
-.um-meeting-controls .lk-disconnect-button:hover {
+.um-control-button.is-leave:hover {
   background: #ef5a4d;
 }
 
@@ -290,20 +240,16 @@ input {
     justify-content: flex-start;
   }
 
-  .um-meeting-controls .lk-button {
+  .um-control-button {
     width: 3rem;
     height: 3rem;
     min-width: 3rem;
     min-height: 3rem;
+    font-size: 0.72rem;
   }
 
-  .um-meeting-controls .lk-disconnect-button {
-    width: 3.5rem;
-    min-width: 3.5rem;
-  }
-
-  .um-meeting-controls .lk-button-group-menu .lk-button {
-    width: 2rem;
-    min-width: 2rem;
+  .um-control-button.is-leave {
+    width: 4.25rem;
+    min-width: 4.25rem;
   }
 }
