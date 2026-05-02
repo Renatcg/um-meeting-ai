@@ -319,10 +319,10 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
 
   if (step === "room" && connection) {
     return (
-      <main className="grid h-screen bg-neutral-950 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <section className="relative min-h-0">
+      <main className="grid h-screen overflow-hidden bg-neutral-950 [height:100dvh] lg:grid-cols-[minmax(0,1fr)_360px]">
+        <section className="relative min-h-0 overflow-hidden">
           <button
-            className="absolute left-4 top-4 z-10 rounded-lg border border-white/10 bg-neutral-950/80 px-4 py-2 text-sm font-semibold text-white backdrop-blur transition hover:bg-neutral-900"
+            className="absolute left-4 top-4 z-20 rounded-lg border border-white/10 bg-neutral-950/80 px-4 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-nmdi-gold/50 hover:bg-neutral-900"
             type="button"
             onClick={leaveMeeting}
           >
@@ -334,14 +334,14 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
             token={connection.token}
             serverUrl={connection.url}
             data-lk-theme="default"
-            className="h-full"
+            className="h-full min-h-0 overflow-hidden"
             onDisconnected={() => setStep("lobby")}
           >
             <VideoConference />
           </LiveKitRoom>
         </section>
 
-        <aside className="flex min-h-0 flex-col border-l border-neutral-800 bg-neutral-950 text-white">
+        <aside className="flex h-full min-h-0 flex-col overflow-hidden border-l border-neutral-800 bg-neutral-950 text-white">
           <div className="border-b border-neutral-800 px-5 py-4">
             <p className="text-xs font-medium uppercase tracking-wide text-teal-300">
               Conversa

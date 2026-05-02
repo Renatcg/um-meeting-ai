@@ -15,6 +15,7 @@ body {
   margin: 0;
   min-height: 100vh;
   background: #f6f4ef;
+  overflow-x: hidden;
 }
 
 button,
@@ -22,54 +23,130 @@ input {
   font: inherit;
 }
 
-.lk-video-conference {
-  height: 100%;
-}
-
 .lk-room-container,
 .lk-video-conference,
 .lk-video-conference-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   min-height: 0;
   height: 100%;
+  max-height: 100%;
   background: #0a0a0a;
   color: #ffffff;
 }
 
+.lk-video-conference {
+  position: relative;
+}
+
 .lk-grid-layout {
   display: grid;
+  flex: 1 1 auto;
   min-height: 0;
-  height: 100%;
+  height: auto;
+  max-height: 100%;
+  overflow: hidden;
   gap: 0.75rem;
-  padding: 0.75rem;
+  padding: 0.75rem 0.75rem 5.5rem;
+}
+
+.lk-focus-layout,
+.lk-focus-layout-wrapper,
+.lk-carousel {
+  min-width: 0;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.lk-focus-layout {
+  flex: 1 1 auto;
+  padding-bottom: 5.5rem;
 }
 
 .lk-participant-tile {
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
   border: 1px solid #262626;
   border-radius: 0.5rem;
   background: #171717;
 }
 
-.lk-participant-media-video {
+.lk-participant-media-video,
+.lk-participant-tile video {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: #0a0a0a;
 }
 
 .lk-control-bar {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  left: 1rem;
+  z-index: 15;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 0.5rem;
-  border-top: 1px solid #262626;
-  background: #0a0a0a;
-  padding: 0.75rem;
+  align-items: center;
+  gap: 0.625rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 0.75rem;
+  background: rgba(10, 10, 10, 0.82);
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.35);
+  padding: 0.625rem;
+  backdrop-filter: blur(18px);
 }
 
 .lk-button {
-  border: 1px solid #404040;
-  border-radius: 0.375rem;
-  background: #171717;
+  min-width: 2.75rem;
+  min-height: 2.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 0.625rem;
+  background: rgba(255, 255, 255, 0.07);
   color: #ffffff;
   padding: 0.625rem 0.875rem;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease,
+    color 180ms ease;
+}
+
+.lk-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(200, 164, 93, 0.55);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.lk-button:active {
+  transform: translateY(0);
+}
+
+.lk-button[aria-pressed="true"],
+.lk-button.lk-button-menu {
+  border-color: rgba(200, 164, 93, 0.45);
+}
+
+.lk-disconnect-button {
+  border-color: rgba(239, 68, 68, 0.45);
+  background: rgba(239, 68, 68, 0.16);
+}
+
+@media (max-width: 1023px) {
+  .lk-control-bar {
+    right: 0.75rem;
+    bottom: 0.75rem;
+    left: 0.75rem;
+  }
+
+  .lk-grid-layout {
+    padding-bottom: 6.25rem;
+  }
 }
