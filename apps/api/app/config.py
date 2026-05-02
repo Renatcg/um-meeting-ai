@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     openai_embedding_model: str = "text-embedding-3-small"
     openai_embedding_dimensions: int = 1536
     cors_origins: str = "http://localhost:3000"
+    cors_origin_regex: str | None = r"https://.*\.vercel\.app"
     agent_api_key: str | None = None
     copilot_agent_name: str = "um-copilot"
     copilot_auto_dispatch: bool = True
@@ -27,6 +28,10 @@ class Settings(BaseSettings):
     @property
     def allowed_origins(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def allows_all_origins(self) -> bool:
+        return "*" in self.allowed_origins
 
 
 @lru_cache
