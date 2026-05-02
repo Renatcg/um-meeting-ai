@@ -76,6 +76,7 @@ export default function HomePage() {
       }
 
       const meeting = (await response.json()) as { id: string };
+      window.sessionStorage.setItem(`um-meeting-host:${meeting.id}`, "1");
       router.push(`/meeting/${meeting.id}?host=1`);
     } catch (err) {
       setFeedback(err instanceof Error ? err.message : "Erro inesperado.");

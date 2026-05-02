@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { LiveKitRoom, VideoConference } from "@livekit/components-react";
+import { useRouter } from "next/navigation";
 
 type Step = "lobby" | "room";
 type ParticipantRole = "host" | "commercial" | "client" | "observer";
@@ -77,6 +78,7 @@ function roleLabel(role: ParticipantRole) {
 }
 
 export default function MeetingClient({ meetingId }: { meetingId: string }) {
+  const router = useRouter();
   const [step, setStep] = useState<Step>("lobby");
   const [participant, setParticipant] = useState<Participant>({
     name: "",
@@ -92,14 +94,18 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
   const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>("transcript");
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isHostCreator, setIsHostCreator] = useState(false);
+  const [isHostCreator, setIsHostCreator] = useState<boolean | null>(null);
   const [inviteLink, setInviteLink] = useState("");
   const [copiedInviteLink, setCopiedInviteLink] = useState(false);
   const [cameraError, setCameraError] = useState(false);
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
   const previewStreamRef = useRef<MediaStream | null>(null);
 
-  const inferredRole = inferParticipantRole(participant.email, isHostCreator);
+  const entryContextReady = isHostCreator !== null;
+  const inferredRole = inferParticipantRole(
+    participant.email,
+    isHostCreator === true,
+  );
 
   const canViewSalesPanel =
     connection?.role === "host" || connection?.role === "commercial";
@@ -110,14 +116,17 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
     }
 
     const params = new URLSearchParams(window.location.search);
-    setIsHostCreator(params.get("host") === "1");
+    const hostStorageKey = `um-meeting-host:${meetingId}`;
+    const isHostFromUrl = params.get("host") === "1";
+    const isHostFromStorage = window.sessionStorage.getItem(hostStorageKey) === "1";
+    setIsHostCreator(isHostFromUrl || isHostFromStorage);
     setInviteLink(`${window.location.origin}/meeting/${meetingId}`);
   }, [meetingId]);
 
   useEffect(() => {
     setParticipant((current) => ({
       ...current,
-      role: inferParticipantRole(current.email, isHostCreator),
+      role: inferParticipantRole(current.email, isHostCreator === true),
     }));
   }, [isHostCreator, participant.email]);
 
@@ -237,6 +246,11 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
     event.preventDefault();
     setError(null);
 
+    if (!entryContextReady) {
+      setError("Aguarde um instante enquanto preparamos a sala.");
+      return;
+    }
+
     if (!acceptedLgpd) {
       setError("Voce precisa aceitar os termos de privacidade para entrar.");
       return;
@@ -287,10 +301,33 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
     }
   }
 
+  function stopPreview() {
+    previewStreamRef.current?.getTracks().forEach((track) => track.stop());
+    previewStreamRef.current = null;
+  }
+
+  function goBackHome() {
+    stopPreview();
+    router.push("/");
+  }
+
+  function leaveMeeting() {
+    setConnection(null);
+    setStep("lobby");
+    router.push("/");
+  }
+
   if (step === "room" && connection) {
     return (
       <main className="grid h-screen bg-neutral-950 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <section className="min-h-0">
+        <section className="relative min-h-0">
+          <button
+            className="absolute left-4 top-4 z-10 rounded-lg border border-white/10 bg-neutral-950/80 px-4 py-2 text-sm font-semibold text-white backdrop-blur transition hover:bg-neutral-900"
+            type="button"
+            onClick={leaveMeeting}
+          >
+            Sair
+          </button>
           <LiveKitRoom
             audio
             video
@@ -423,9 +460,18 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
         onSubmit={joinMeeting}
         className="relative z-10 w-full max-w-xl rounded-lg border border-white/10 bg-nmdi-ink/[0.82] p-6 shadow-nmdi-deep backdrop-blur-xl sm:p-8"
       >
-        <p className="mb-3 inline-flex rounded-full border border-nmdi-gold/30 bg-nmdi-gold/10 px-3 py-1 font-mono text-xs uppercase text-nmdi-gold">
-          Sala {meetingId}
-        </p>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="inline-flex rounded-full border border-nmdi-gold/30 bg-nmdi-gold/10 px-3 py-1 font-mono text-xs uppercase text-nmdi-gold">
+            Sala {meetingId}
+          </p>
+          <button
+            className="rounded-lg border border-white/10 px-3 py-2 text-sm font-semibold text-nmdi-ivory transition hover:border-nmdi-gold/50 hover:bg-white/[0.06]"
+            type="button"
+            onClick={goBackHome}
+          >
+            Voltar
+          </button>
+        </div>
         <h1 className="font-display text-3xl font-semibold leading-tight text-nmdi-ivory">
           Antes de entrar, identifique-se.
         </h1>
@@ -486,7 +532,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
               </p>
             </div>
             <span className="rounded-full border border-nmdi-gold/30 bg-nmdi-gold/10 px-3 py-1 font-mono text-xs uppercase text-nmdi-gold">
-              {roleLabel(inferredRole)}
+              {entryContextReady ? roleLabel(inferredRole) : "Preparando"}
             </span>
           </div>
         </div>
@@ -535,7 +581,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
         <div className="mt-6 flex justify-end">
           <button
             className="rounded-lg bg-gradient-to-r from-nmdi-gold to-nmdi-amber px-6 py-3 font-bold text-nmdi-ink shadow-nmdi-glow transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={isJoining || !acceptedLgpd}
+            disabled={isJoining || !acceptedLgpd || !entryContextReady}
             type="submit"
           >
             {isJoining ? "Entrando..." : "Entrar na sala"}
