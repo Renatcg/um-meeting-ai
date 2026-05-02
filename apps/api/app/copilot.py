@@ -5,6 +5,7 @@ import aiohttp
 from livekit import api
 
 from app.config import Settings
+from app.database import mark_meeting_copilot_dispatched
 from app.models import Meeting
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,10 @@ async def dispatch_copilot(
             )
         )
         meeting.copilot_dispatched = True
+        await mark_meeting_copilot_dispatched(
+            settings=settings,
+            meeting_id=meeting.id,
+        )
         return True, None
     except Exception as exc:
         logger.warning("failed to dispatch Jarvis", exc_info=exc)

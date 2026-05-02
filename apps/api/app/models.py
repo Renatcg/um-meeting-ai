@@ -17,6 +17,9 @@ class Meeting(BaseModel):
     id: str
     title: str
     created_at: datetime
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    recording_url: str | None = None
     copilot_dispatched: bool = False
 
     @classmethod
@@ -26,6 +29,15 @@ class Meeting(BaseModel):
             title=title,
             created_at=datetime.now(timezone.utc),
         )
+
+
+class MeetingParticipant(BaseModel):
+    id: int
+    meeting_id: str
+    name: str
+    email: EmailStr
+    role: ParticipantRole
+    joined_at: datetime
 
 
 class CreateTokenRequest(BaseModel):

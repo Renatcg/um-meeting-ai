@@ -7,6 +7,7 @@ from app.config import Settings
 from app.models import (
     KnowledgeDocument,
     KnowledgeSearchResult,
+    Meeting,
     SalesRecommendation,
     TranscriptSegment,
     TranscriptSegmentCreate,
@@ -83,10 +84,41 @@ CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_embedding
 ON knowledge_chunks USING hnsw (embedding vector_cosine_ops);
 """
 
+CREATE_MEETINGS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS meetings (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    started_at TIMESTAMPTZ,
+    ended_at TIMESTAMPTZ,
+    recording_url TEXT,
+    copilot_dispatched BOOLEAN NOT NULL DEFAULT FALSE
+);
+"""
+
+CREATE_MEETING_PARTICIPANTS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS meeting_participants (
+    id BIGSERIAL PRIMARY KEY,
+    meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('host', 'commercial', 'client', 'observer')),
+    joined_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
+
+CREATE_MEETING_PARTICIPANTS_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_meeting_participants_meeting_joined
+ON meeting_participants (meeting_id, joined_at, id);
+"""
+
 
 async def init_database(settings: Settings) -> None:
     async with await psycopg.AsyncConnection.connect(settings.database_url) as conn:
         await conn.execute(CREATE_VECTOR_EXTENSION_SQL)
+        await conn.execute(CREATE_MEETINGS_TABLE_SQL)
+        await conn.execute(CREATE_MEETING_PARTICIPANTS_TABLE_SQL)
+        await conn.execute(CREATE_MEETING_PARTICIPANTS_INDEX_SQL)
         await conn.execute(CREATE_TRANSCRIPT_TABLE_SQL)
         await conn.execute(CREATE_TRANSCRIPT_INDEX_SQL)
         await conn.execute(CREATE_RECOMMENDATIONS_TABLE_SQL)
@@ -99,6 +131,146 @@ async def init_database(settings: Settings) -> None:
         )
         await conn.execute(CREATE_KNOWLEDGE_CHUNKS_DOCUMENT_INDEX_SQL)
         await conn.execute(CREATE_KNOWLEDGE_CHUNKS_VECTOR_INDEX_SQL)
+
+
+async def insert_meeting(*, settings: Settings, meeting: Meeting) -> Meeting:
+    query = """
+    INSERT INTO meetings (
+        id,
+        title,
+        created_at,
+        started_at,
+        ended_at,
+        recording_url,
+        copilot_dispatched
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s)
+    RETURNING id, title, created_at, started_at, ended_at, recording_url, copilot_dispatched;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                query,
+                (
+                    meeting.id,
+                    meeting.title,
+                    meeting.created_at,
+                    meeting.started_at,
+                    meeting.ended_at,
+                    meeting.recording_url,
+                    meeting.copilot_dispatched,
+                ),
+            )
+            row = await cur.fetchone()
+
+    if row is None:
+        raise RuntimeError("Meeting insert did not return a row.")
+
+    return Meeting.model_validate(row)
+
+
+async def get_meeting_by_id(*, settings: Settings, meeting_id: str) -> Meeting | None:
+    query = """
+    SELECT id, title, created_at, started_at, ended_at, recording_url, copilot_dispatched
+    FROM meetings
+    WHERE id = %s;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (meeting_id,))
+            row = await cur.fetchone()
+
+    if row is None:
+        return None
+
+    return Meeting.model_validate(row)
+
+
+async def ensure_meeting(*, settings: Settings, meeting_id: str) -> Meeting:
+    existing = await get_meeting_by_id(settings=settings, meeting_id=meeting_id)
+    if existing:
+        return existing
+
+    meeting = Meeting.create("Reuniao UM")
+    meeting.id = meeting_id
+    return await insert_meeting(settings=settings, meeting=meeting)
+
+
+async def mark_meeting_copilot_dispatched(
+    *,
+    settings: Settings,
+    meeting_id: str,
+) -> None:
+    query = """
+    UPDATE meetings
+    SET copilot_dispatched = TRUE
+    WHERE id = %s;
+    """
+
+    async with await psycopg.AsyncConnection.connect(settings.database_url) as conn:
+        await conn.execute(query, (meeting_id,))
+
+
+async def register_meeting_participant(
+    *,
+    settings: Settings,
+    meeting_id: str,
+    name: str,
+    email: str,
+    role: str,
+) -> None:
+    async with await psycopg.AsyncConnection.connect(settings.database_url) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                """
+                INSERT INTO meeting_participants (meeting_id, name, email, role)
+                VALUES (%s, %s, %s, %s);
+                """,
+                (meeting_id, name, email, role),
+            )
+
+            if role in ("host", "commercial"):
+                await cur.execute(
+                    """
+                    UPDATE meetings
+                    SET started_at = COALESCE(started_at, now())
+                    WHERE id = %s;
+                    """,
+                    (meeting_id,),
+                )
+
+
+async def has_host_or_commercial_joined(
+    *,
+    settings: Settings,
+    meeting_id: str,
+) -> bool:
+    query = """
+    SELECT EXISTS (
+        SELECT 1
+        FROM meeting_participants
+        WHERE meeting_id = %s
+          AND role IN ('host', 'commercial')
+    ) AS has_joined;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (meeting_id,))
+            row = await cur.fetchone()
+
+    return bool(row and row["has_joined"])
 
 
 async def insert_transcript_segment(

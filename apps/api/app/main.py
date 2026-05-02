@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from contextlib import asynccontextmanager
@@ -15,11 +16,15 @@ from app.auth import (
 from app.config import get_settings
 from app.copilot import dispatch_copilot
 from app.database import (
+    ensure_meeting,
+    has_host_or_commercial_joined,
     init_database,
     insert_sales_recommendations,
     insert_transcript_segment,
+    insert_meeting,
     list_sales_recommendations,
     list_transcript_segments,
+    register_meeting_participant,
 )
 from app.models import (
     CreateMeetingRequest,
@@ -38,6 +43,7 @@ from app.sales_coach_service import analyze_segment
 from app.store import meeting_store
 
 settings = get_settings()
+MEETING_JOIN_GRACE_PERIOD = timedelta(minutes=15)
 
 
 @asynccontextmanager
@@ -81,13 +87,14 @@ async def search_knowledge_base(
 
 
 @app.post("/meetings", response_model=Meeting, status_code=201)
-def create_meeting(payload: CreateMeetingRequest) -> Meeting:
-    return meeting_store.create(payload.title)
+async def create_meeting(payload: CreateMeetingRequest) -> Meeting:
+    meeting = meeting_store.create(payload.title)
+    return await insert_meeting(settings=settings, meeting=meeting)
 
 
 @app.get("/meetings/{meeting_id}", response_model=Meeting)
-def get_meeting(meeting_id: str) -> Meeting:
-    return meeting_store.ensure(meeting_id)
+async def get_meeting(meeting_id: str) -> Meeting:
+    return await ensure_meeting(settings=settings, meeting_id=meeting_id)
 
 
 @app.post("/meetings/{meeting_id}/token", response_model=LiveKitTokenResponse)
@@ -101,7 +108,38 @@ async def create_livekit_token(
             detail="Aceite LGPD obrigatorio para entrar na reuniao.",
         )
 
-    meeting = meeting_store.ensure(meeting_id)
+    meeting = await ensure_meeting(settings=settings, meeting_id=meeting_id)
+
+    now = datetime.now(timezone.utc)
+    if (
+        meeting.ended_at is not None
+        and now - meeting.ended_at > MEETING_JOIN_GRACE_PERIOD
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Link da reuniao expirado.",
+        )
+
+    has_gatekeeper_joined = await has_host_or_commercial_joined(
+        settings=settings,
+        meeting_id=meeting.id,
+    )
+
+    if (
+        payload.role not in ("host", "commercial")
+        and not has_gatekeeper_joined
+    ):
+        if now - meeting.created_at > MEETING_JOIN_GRACE_PERIOD:
+            raise HTTPException(
+                status_code=status.HTTP_410_GONE,
+                detail="Link da reuniao expirado porque Host ou Comercial nao entrou.",
+            )
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Aguarde o Host ou Comercial entrar para liberar a sala.",
+        )
+
     identity = f"{payload.email}:{uuid4().hex[:8]}"
     participant_access_token = create_participant_access_token(
         settings=settings,
@@ -129,6 +167,13 @@ async def create_livekit_token(
     copilot_dispatch_requested, copilot_dispatch_error = await dispatch_copilot(
         settings=settings,
         meeting=meeting,
+    )
+    await register_meeting_participant(
+        settings=settings,
+        meeting_id=meeting.id,
+        name=payload.name,
+        email=str(payload.email),
+        role=payload.role,
     )
 
     return LiveKitTokenResponse(
@@ -166,7 +211,7 @@ async def create_transcript_segment(
     meeting_id: str,
     payload: TranscriptSegmentCreate,
 ) -> TranscriptSegment:
-    meeting_store.ensure(meeting_id)
+    await ensure_meeting(settings=settings, meeting_id=meeting_id)
     segment = await insert_transcript_segment(
         settings=settings,
         meeting_id=meeting_id,
@@ -184,7 +229,7 @@ async def create_transcript_segment(
 
 @app.get("/meetings/{meeting_id}/transcript", response_model=list[TranscriptSegment])
 async def get_meeting_transcript(meeting_id: str) -> list[TranscriptSegment]:
-    meeting_store.ensure(meeting_id)
+    await ensure_meeting(settings=settings, meeting_id=meeting_id)
     segments = await list_transcript_segments(settings=settings, meeting_id=meeting_id)
     return list(segments)
 
@@ -197,7 +242,7 @@ async def get_sales_recommendations(
     meeting_id: str,
     claims: ParticipantClaims = Depends(get_participant_claims),
 ) -> list[SalesRecommendation]:
-    meeting_store.ensure(meeting_id)
+    await ensure_meeting(settings=settings, meeting_id=meeting_id)
     require_sales_panel_access(claims, meeting_id)
     recommendations = await list_sales_recommendations(
         settings=settings,

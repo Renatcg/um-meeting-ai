@@ -597,42 +597,43 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-nmdi-ink px-5 py-10 text-nmdi-ivory">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-white px-5 py-10 text-[#11110F]">
       <video
         ref={previewVideoRef}
         autoPlay
         muted
         playsInline
-        className="absolute inset-0 h-full w-full scale-x-[-1] object-cover opacity-70"
+        className="absolute inset-0 h-full w-full scale-x-[-1] object-cover opacity-20 grayscale"
       />
-      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(11,13,18,0.88),rgba(11,13,18,0.38)),radial-gradient(circle_at_50%_0%,rgba(200,164,93,0.18),transparent_35%)]" />
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(17,17,15,0.055)_1px,transparent_1px),linear-gradient(to_bottom,rgba(17,17,15,0.055)_1px,transparent_1px)] bg-[length:42px_42px]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_10%,rgba(249,115,22,0.12),transparent_35%),linear-gradient(90deg,rgba(255,255,255,0.96),rgba(255,255,255,0.84))]" />
 
       {cameraError ? (
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.035)_1px,transparent_1px)] bg-[length:42px_42px]" />
+        <div className="absolute inset-0 bg-[#FCFCFB]" />
       ) : null}
 
       <form
         onSubmit={joinMeeting}
-        className={`relative z-10 max-h-[92vh] w-full overflow-y-auto rounded-lg border border-white/10 bg-nmdi-ink/[0.82] p-6 shadow-nmdi-deep backdrop-blur-xl sm:p-8 ${
+        className={`relative z-10 max-h-[92vh] w-full overflow-y-auto rounded-2xl border border-[#E7E7E2] bg-white/90 p-6 shadow-[0_24px_90px_rgba(17,17,15,0.12)] backdrop-blur-xl sm:p-8 ${
           isHostLobby ? "max-w-4xl" : "max-w-2xl"
         }`}
       >
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="inline-flex rounded-full border border-nmdi-gold/30 bg-nmdi-gold/10 px-3 py-1 font-mono text-xs uppercase text-nmdi-gold">
+          <p className="inline-flex rounded-full border border-[#FDBA74] bg-[#FFF3EA] px-3 py-1 font-mono text-xs uppercase text-[#F97316]">
             {isHostLobby ? `Sala ${meetingId}` : "Convite de reuniao"}
           </p>
           <button
-            className="rounded-lg border border-white/10 px-3 py-2 text-sm font-semibold text-nmdi-ivory transition hover:border-nmdi-gold/50 hover:bg-white/[0.06]"
+            className="rounded-lg border border-[#E7E7E2] bg-white px-3 py-2 text-sm font-semibold text-[#11110F] transition hover:-translate-y-0.5 hover:border-[#F97316] hover:bg-[#FFF3EA]"
             type="button"
             onClick={goBackHome}
           >
             Voltar
           </button>
         </div>
-        <h1 className="font-display text-3xl font-semibold leading-tight text-nmdi-ivory">
+        <h1 className="font-display text-3xl font-semibold leading-tight text-[#11110F]">
           {isHostLobby ? "Antes de entrar, configure a sala." : lobbyTitle}
         </h1>
-        <p className="mt-2 text-sm leading-6 text-nmdi-muted">
+        <p className="mt-2 text-sm leading-6 text-[#73736B]">
           {isHostLobby
             ? "Sua camera ja esta em preview. O link abaixo pode ser enviado para os convidados entrarem como participantes."
             : "Informe seus dados para entrar na reuniao. A traducao simultanea ainda nao esta ativa neste MVP."}
@@ -640,11 +641,11 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           <label className="block">
-            <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
+            <span className="mb-2 block text-sm font-medium text-[#11110F]">
               Nome
             </span>
             <input
-              className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-nmdi-ivory outline-none transition placeholder:text-nmdi-muted focus:border-nmdi-gold/70 focus:ring-2 focus:ring-nmdi-gold/20"
+              className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-[#11110F] outline-none transition placeholder:text-[#73736B] focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/15"
               value={participant.name}
               onChange={(event) =>
                 setParticipant((current) => ({
@@ -659,11 +660,11 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
           </label>
 
           <label className="block">
-            <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
+            <span className="mb-2 block text-sm font-medium text-[#11110F]">
               E-mail
             </span>
             <input
-              className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-nmdi-ivory outline-none transition placeholder:text-nmdi-muted focus:border-nmdi-gold/70 focus:ring-2 focus:ring-nmdi-gold/20"
+              className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-[#11110F] outline-none transition placeholder:text-[#73736B] focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/15"
               type="email"
               value={participant.email}
               onChange={(event) =>
@@ -679,18 +680,18 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
         </div>
 
         {isHostLobby ? (
-          <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.04] p-4">
+          <div className="mt-4 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="font-mono text-xs uppercase text-nmdi-gold">
+                <p className="font-mono text-xs uppercase text-[#F97316]">
                   Papel automatico
                 </p>
-                <p className="mt-1 text-sm text-nmdi-muted">
+                <p className="mt-1 text-sm text-[#73736B]">
                   Host para quem criou a sala; Comercial pelo cadastro; demais
                   entram como Participante.
                 </p>
               </div>
-              <span className="rounded-full border border-nmdi-gold/30 bg-nmdi-gold/10 px-3 py-1 font-mono text-xs uppercase text-nmdi-gold">
+              <span className="rounded-full border border-[#FDBA74] bg-[#FFF3EA] px-3 py-1 font-mono text-xs uppercase text-[#F97316]">
                 {entryContextReady ? roleLabel(inferredRole) : "Preparando"}
               </span>
             </div>
@@ -698,19 +699,19 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
         ) : null}
 
         {isHostLobby ? (
-          <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.04] p-4">
+          <div className="mt-4 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">
             <label className="block">
-              <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
+              <span className="mb-2 block text-sm font-medium text-[#11110F]">
                 Link para convidar
               </span>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <input
-                  className="min-w-0 flex-1 rounded-lg border border-white/10 bg-nmdi-ink/70 px-4 py-3 text-sm text-nmdi-muted outline-none"
+                  className="min-w-0 flex-1 rounded-lg border border-[#E7E7E2] bg-[#F8F8F6] px-4 py-3 text-sm text-[#73736B] outline-none"
                   value={inviteLink}
                   readOnly
                 />
                 <button
-                  className="rounded-lg border border-nmdi-gold/40 px-4 py-3 text-sm font-semibold text-nmdi-gold transition hover:bg-nmdi-gold/10"
+                  className="rounded-lg border border-[#FDBA74] px-4 py-3 text-sm font-semibold text-[#F97316] transition hover:bg-[#FFF3EA]"
                   type="button"
                   onClick={copyInviteLink}
                 >
@@ -722,28 +723,28 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
         ) : null}
 
         {isHostLobby ? (
-          <section className="mt-4 rounded-lg border border-white/10 bg-white/[0.04] p-4">
+          <section className="mt-4 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="font-mono text-xs uppercase text-nmdi-gold">
+                <p className="font-mono text-xs uppercase text-[#F97316]">
                   Base de conhecimento
                 </p>
-                <p className="mt-1 text-sm text-nmdi-muted">
+                <p className="mt-1 text-sm text-[#73736B]">
                   Apenas o Host pode alimentar a base antes da reuniao.
                 </p>
               </div>
-              <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 font-mono text-xs uppercase text-nmdi-muted">
+              <span className="rounded-full border border-[#E7E7E2] bg-white px-3 py-1 font-mono text-xs uppercase text-[#73736B]">
                 Host liberado
               </span>
             </div>
 
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
+                <span className="mb-2 block text-sm font-medium text-[#11110F]">
                   Documentos
                 </span>
                 <input
-                  className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-nmdi-muted file:mr-3 file:rounded-md file:border-0 file:bg-nmdi-gold file:px-3 file:py-2 file:text-sm file:font-bold file:text-nmdi-ink"
+                  className="w-full rounded-lg border border-[#E7E7E2] bg-white px-4 py-3 text-sm text-[#73736B] file:mr-3 file:rounded-md file:border-0 file:bg-[#11110F] file:px-3 file:py-2 file:text-sm file:font-bold file:text-white"
                   type="file"
                   multiple
                   accept=".pdf,.doc,.docx,.txt,.md"
@@ -751,11 +752,11 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
               </label>
 
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
+                <span className="mb-2 block text-sm font-medium text-[#11110F]">
                   Links da web
                 </span>
                 <input
-                  className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-nmdi-ivory outline-none transition placeholder:text-nmdi-muted focus:border-nmdi-gold/70 focus:ring-2 focus:ring-nmdi-gold/20"
+                  className="w-full rounded-lg border border-[#E7E7E2] bg-white px-4 py-3 text-sm text-[#11110F] outline-none transition placeholder:text-[#73736B] focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/15"
                   type="url"
                   placeholder="https://..."
                 />
@@ -764,11 +765,11 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
 
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
+                <span className="mb-2 block text-sm font-medium text-[#11110F]">
                   Audios e videos
                 </span>
                 <input
-                  className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-nmdi-muted file:mr-3 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:font-bold file:text-nmdi-ivory"
+                  className="w-full rounded-lg border border-[#E7E7E2] bg-white px-4 py-3 text-sm text-[#73736B] file:mr-3 file:rounded-md file:border-0 file:bg-[#F8F8F6] file:px-3 file:py-2 file:text-sm file:font-bold file:text-[#11110F]"
                   type="file"
                   multiple
                   accept="audio/*,video/*"
@@ -776,11 +777,11 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
               </label>
 
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
+                <span className="mb-2 block text-sm font-medium text-[#11110F]">
                   Transcricoes
                 </span>
                 <textarea
-                  className="h-24 w-full resize-none rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-nmdi-ivory outline-none transition placeholder:text-nmdi-muted focus:border-nmdi-gold/70 focus:ring-2 focus:ring-nmdi-gold/20"
+                  className="h-24 w-full resize-none rounded-lg border border-[#E7E7E2] bg-white px-4 py-3 text-sm text-[#11110F] outline-none transition placeholder:text-[#73736B] focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/15"
                   placeholder="Cole uma transcricao, briefing ou contexto da reuniao."
                 />
               </label>
@@ -788,33 +789,33 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
           </section>
         ) : null}
 
-        <section className="mt-4 rounded-lg border border-white/10 bg-white/[0.035] p-4 opacity-70">
+        <section className="mt-4 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4 opacity-70">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="font-mono text-xs uppercase text-nmdi-gold">
+              <p className="font-mono text-xs uppercase text-[#F97316]">
                 Traducao simultanea
               </p>
-              <p className="mt-1 text-sm text-nmdi-muted">
+              <p className="mt-1 text-sm text-[#73736B]">
                 Funcao planejada: cada participante fala e ouve na propria lingua.
               </p>
             </div>
-            <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 font-mono text-xs uppercase text-nmdi-muted">
+            <span className="rounded-full border border-[#E7E7E2] bg-white px-3 py-1 font-mono text-xs uppercase text-[#73736B]">
               Em breve
             </span>
           </div>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-[1fr_2fr]">
-            <label className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-4 text-sm text-nmdi-muted">
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <label className="flex items-center gap-3 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4 text-sm text-[#73736B]">
               <input className="h-4 w-4" type="checkbox" disabled />
               Preciso de traducao simultanea
             </label>
 
             <label className="block">
-              <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
+              <span className="mb-2 block text-sm font-medium text-[#11110F]">
                 Lingua desejada
               </span>
               <select
-                className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-nmdi-muted outline-none disabled:cursor-not-allowed"
+                className="w-full rounded-lg border border-[#E7E7E2] bg-white px-4 py-3 text-sm text-[#73736B] outline-none disabled:cursor-not-allowed"
                 disabled
                 defaultValue=""
               >
@@ -830,9 +831,9 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
           </div>
         </section>
 
-        <label className="mt-4 flex gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-4 text-sm leading-6 text-nmdi-muted">
+        <label className="mt-4 flex gap-3 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4 text-sm leading-6 text-[#73736B]">
           <input
-            className="mt-1 h-4 w-4 accent-nmdi-gold"
+            className="mt-1 h-4 w-4 accent-[#F97316]"
             type="checkbox"
             checked={acceptedLgpd}
             onChange={(event) => setAcceptedLgpd(event.target.checked)}
@@ -844,14 +845,14 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
         </label>
 
         {error ? (
-          <p className="mt-4 rounded-lg border border-nmdi-red/25 bg-nmdi-red/10 px-4 py-3 text-sm text-red-200">
+          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
           </p>
         ) : null}
 
         <div className="mt-6 flex justify-end">
           <button
-            className="rounded-lg bg-gradient-to-r from-nmdi-gold to-nmdi-amber px-6 py-3 font-bold text-nmdi-ink shadow-nmdi-glow transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-lg bg-[#11110F] px-6 py-3 font-bold text-white shadow-[0_20px_70px_rgba(249,115,22,0.22)] transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60"
             disabled={isJoining || !acceptedLgpd || !entryContextReady}
             type="submit"
           >
