@@ -85,6 +85,11 @@ def create_meeting(payload: CreateMeetingRequest) -> Meeting:
     return meeting_store.create(payload.title)
 
 
+@app.get("/meetings/{meeting_id}", response_model=Meeting)
+def get_meeting(meeting_id: str) -> Meeting:
+    return meeting_store.ensure(meeting_id)
+
+
 @app.post("/meetings/{meeting_id}/token", response_model=LiveKitTokenResponse)
 async def create_livekit_token(
     meeting_id: str,

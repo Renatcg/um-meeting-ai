@@ -52,6 +52,12 @@ type SalesRecommendation = {
   created_at: string;
 };
 
+type MeetingSummary = {
+  id: string;
+  title: string;
+  created_at: string;
+};
+
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const commercialUserEmails = new Set(["renato@coevo.ai", "marina@coevo.ai"]);
 
@@ -215,6 +221,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isHostCreator, setIsHostCreator] = useState<boolean | null>(null);
+  const [meetingTitle, setMeetingTitle] = useState("");
   const [inviteLink, setInviteLink] = useState("");
   const [copiedInviteLink, setCopiedInviteLink] = useState(false);
   const [cameraError, setCameraError] = useState(false);
@@ -226,6 +233,8 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
     participant.email,
     isHostCreator === true,
   );
+  const isHostLobby = inferredRole === "host";
+  const lobbyTitle = meetingTitle || meetingId;
 
   const canViewSalesPanel =
     connection?.role === "host" || connection?.role === "commercial";
@@ -241,6 +250,32 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
     const isHostFromStorage = window.sessionStorage.getItem(hostStorageKey) === "1";
     setIsHostCreator(isHostFromUrl || isHostFromStorage);
     setInviteLink(`${window.location.origin}/meeting/${meetingId}`);
+  }, [meetingId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMeeting() {
+      try {
+        const response = await fetch(`${apiUrl}/meetings/${meetingId}`);
+        if (!response.ok) {
+          return;
+        }
+
+        const meeting = (await response.json()) as MeetingSummary;
+        if (!cancelled) {
+          setMeetingTitle(meeting.title);
+        }
+      } catch {
+        // The room can still be joined if the title lookup fails.
+      }
+    }
+
+    loadMeeting();
+
+    return () => {
+      cancelled = true;
+    };
   }, [meetingId]);
 
   useEffect(() => {
@@ -578,11 +613,13 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
 
       <form
         onSubmit={joinMeeting}
-        className="relative z-10 max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-lg border border-white/10 bg-nmdi-ink/[0.82] p-6 shadow-nmdi-deep backdrop-blur-xl sm:p-8"
+        className={`relative z-10 max-h-[92vh] w-full overflow-y-auto rounded-lg border border-white/10 bg-nmdi-ink/[0.82] p-6 shadow-nmdi-deep backdrop-blur-xl sm:p-8 ${
+          isHostLobby ? "max-w-4xl" : "max-w-2xl"
+        }`}
       >
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <p className="inline-flex rounded-full border border-nmdi-gold/30 bg-nmdi-gold/10 px-3 py-1 font-mono text-xs uppercase text-nmdi-gold">
-            Sala {meetingId}
+            {isHostLobby ? `Sala ${meetingId}` : "Convite de reuniao"}
           </p>
           <button
             className="rounded-lg border border-white/10 px-3 py-2 text-sm font-semibold text-nmdi-ivory transition hover:border-nmdi-gold/50 hover:bg-white/[0.06]"
@@ -593,11 +630,12 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
           </button>
         </div>
         <h1 className="font-display text-3xl font-semibold leading-tight text-nmdi-ivory">
-          Antes de entrar, identifique-se.
+          {isHostLobby ? "Antes de entrar, configure a sala." : lobbyTitle}
         </h1>
         <p className="mt-2 text-sm leading-6 text-nmdi-muted">
-          Sua camera ja esta em preview. O link abaixo pode ser enviado para os
-          convidados entrarem como participantes.
+          {isHostLobby
+            ? "Sua camera ja esta em preview. O link abaixo pode ser enviado para os convidados entrarem como participantes."
+            : "Informe seus dados para entrar na reuniao. A traducao simultanea ainda nao esta ativa neste MVP."}
         </p>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -640,113 +678,115 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
           </label>
         </div>
 
-        <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.04] p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="font-mono text-xs uppercase text-nmdi-gold">
-                Papel automatico
-              </p>
-              <p className="mt-1 text-sm text-nmdi-muted">
-                Host para quem criou a sala; Comercial pelo cadastro; demais
-                entram como Participante.
-              </p>
+        {isHostLobby ? (
+          <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.04] p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="font-mono text-xs uppercase text-nmdi-gold">
+                  Papel automatico
+                </p>
+                <p className="mt-1 text-sm text-nmdi-muted">
+                  Host para quem criou a sala; Comercial pelo cadastro; demais
+                  entram como Participante.
+                </p>
+              </div>
+              <span className="rounded-full border border-nmdi-gold/30 bg-nmdi-gold/10 px-3 py-1 font-mono text-xs uppercase text-nmdi-gold">
+                {entryContextReady ? roleLabel(inferredRole) : "Preparando"}
+              </span>
             </div>
-            <span className="rounded-full border border-nmdi-gold/30 bg-nmdi-gold/10 px-3 py-1 font-mono text-xs uppercase text-nmdi-gold">
-              {entryContextReady ? roleLabel(inferredRole) : "Preparando"}
-            </span>
           </div>
-        </div>
+        ) : null}
 
-        <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.04] p-4">
-          <label className="block">
-            <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
-              Link para convidar
-            </span>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <input
-                className="min-w-0 flex-1 rounded-lg border border-white/10 bg-nmdi-ink/70 px-4 py-3 text-sm text-nmdi-muted outline-none"
-                value={inviteLink}
-                readOnly
-              />
-              <button
-                className="rounded-lg border border-nmdi-gold/40 px-4 py-3 text-sm font-semibold text-nmdi-gold transition hover:bg-nmdi-gold/10"
-                type="button"
-                onClick={copyInviteLink}
-              >
-                {copiedInviteLink ? "Copiado" : "Copiar link"}
-              </button>
+        {isHostLobby ? (
+          <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.04] p-4">
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
+                Link para convidar
+              </span>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <input
+                  className="min-w-0 flex-1 rounded-lg border border-white/10 bg-nmdi-ink/70 px-4 py-3 text-sm text-nmdi-muted outline-none"
+                  value={inviteLink}
+                  readOnly
+                />
+                <button
+                  className="rounded-lg border border-nmdi-gold/40 px-4 py-3 text-sm font-semibold text-nmdi-gold transition hover:bg-nmdi-gold/10"
+                  type="button"
+                  onClick={copyInviteLink}
+                >
+                  {copiedInviteLink ? "Copiado" : "Copiar link"}
+                </button>
+              </div>
+            </label>
+          </div>
+        ) : null}
+
+        {isHostLobby ? (
+          <section className="mt-4 rounded-lg border border-white/10 bg-white/[0.04] p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="font-mono text-xs uppercase text-nmdi-gold">
+                  Base de conhecimento
+                </p>
+                <p className="mt-1 text-sm text-nmdi-muted">
+                  Apenas o Host pode alimentar a base antes da reuniao.
+                </p>
+              </div>
+              <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 font-mono text-xs uppercase text-nmdi-muted">
+                Host liberado
+              </span>
             </div>
-          </label>
-        </div>
 
-        <section className="mt-4 rounded-lg border border-white/10 bg-white/[0.04] p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="font-mono text-xs uppercase text-nmdi-gold">
-                Base de conhecimento
-              </p>
-              <p className="mt-1 text-sm text-nmdi-muted">
-                Apenas o Host pode alimentar a base antes da reuniao.
-              </p>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
+                  Documentos
+                </span>
+                <input
+                  className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-nmdi-muted file:mr-3 file:rounded-md file:border-0 file:bg-nmdi-gold file:px-3 file:py-2 file:text-sm file:font-bold file:text-nmdi-ink"
+                  type="file"
+                  multiple
+                  accept=".pdf,.doc,.docx,.txt,.md"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
+                  Links da web
+                </span>
+                <input
+                  className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-nmdi-ivory outline-none transition placeholder:text-nmdi-muted focus:border-nmdi-gold/70 focus:ring-2 focus:ring-nmdi-gold/20"
+                  type="url"
+                  placeholder="https://..."
+                />
+              </label>
             </div>
-            <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 font-mono text-xs uppercase text-nmdi-muted">
-              {inferredRole === "host" ? "Host liberado" : "Somente Host"}
-            </span>
-          </div>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
-                Documentos
-              </span>
-              <input
-                className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-nmdi-muted file:mr-3 file:rounded-md file:border-0 file:bg-nmdi-gold file:px-3 file:py-2 file:text-sm file:font-bold file:text-nmdi-ink disabled:cursor-not-allowed disabled:opacity-50"
-                type="file"
-                multiple
-                accept=".pdf,.doc,.docx,.txt,.md"
-                disabled={inferredRole !== "host"}
-              />
-            </label>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
+                  Audios e videos
+                </span>
+                <input
+                  className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-nmdi-muted file:mr-3 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:font-bold file:text-nmdi-ivory"
+                  type="file"
+                  multiple
+                  accept="audio/*,video/*"
+                />
+              </label>
 
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
-                Links da web
-              </span>
-              <input
-                className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-nmdi-ivory outline-none transition placeholder:text-nmdi-muted focus:border-nmdi-gold/70 focus:ring-2 focus:ring-nmdi-gold/20 disabled:cursor-not-allowed disabled:opacity-50"
-                type="url"
-                placeholder="https://..."
-                disabled={inferredRole !== "host"}
-              />
-            </label>
-          </div>
-
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
-                Audios e videos
-              </span>
-              <input
-                className="w-full rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-nmdi-muted file:mr-3 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:font-bold file:text-nmdi-ivory disabled:cursor-not-allowed disabled:opacity-50"
-                type="file"
-                multiple
-                accept="audio/*,video/*"
-                disabled={inferredRole !== "host"}
-              />
-            </label>
-
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
-                Transcricoes
-              </span>
-              <textarea
-                className="h-24 w-full resize-none rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-nmdi-ivory outline-none transition placeholder:text-nmdi-muted focus:border-nmdi-gold/70 focus:ring-2 focus:ring-nmdi-gold/20 disabled:cursor-not-allowed disabled:opacity-50"
-                placeholder="Cole uma transcricao, briefing ou contexto da reuniao."
-                disabled={inferredRole !== "host"}
-              />
-            </label>
-          </div>
-        </section>
+              <label className="block">
+                <span className="mb-2 block text-sm font-medium text-nmdi-ivory">
+                  Transcricoes
+                </span>
+                <textarea
+                  className="h-24 w-full resize-none rounded-lg border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-nmdi-ivory outline-none transition placeholder:text-nmdi-muted focus:border-nmdi-gold/70 focus:ring-2 focus:ring-nmdi-gold/20"
+                  placeholder="Cole uma transcricao, briefing ou contexto da reuniao."
+                />
+              </label>
+            </div>
+          </section>
+        ) : null}
 
         <section className="mt-4 rounded-lg border border-white/10 bg-white/[0.035] p-4 opacity-70">
           <div className="flex flex-wrap items-start justify-between gap-3">
