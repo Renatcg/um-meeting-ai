@@ -1,3 +1,4 @@
+import json
 from collections.abc import Sequence
 
 import psycopg
@@ -5,6 +6,7 @@ from psycopg.rows import dict_row
 
 from app.config import Settings
 from app.models import (
+    AgentProfile,
     KnowledgeDocument,
     KnowledgeSearchResult,
     Meeting,
@@ -123,6 +125,14 @@ CREATE INDEX IF NOT EXISTS idx_meeting_participants_meeting_joined
 ON meeting_participants (meeting_id, joined_at, id);
 """
 
+CREATE_AGENT_PROFILE_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS agent_profile (
+    id TEXT PRIMARY KEY,
+    config JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
+
 
 async def init_database(settings: Settings) -> None:
     async with await psycopg.AsyncConnection.connect(settings.database_url) as conn:
@@ -130,6 +140,7 @@ async def init_database(settings: Settings) -> None:
         await conn.execute(CREATE_MEETINGS_TABLE_SQL)
         await conn.execute(CREATE_MEETING_PARTICIPANTS_TABLE_SQL)
         await conn.execute(CREATE_MEETING_PARTICIPANTS_INDEX_SQL)
+        await conn.execute(CREATE_AGENT_PROFILE_TABLE_SQL)
         await conn.execute(CREATE_TRANSCRIPT_TABLE_SQL)
         await conn.execute(CREATE_TRANSCRIPT_INDEX_SQL)
         await conn.execute(CREATE_RECOMMENDATIONS_TABLE_SQL)
@@ -531,7 +542,11 @@ async def search_knowledge_chunks(
     top_k: int,
     meeting_id: str | None = None,
 ) -> Sequence[KnowledgeSearchResult]:
-    meeting_filter = "WHERE kd.meeting_id = %s" if meeting_id else ""
+    meeting_filter = (
+        "WHERE kd.meeting_id = %s OR kd.meeting_id IS NULL"
+        if meeting_id
+        else "WHERE kd.meeting_id IS NULL"
+    )
     query = f"""
     SELECT
         kc.id AS chunk_id,
@@ -562,3 +577,58 @@ async def search_knowledge_chunks(
             rows = await cur.fetchall()
 
     return [KnowledgeSearchResult.model_validate(row) for row in rows]
+
+
+async def get_agent_profile(*, settings: Settings) -> AgentProfile:
+    query = """
+    SELECT config, updated_at
+    FROM agent_profile
+    WHERE id = 'default';
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query)
+            row = await cur.fetchone()
+
+    if row is None:
+        return AgentProfile()
+
+    profile = AgentProfile.model_validate(row["config"])
+    profile.updated_at = row["updated_at"]
+    return profile
+
+
+async def upsert_agent_profile(
+    *,
+    settings: Settings,
+    profile: AgentProfile,
+) -> AgentProfile:
+    query = """
+    INSERT INTO agent_profile (id, config, updated_at)
+    VALUES ('default', %s::jsonb, now())
+    ON CONFLICT (id) DO UPDATE
+    SET config = EXCLUDED.config,
+        updated_at = now()
+    RETURNING config, updated_at;
+    """
+
+    payload = profile.model_dump(mode="json", exclude={"updated_at"})
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (json.dumps(payload),))
+            row = await cur.fetchone()
+
+    if row is None:
+        raise RuntimeError("Agent profile upsert did not return a row.")
+
+    saved = AgentProfile.model_validate(row["config"])
+    saved.updated_at = row["updated_at"]
+    return saved

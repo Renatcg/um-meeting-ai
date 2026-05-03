@@ -7,6 +7,19 @@ from pydantic import BaseModel, EmailStr, Field
 ParticipantRole = Literal["host", "commercial", "client", "observer"]
 RecommendationKind = Literal["objection", "risk", "opportunity"]
 RecommendationSeverity = Literal["low", "medium", "high"]
+AgentGender = Literal["masculine", "feminine", "neutral"]
+AgentVoice = Literal[
+    "alloy",
+    "ash",
+    "ballad",
+    "coral",
+    "echo",
+    "sage",
+    "shimmer",
+    "verse",
+    "marin",
+    "cedar",
+]
 
 
 class CreateMeetingRequest(BaseModel):
@@ -114,3 +127,34 @@ class KnowledgeSearchResult(BaseModel):
 
 class KnowledgeSearchResponse(BaseModel):
     results: list[KnowledgeSearchResult]
+
+
+class AgentProfile(BaseModel):
+    name: str = Field(default="Coevo", min_length=2, max_length=40)
+    gender: AgentGender = "masculine"
+    voice: AgentVoice = "marin"
+    tone: str = Field(default="consultivo", max_length=80)
+    formality: int = Field(default=68, ge=0, le=100)
+    energy: int = Field(default=48, ge=0, le=100)
+    empathy: int = Field(default=74, ge=0, le=100)
+    assertiveness: int = Field(default=58, ge=0, le=100)
+    brevity: int = Field(default=70, ge=0, le=100)
+    keywords: list[str] = Field(default_factory=list, max_length=20)
+    avoid_words: list[str] = Field(default_factory=list, max_length=20)
+    behavior_tags: list[str] = Field(default_factory=list, max_length=20)
+    sales_method: str = Field(default="consultivo", max_length=80)
+    language_policy: str = Field(
+        default="Responder sempre na mesma lingua usada pelo participante.",
+        max_length=240,
+    )
+    custom_instructions: str = Field(default="", max_length=1600)
+    updated_at: datetime | None = None
+
+
+class VoiceDemoRequest(BaseModel):
+    voice: AgentVoice
+    text: str = Field(
+        default="Ola, eu sou o Coevo. Vou acompanhar a reuniao com clareza, calma e foco no que importa.",
+        min_length=3,
+        max_length=240,
+    )

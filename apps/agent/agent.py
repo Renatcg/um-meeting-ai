@@ -104,9 +104,9 @@ def is_meaningful_transcript(value: str) -> bool:
 
 @function_tool(
     description=(
-        "Busca informacoes somente na base de conhecimento submetida para a "
-        "reuniao atual. Use quando o participante perguntar algo que possa estar "
-        "nos documentos, midias ou links enviados antes da chamada."
+        "Busca informacoes na base institucional da empresa e na base submetida "
+        "para a reuniao atual. Use quando o participante perguntar algo que "
+        "possa estar nos documentos, midias ou links cadastrados."
     )
 )
 async def search_knowledge_base(query: str) -> str:
@@ -155,10 +155,62 @@ async def search_knowledge_base(query: str) -> str:
     return "\n\n---\n\n".join(formatted_results)
 
 
+async def fetch_agent_profile() -> dict:
+    headers = {"Content-Type": "application/json"}
+    if AGENT_API_KEY:
+        headers["X-Agent-API-Key"] = AGENT_API_KEY
+
+    try:
+        async with aiohttp.ClientSession() as http:
+            async with http.get(
+                f"{API_URL}/agent/profile",
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=5),
+            ) as response:
+                if response.status >= 400:
+                    return {}
+                return await response.json()
+    except Exception:
+        logger.warning("failed to fetch agent profile", exc_info=True)
+        return {}
+
+
+def build_profile_instructions(profile: dict) -> str:
+    if not profile:
+        return SYSTEM_PROMPT
+
+    keywords = ", ".join(profile.get("keywords") or [])
+    avoid_words = ", ".join(profile.get("avoid_words") or [])
+    behavior_tags = ", ".join(profile.get("behavior_tags") or [])
+    custom_instructions = profile.get("custom_instructions") or ""
+
+    profile_prompt = f"""
+Personalidade configurada pelo usuario:
+- Nome publico: {profile.get("name", "Coevo")}
+- Genero/voz desejada: {profile.get("gender", "masculine")}
+- Tom principal: {profile.get("tone", "consultivo")}
+- Metodo comercial: {profile.get("sales_method", "consultivo")}
+- Formalidade: {profile.get("formality", 68)}/100
+- Energia: {profile.get("energy", 48)}/100
+- Empatia: {profile.get("empathy", 74)}/100
+- Assertividade: {profile.get("assertiveness", 58)}/100
+- Brevidade: {profile.get("brevity", 70)}/100
+- Palavras-chave preferidas: {keywords or "nenhuma configurada"}
+- Palavras/expressoes a evitar: {avoid_words or "nenhuma configurada"}
+- Tracos comportamentais: {behavior_tags or "nenhum configurado"}
+- Politica de idioma: {profile.get("language_policy", "Responder na mesma lingua do participante.")}
+- Instrucoes adicionais: {custom_instructions or "nenhuma"}
+
+Use esta personalidade como guia, sem violar as regras obrigatorias acima.
+""".strip()
+
+    return f"{SYSTEM_PROMPT}\n\n{profile_prompt}"
+
+
 class JarvisAgent(Agent):
-    def __init__(self) -> None:
+    def __init__(self, instructions: str) -> None:
         super().__init__(
-            instructions=SYSTEM_PROMPT,
+            instructions=instructions,
             tools=[search_knowledge_base],
         )
 
@@ -229,11 +281,14 @@ async def jarvis(ctx: agents.JobContext):
     started_at = time.monotonic()
     active_until = 0.0
     silenced_until_new_wake = False
+    profile = await fetch_agent_profile()
+    profile_instructions = build_profile_instructions(profile)
+    profile_voice = profile.get("voice") or OPENAI_REALTIME_VOICE
 
     session = AgentSession(
         llm=openai.realtime.RealtimeModel(
             model=OPENAI_REALTIME_MODEL,
-            voice=OPENAI_REALTIME_VOICE,
+            voice=profile_voice,
             input_audio_transcription=InputAudioTranscription(
                 model=OPENAI_TRANSCRIPTION_MODEL,
             ),
@@ -304,7 +359,7 @@ async def jarvis(ctx: agents.JobContext):
             user_input=transcript,
             instructions=(
                 "Voce e Coevo. Responda ao participante de forma breve, em "
-                "voz/tom masculino, calmo e profissional. Responda na mesma "
+                "tom alinhado a personalidade configurada. Responda na mesma "
                 "lingua usada pelo participante que acabou de falar. Nao traduza "
                 "nem mude de lingua a menos que o participante peca explicitamente. "
                 "Depois de ser chamado por Coevo, trate falas subsequentes como "
@@ -332,7 +387,7 @@ async def jarvis(ctx: agents.JobContext):
 
     await session.start(
         room=ctx.room,
-        agent=JarvisAgent(),
+        agent=JarvisAgent(profile_instructions),
         room_options=room_io.RoomOptions(
             audio_input=room_io.AudioInputOptions(),
             audio_output=room_io.AudioOutputOptions(),

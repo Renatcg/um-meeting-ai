@@ -5,7 +5,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from livekit import api
+from openai import AsyncOpenAI, OpenAIError
 
 from app.auth import (
     create_participant_access_token,
@@ -17,6 +19,7 @@ from app.config import get_settings
 from app.copilot import dispatch_copilot
 from app.database import (
     ensure_meeting,
+    get_agent_profile,
     has_host_or_commercial_joined,
     init_database,
     insert_sales_recommendations,
@@ -25,8 +28,10 @@ from app.database import (
     list_sales_recommendations,
     list_transcript_segments,
     register_meeting_participant,
+    upsert_agent_profile,
 )
 from app.models import (
+    AgentProfile,
     CreateMeetingRequest,
     CreateTokenRequest,
     KnowledgeSearchRequest,
@@ -37,6 +42,7 @@ from app.models import (
     SalesRecommendation,
     TranscriptSegment,
     TranscriptSegmentCreate,
+    VoiceDemoRequest,
 )
 from app.knowledge_service import (
     ingest_knowledge_document,
@@ -77,6 +83,48 @@ async def upload_knowledge_document(
     file: UploadFile = File(...),
 ) -> KnowledgeUploadResponse:
     return await ingest_knowledge_document(settings=settings, file=file)
+
+
+@app.post("/knowledge/media", response_model=KnowledgeUploadResponse, status_code=201)
+async def upload_knowledge_media(
+    file: UploadFile = File(...),
+) -> KnowledgeUploadResponse:
+    return await ingest_knowledge_media(settings=settings, file=file)
+
+
+@app.get("/agent/profile", response_model=AgentProfile)
+async def read_agent_profile() -> AgentProfile:
+    return await get_agent_profile(settings=settings)
+
+
+@app.put("/agent/profile", response_model=AgentProfile)
+async def save_agent_profile(profile: AgentProfile) -> AgentProfile:
+    return await upsert_agent_profile(settings=settings, profile=profile)
+
+
+@app.post("/agent/voice-demo")
+async def create_voice_demo(payload: VoiceDemoRequest) -> Response:
+    if not settings.openai_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="OPENAI_API_KEY is required for voice demos.",
+        )
+
+    client = AsyncOpenAI(api_key=settings.openai_api_key)
+    try:
+        audio = await client.audio.speech.create(
+            model="gpt-4o-mini-tts",
+            voice=payload.voice,
+            input=payload.text,
+            response_format="mp3",
+        )
+    except OpenAIError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Nao foi possivel gerar a demo de voz.",
+        ) from exc
+
+    return Response(content=audio.content, media_type="audio/mpeg")
 
 
 @app.post(

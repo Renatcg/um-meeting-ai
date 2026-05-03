@@ -1,9 +1,42 @@
 "use client";
 
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+type Section = "meetings" | "coevo" | "knowledge";
+type AgentGender = "masculine" | "feminine" | "neutral";
+type AgentVoice =
+  | "alloy"
+  | "ash"
+  | "ballad"
+  | "coral"
+  | "echo"
+  | "sage"
+  | "shimmer"
+  | "verse"
+  | "marin"
+  | "cedar";
+
+type AgentProfile = {
+  name: string;
+  gender: AgentGender;
+  voice: AgentVoice;
+  tone: string;
+  formality: number;
+  energy: number;
+  empathy: number;
+  assertiveness: number;
+  brevity: number;
+  keywords: string[];
+  avoid_words: string[];
+  behavior_tags: string[];
+  sales_method: string;
+  language_policy: string;
+  custom_instructions: string;
+  updated_at?: string | null;
+};
 
 type MeetingListItem = {
   id: string;
@@ -22,11 +55,210 @@ const sessionUser = {
 const invitedMeetings: MeetingListItem[] = [];
 const meetingHistory: MeetingListItem[] = [];
 
+const defaultProfile: AgentProfile = {
+  name: "Coevo",
+  gender: "masculine",
+  voice: "marin",
+  tone: "consultivo",
+  formality: 68,
+  energy: 48,
+  empathy: 74,
+  assertiveness: 58,
+  brevity: 70,
+  keywords: ["clareza", "objetividade", "contexto", "proximo passo"],
+  avoid_words: ["talvez", "acho", "impossivel"],
+  behavior_tags: ["consultivo", "calmo", "direto"],
+  sales_method: "consultivo",
+  language_policy: "Responder sempre na mesma lingua usada pelo participante.",
+  custom_instructions: "",
+};
+
+const toneOptions = ["consultivo", "executivo", "acolhedor", "didatico", "provocativo"];
+const salesMethods = ["consultivo", "SPIN", "MEDDIC", "BANT", "Challenger"];
+const languagePolicies = [
+  "Responder sempre na mesma lingua usada pelo participante.",
+  "Priorizar portugues do Brasil, exceto quando o participante falar outro idioma.",
+  "Manter respostas curtas e confirmar antes de traduzir.",
+];
+const keywordOptions = [
+  "clareza",
+  "objetividade",
+  "proximo passo",
+  "impacto",
+  "risco",
+  "valor",
+  "evidencia",
+  "contexto",
+  "prioridade",
+  "decisao",
+  "ROI",
+  "prazo",
+];
+const behaviorOptions = [
+  "consultivo",
+  "calmo",
+  "direto",
+  "curioso",
+  "estrategico",
+  "didatico",
+  "empatico",
+  "assertivo",
+  "executivo",
+  "socratico",
+];
+const avoidOptions = [
+  "talvez",
+  "acho",
+  "impossivel",
+  "obviamente",
+  "sempre",
+  "nunca",
+  "problema",
+  "barato",
+];
+const voices: Array<{
+  id: AgentVoice;
+  label: string;
+  description: string;
+  color: string;
+}> = [
+  {
+    id: "marin",
+    label: "Marin",
+    description: "Natural, premium e equilibrada.",
+    color: "bg-[#11110F] text-white",
+  },
+  {
+    id: "cedar",
+    label: "Cedar",
+    description: "Grave, firme e institucional.",
+    color: "bg-[#F97316] text-white",
+  },
+  {
+    id: "ash",
+    label: "Ash",
+    description: "Calma e masculina.",
+    color: "bg-[#FFF3EA] text-[#F97316]",
+  },
+  {
+    id: "echo",
+    label: "Echo",
+    description: "Clara e objetiva.",
+    color: "bg-[#F8F8F6] text-[#11110F]",
+  },
+  {
+    id: "alloy",
+    label: "Alloy",
+    description: "Neutra e versatil.",
+    color: "bg-[#F8F8F6] text-[#11110F]",
+  },
+  {
+    id: "coral",
+    label: "Coral",
+    description: "Leve e expressiva.",
+    color: "bg-[#F8F8F6] text-[#11110F]",
+  },
+  {
+    id: "ballad",
+    label: "Ballad",
+    description: "Suave e narrativa.",
+    color: "bg-[#F8F8F6] text-[#11110F]",
+  },
+  {
+    id: "sage",
+    label: "Sage",
+    description: "Maduro e confiavel.",
+    color: "bg-[#F8F8F6] text-[#11110F]",
+  },
+  {
+    id: "shimmer",
+    label: "Shimmer",
+    description: "Aberta e energica.",
+    color: "bg-[#F8F8F6] text-[#11110F]",
+  },
+  {
+    id: "verse",
+    label: "Verse",
+    description: "Conversacional.",
+    color: "bg-[#F8F8F6] text-[#11110F]",
+  },
+];
+
+function Chip({
+  active,
+  children,
+  onClick,
+}: {
+  active: boolean;
+  children: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${
+        active
+          ? "border-[#F97316] bg-[#FFF3EA] text-[#F97316]"
+          : "border-[#E7E7E2] bg-white text-[#73736B] hover:border-[#FDBA74] hover:text-[#11110F]"
+      }`}
+      type="button"
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Slider({
+  label,
+  value,
+  onChange,
+  left,
+  right,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+  left: string;
+  right: string;
+}) {
+  return (
+    <label className="rounded-lg border border-[#E7E7E2] bg-white p-4">
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-sm font-semibold text-[#11110F]">{label}</span>
+        <span className="font-mono text-xs text-[#F97316]">{value}</span>
+      </div>
+      <input
+        className="mt-4 w-full accent-[#F97316]"
+        type="range"
+        min="0"
+        max="100"
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+      <div className="mt-2 flex justify-between text-xs text-[#73736B]">
+        <span>{left}</span>
+        <span>{right}</span>
+      </div>
+    </label>
+  );
+}
+
 export default function HomePage() {
   const router = useRouter();
+  const [activeSection, setActiveSection] = useState<Section>("meetings");
   const [isCreating, setIsCreating] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [currentDate, setCurrentDate] = useState("");
+  const [profile, setProfile] = useState<AgentProfile>(defaultProfile);
+  const [profileStatus, setProfileStatus] = useState<string | null>(null);
+  const [voiceDemoUrl, setVoiceDemoUrl] = useState<string | null>(null);
+  const [isGeneratingVoice, setIsGeneratingVoice] = useState<AgentVoice | null>(null);
+  const [knowledgeStatus, setKnowledgeStatus] = useState<string | null>(null);
+  const [isUploadingKnowledge, setIsUploadingKnowledge] = useState(false);
+  const companyDocsRef = useRef<HTMLInputElement | null>(null);
+  const companyMediaRef = useRef<HTMLInputElement | null>(null);
+  const companyLinksRef = useRef<HTMLTextAreaElement | null>(null);
+  const companyNotesRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     const formattedDate = new Intl.DateTimeFormat("pt-BR", {
@@ -38,6 +270,41 @@ export default function HomePage() {
     }).format(new Date());
     setCurrentDate(formattedDate);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProfile() {
+      try {
+        const response = await fetch(`${apiUrl}/agent/profile`);
+        if (!response.ok) {
+          return;
+        }
+        const loadedProfile = (await response.json()) as AgentProfile;
+        if (!cancelled) {
+          setProfile({ ...defaultProfile, ...loadedProfile });
+        }
+      } catch {
+        // Keep the local defaults when the API is unavailable.
+      }
+    }
+
+    loadProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function toggleArrayValue(key: "keywords" | "avoid_words" | "behavior_tags", value: string) {
+    setProfile((current) => {
+      const values = current[key];
+      const nextValues = values.includes(value)
+        ? values.filter((item) => item !== value)
+        : [...values, value];
+      return { ...current, [key]: nextValues };
+    });
+  }
 
   async function createInstantMeeting() {
     setFeedback(null);
@@ -67,6 +334,134 @@ export default function HomePage() {
     setFeedback("Agendamento entra na proxima etapa. Por enquanto, use reuniao instantanea.");
   }
 
+  async function saveProfile() {
+    setProfileStatus("Salvando personalidade...");
+    try {
+      const response = await fetch(`${apiUrl}/agent/profile`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(profile),
+      });
+
+      if (!response.ok) {
+        throw new Error("Nao foi possivel salvar a personalidade.");
+      }
+
+      const savedProfile = (await response.json()) as AgentProfile;
+      setProfile({ ...defaultProfile, ...savedProfile });
+      setProfileStatus("Personalidade salva. O Coevo usara este perfil nas proximas reunioes.");
+    } catch (err) {
+      setProfileStatus(err instanceof Error ? err.message : "Erro inesperado.");
+    }
+  }
+
+  async function playVoiceDemo(voice: AgentVoice) {
+    setIsGeneratingVoice(voice);
+    setProfileStatus(null);
+
+    try {
+      const response = await fetch(`${apiUrl}/agent/voice-demo`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          voice,
+          text: "Ola, eu sou o Coevo. Vou acompanhar a reuniao com clareza, calma e foco no que importa.",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Nao foi possivel gerar a demo de voz.");
+      }
+
+      if (voiceDemoUrl) {
+        URL.revokeObjectURL(voiceDemoUrl);
+      }
+
+      const url = URL.createObjectURL(await response.blob());
+      setVoiceDemoUrl(url);
+      const audio = new Audio(url);
+      await audio.play();
+    } catch (err) {
+      setProfileStatus(err instanceof Error ? err.message : "Erro inesperado.");
+    } finally {
+      setIsGeneratingVoice(null);
+    }
+  }
+
+  async function uploadTextKnowledge(filename: string, content: string) {
+    const text = content.trim();
+    if (!text) {
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", new File([text], filename, { type: "text/plain" }));
+    const response = await fetch(`${apiUrl}/knowledge/documents`, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error("Nao foi possivel salvar a base institucional.");
+    }
+  }
+
+  async function uploadInstitutionalKnowledge(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setKnowledgeStatus("Enviando base institucional...");
+    setIsUploadingKnowledge(true);
+
+    try {
+      const documents = Array.from(companyDocsRef.current?.files ?? []);
+      for (const file of documents) {
+        const formData = new FormData();
+        formData.append("file", file);
+        const response = await fetch(`${apiUrl}/knowledge/documents`, {
+          method: "POST",
+          body: formData,
+        });
+        if (!response.ok) {
+          throw new Error("Nao foi possivel salvar um dos documentos.");
+        }
+      }
+
+      const mediaFiles = Array.from(companyMediaRef.current?.files ?? []);
+      for (const file of mediaFiles) {
+        const formData = new FormData();
+        formData.append("file", file);
+        const response = await fetch(`${apiUrl}/knowledge/media`, {
+          method: "POST",
+          body: formData,
+        });
+        if (!response.ok) {
+          throw new Error("Nao foi possivel transcrever uma das midias.");
+        }
+      }
+
+      await uploadTextKnowledge(
+        "links-institucionais.txt",
+        companyLinksRef.current?.value ?? "",
+      );
+      await uploadTextKnowledge(
+        "contexto-institucional.txt",
+        companyNotesRef.current?.value ?? "",
+      );
+
+      setKnowledgeStatus("Base institucional atualizada. O Coevo ja pode consultar este conteudo.");
+    } catch (err) {
+      setKnowledgeStatus(err instanceof Error ? err.message : "Erro inesperado.");
+    } finally {
+      setIsUploadingKnowledge(false);
+    }
+  }
+
+  const navItemClass = (section: Section) =>
+    `flex w-full items-center gap-4 rounded-lg px-4 py-3 text-left text-sm transition ${
+      activeSection === section
+        ? "border border-[#FDBA74] bg-[#FFF3EA] font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)]"
+        : "font-medium text-[#73736B] hover:bg-[#F8F8F6] hover:text-[#11110F]"
+    }`;
+
   return (
     <main className="min-h-screen overflow-hidden bg-white text-[#11110F]">
       <div
@@ -81,15 +476,6 @@ export default function HomePage() {
 
       <header className="fixed left-0 right-0 top-0 z-20 flex min-h-20 items-center justify-between border-b border-[#E7E7E2] bg-white/85 px-4 py-4 backdrop-blur-xl lg:left-72 lg:px-8">
         <div className="flex items-center gap-4 lg:hidden">
-          <button
-            aria-label="Abrir menu"
-            className="flex h-10 w-10 flex-col items-center justify-center gap-1 rounded-full border border-[#E7E7E2] bg-white transition hover:border-[#F97316]"
-            type="button"
-          >
-            <span className="h-0.5 w-5 rounded-full bg-[#11110F]" />
-            <span className="h-0.5 w-5 rounded-full bg-[#11110F]" />
-            <span className="h-0.5 w-5 rounded-full bg-[#11110F]" />
-          </button>
           <p className="font-display text-lg font-semibold">Coevo</p>
         </div>
 
@@ -124,193 +510,422 @@ export default function HomePage() {
         </div>
 
         <nav className="mt-7 space-y-2">
-          <a
-            className="flex items-center gap-4 rounded-lg border border-[#FDBA74] bg-[#FFF3EA] px-4 py-3 text-sm font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)]"
-            href="#meetings"
-          >
+          <button className={navItemClass("meetings")} type="button" onClick={() => setActiveSection("meetings")}>
             <span className="flex h-8 w-8 items-center justify-center rounded-md bg-[#F97316] font-mono text-xs font-bold text-white">
               M
             </span>
             Reunioes
-          </a>
-          <a
-            className="flex items-center gap-4 rounded-lg px-4 py-3 text-sm font-medium text-[#73736B] transition hover:bg-[#F8F8F6] hover:text-[#11110F]"
-            href="#calls"
-          >
+          </button>
+          <button className={navItemClass("coevo")} type="button" onClick={() => setActiveSection("coevo")}>
             <span className="flex h-8 w-8 items-center justify-center rounded-md border border-[#E7E7E2] font-mono text-xs">
-              L
+              IA
             </span>
-            Ligacoes
-          </a>
-          <a
-            className="flex items-center gap-4 rounded-lg px-4 py-3 text-sm font-medium text-[#73736B] transition hover:bg-[#F8F8F6] hover:text-[#11110F]"
-            href="#knowledge"
-          >
+            Configurar Coevo
+          </button>
+          <button className={navItemClass("knowledge")} type="button" onClick={() => setActiveSection("knowledge")}>
             <span className="flex h-8 w-8 items-center justify-center rounded-md border border-[#E7E7E2] font-mono text-xs">
               B
             </span>
-            Base de conhecimento
-          </a>
+            Base institucional
+          </button>
         </nav>
 
         <div className="absolute bottom-5 left-5 right-5 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">
           <p className="font-mono text-xs uppercase text-[#F97316]">Status</p>
           <p className="mt-2 text-sm font-medium text-[#11110F]">Coevo pronto</p>
           <p className="mt-1 text-xs leading-5 text-[#73736B]">
-            LiveKit, API e agente conectados para testes.
+            A personalidade salva sera usada nas proximas reunioes.
           </p>
         </div>
       </aside>
 
-      <section
-        className="relative z-10 flex min-h-screen items-start justify-center px-5 pb-16 pt-32 sm:px-8 lg:ml-72 lg:pt-36"
-        id="meetings"
-      >
-        <div className="w-full max-w-5xl text-center">
-          <p className="mx-auto mb-5 inline-flex rounded-full border border-[#FDBA74] bg-[#FFF3EA] px-4 py-2 font-mono text-xs uppercase text-[#F97316]">
-            Reunioes Coevo
-          </p>
-          <h1 className="mx-auto max-w-4xl font-display text-5xl font-semibold leading-tight text-[#11110F] md:text-6xl">
-            Videochamadas Assistidas
-          </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-[#73736B]">
-            Grupo Coevo
-          </p>
+      <section className="relative z-10 min-h-screen px-5 pb-16 pt-32 sm:px-8 lg:ml-72 lg:pt-32">
+        <div className="mx-auto max-w-6xl">
+          {activeSection === "meetings" ? (
+            <div className="text-center">
+              <p className="mx-auto mb-5 inline-flex rounded-full border border-[#FDBA74] bg-[#FFF3EA] px-4 py-2 font-mono text-xs uppercase text-[#F97316]">
+                Reunioes Coevo
+              </p>
+              <h1 className="mx-auto max-w-4xl font-display text-5xl font-semibold leading-tight text-[#11110F] md:text-6xl">
+                Videochamadas Assistidas
+              </h1>
+              <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-[#73736B]">
+                Grupo Coevo
+              </p>
 
-          <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <button
-              className="relative overflow-hidden rounded-lg bg-[#11110F] px-7 py-4 text-base font-bold text-white shadow-[0_20px_80px_rgba(249,115,22,0.22)] transition hover:translate-y-[-1px] hover:bg-[#F97316] disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={isCreating}
-              onClick={createInstantMeeting}
-              type="button"
-            >
-              <span className="absolute inset-y-0 left-[-40%] w-1/3 skew-x-[-18deg] bg-white/30" />
-              <span className="relative">
-                {isCreating ? "Criando..." : "Criar Reuniao Instantanea"}
-              </span>
-            </button>
-            <button
-              className="rounded-lg border border-[#E7E7E2] bg-white px-7 py-4 text-base font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] transition hover:border-[#F97316] hover:bg-[#FFF3EA]"
-              onClick={scheduleMeeting}
-              type="button"
-            >
-              Agendar Reuniao
-            </button>
-          </div>
+              <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+                <button
+                  className="rounded-lg bg-[#11110F] px-7 py-4 text-base font-bold text-white shadow-[0_20px_80px_rgba(249,115,22,0.22)] transition hover:translate-y-[-1px] hover:bg-[#F97316] disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={isCreating}
+                  onClick={createInstantMeeting}
+                  type="button"
+                >
+                  {isCreating ? "Criando..." : "Criar Reuniao Instantanea"}
+                </button>
+                <button
+                  className="rounded-lg border border-[#E7E7E2] bg-white px-7 py-4 text-base font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] transition hover:border-[#F97316] hover:bg-[#FFF3EA]"
+                  onClick={scheduleMeeting}
+                  type="button"
+                >
+                  Agendar Reuniao
+                </button>
+              </div>
 
-          {feedback ? (
-            <p className="mx-auto mt-5 max-w-xl rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {feedback}
-            </p>
+              {feedback ? (
+                <p className="mx-auto mt-5 max-w-xl rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {feedback}
+                </p>
+              ) : null}
+
+              <div className="mx-auto mt-12 h-px max-w-3xl bg-gradient-to-r from-transparent via-[#E7E7E2] to-transparent" />
+
+              <section className="mx-auto mt-10 max-w-3xl text-left">
+                <div className="mb-4 flex items-center justify-between gap-4">
+                  <h2 className="font-display text-xl font-semibold text-[#11110F]">
+                    Reunioes para as quais voce foi convidado
+                  </h2>
+                  <p className="font-mono text-xs uppercase text-[#73736B]">
+                    {invitedMeetings.length} convites
+                  </p>
+                </div>
+
+                <div className="overflow-hidden rounded-lg border border-[#E7E7E2] bg-white shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                  {invitedMeetings.length === 0 ? (
+                    <div className="px-5 py-7 text-center">
+                      <p className="text-sm font-semibold text-[#11110F]">
+                        Nenhum convite encontrado
+                      </p>
+                      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#73736B]">
+                        Quando voce for convidado para uma reuniao, ela aparecera aqui.
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              </section>
+
+              <section className="mx-auto mt-8 max-w-3xl text-left">
+                <div className="mb-4 flex items-center justify-between gap-4">
+                  <h2 className="font-display text-xl font-semibold text-[#11110F]">
+                    Historico das reunioes que participou
+                  </h2>
+                  <p className="font-mono text-xs uppercase text-[#73736B]">
+                    Mais recentes primeiro
+                  </p>
+                </div>
+
+                <div className="overflow-hidden rounded-lg border border-[#E7E7E2] bg-white shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                  {meetingHistory.length === 0 ? (
+                    <div className="px-5 py-7 text-center">
+                      <p className="text-sm font-semibold text-[#11110F]">
+                        Nenhuma reuniao no historico
+                      </p>
+                      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#73736B]">
+                        As reunioes encerradas em que voce participou serao listadas aqui.
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              </section>
+            </div>
           ) : null}
 
-          <div className="mx-auto mt-12 h-px max-w-3xl bg-gradient-to-r from-transparent via-[#E7E7E2] to-transparent" />
+          {activeSection === "coevo" ? (
+            <div className="space-y-6">
+              <div>
+                <p className="font-mono text-xs uppercase text-[#F97316]">Personalidade</p>
+                <h1 className="mt-2 font-display text-4xl font-semibold text-[#11110F]">
+                  Configure como o Coevo pensa, fala e se comporta.
+                </h1>
+                <p className="mt-3 max-w-3xl text-sm leading-6 text-[#73736B]">
+                  Quase tudo aqui e feito por escolhas visuais. O campo livre serve
+                  apenas para uma orientacao fina.
+                </p>
+              </div>
 
-          <section className="mx-auto mt-10 max-w-3xl text-left">
-            <div className="mb-4 flex items-center justify-between gap-4">
-              <h2 className="font-display text-xl font-semibold text-[#11110F]">
-                Reunioes para as quais voce foi convidado
-              </h2>
-              <p className="font-mono text-xs uppercase text-[#73736B]">
-                {invitedMeetings.length} convites
-              </p>
-            </div>
-
-            <div className="overflow-hidden rounded-lg border border-[#E7E7E2] bg-white shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
-              {invitedMeetings.length === 0 ? (
-                <div className="px-5 py-7 text-center">
-                  <p className="text-sm font-semibold text-[#11110F]">
-                    Nenhum convite encontrado
-                  </p>
-                  <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#73736B]">
-                    Quando voce for convidado para uma reuniao, ela aparecera aqui
-                    com o link direto de entrada.
-                  </p>
-                </div>
-              ) : null}
-
-              {invitedMeetings.map((meeting, index) => (
-                <button
-                  className={`flex w-full items-center justify-between gap-5 px-5 py-4 text-left transition hover:bg-[#F8F8F6] ${
-                    index > 0 ? "border-t border-[#E7E7E2]" : ""
-                  }`}
-                  key={meeting.id}
-                  onClick={() => router.push(`/meeting/${meeting.id}`)}
-                  type="button"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-base font-semibold text-[#11110F]">
-                      {meeting.title}
-                    </p>
-                    <p className="mt-1 text-sm text-[#73736B]">
-                      Organizador: {meeting.owner}
-                    </p>
+              <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
+                <section className="space-y-5">
+                  <div className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <label>
+                        <span className="mb-2 block text-sm font-semibold">Nome publico</span>
+                        <input
+                          className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm outline-none focus:border-[#F97316]"
+                          value={profile.name}
+                          onChange={(event) => setProfile((current) => ({ ...current, name: event.target.value }))}
+                        />
+                      </label>
+                      <label>
+                        <span className="mb-2 block text-sm font-semibold">Genero</span>
+                        <select
+                          className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm outline-none focus:border-[#F97316]"
+                          value={profile.gender}
+                          onChange={(event) => setProfile((current) => ({ ...current, gender: event.target.value as AgentGender }))}
+                        >
+                          <option value="masculine">Masculino</option>
+                          <option value="feminine">Feminino</option>
+                          <option value="neutral">Neutro</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span className="mb-2 block text-sm font-semibold">Metodo comercial</span>
+                        <select
+                          className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm outline-none focus:border-[#F97316]"
+                          value={profile.sales_method}
+                          onChange={(event) => setProfile((current) => ({ ...current, sales_method: event.target.value }))}
+                        >
+                          {salesMethods.map((method) => (
+                            <option key={method} value={method}>
+                              {method}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
                   </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-sm font-semibold text-[#11110F]">
-                      {meeting.dateLabel}
-                    </p>
-                    <p className="mt-2 inline-flex rounded-full border border-[#FDBA74] bg-[#FFF3EA] px-3 py-1 font-mono text-[11px] uppercase text-[#F97316]">
-                      {meeting.role}
-                    </p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </section>
 
-          <section className="mx-auto mt-8 max-w-3xl text-left">
-            <div className="mb-4 flex items-center justify-between gap-4">
-              <h2 className="font-display text-xl font-semibold text-[#11110F]">
-                Historico das reunioes que participou
-              </h2>
-              <p className="font-mono text-xs uppercase text-[#73736B]">
-                Mais recentes primeiro
-              </p>
-            </div>
-
-            <div className="overflow-hidden rounded-lg border border-[#E7E7E2] bg-white shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
-              {meetingHistory.length === 0 ? (
-                <div className="px-5 py-7 text-center">
-                  <p className="text-sm font-semibold text-[#11110F]">
-                    Nenhuma reuniao no historico
-                  </p>
-                  <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#73736B]">
-                    As reunioes encerradas em que voce participou serao listadas
-                    aqui em ordem decrescente.
-                  </p>
-                </div>
-              ) : null}
-
-              {meetingHistory.map((meeting, index) => (
-                <button
-                  className={`flex w-full items-center justify-between gap-5 px-5 py-4 text-left transition hover:bg-[#F8F8F6] ${
-                    index > 0 ? "border-t border-[#E7E7E2]" : ""
-                  }`}
-                  key={meeting.id}
-                  onClick={() => router.push(`/meeting/${meeting.id}`)}
-                  type="button"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-base font-semibold text-[#11110F]">
-                      {meeting.title}
-                    </p>
-                    <p className="mt-1 text-sm text-[#73736B]">
-                      Organizador: {meeting.owner}
-                    </p>
+                  <div className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                    <h2 className="font-display text-xl font-semibold">Modo de fala</h2>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {toneOptions.map((tone) => (
+                        <Chip
+                          key={tone}
+                          active={profile.tone === tone}
+                          onClick={() => setProfile((current) => ({ ...current, tone }))}
+                        >
+                          {tone}
+                        </Chip>
+                      ))}
+                    </div>
+                    <div className="mt-5 grid gap-4 md:grid-cols-2">
+                      <Slider label="Formalidade" value={profile.formality} left="casual" right="executivo" onChange={(value) => setProfile((current) => ({ ...current, formality: value }))} />
+                      <Slider label="Energia" value={profile.energy} left="sereno" right="vibrante" onChange={(value) => setProfile((current) => ({ ...current, energy: value }))} />
+                      <Slider label="Empatia" value={profile.empathy} left="objetivo" right="acolhedor" onChange={(value) => setProfile((current) => ({ ...current, empathy: value }))} />
+                      <Slider label="Assertividade" value={profile.assertiveness} left="exploratorio" right="direto" onChange={(value) => setProfile((current) => ({ ...current, assertiveness: value }))} />
+                      <Slider label="Brevidade" value={profile.brevity} left="explicativo" right="curto" onChange={(value) => setProfile((current) => ({ ...current, brevity: value }))} />
+                    </div>
                   </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-sm font-semibold text-[#11110F]">
-                      {meeting.dateLabel}
-                    </p>
-                    <p className="mt-2 inline-flex rounded-full border border-[#E7E7E2] bg-[#FCFCFB] px-3 py-1 font-mono text-[11px] uppercase text-[#73736B]">
-                      {meeting.role}
-                    </p>
+
+                  <div className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                    <h2 className="font-display text-xl font-semibold">Palavras e comportamento</h2>
+                    <div className="mt-5 space-y-5">
+                      <div>
+                        <p className="mb-2 text-sm font-semibold">Palavras que deve usar</p>
+                        <div className="flex flex-wrap gap-2">
+                          {keywordOptions.map((word) => (
+                            <Chip key={word} active={profile.keywords.includes(word)} onClick={() => toggleArrayValue("keywords", word)}>
+                              {word}
+                            </Chip>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="mb-2 text-sm font-semibold">Comportamentos</p>
+                        <div className="flex flex-wrap gap-2">
+                          {behaviorOptions.map((word) => (
+                            <Chip key={word} active={profile.behavior_tags.includes(word)} onClick={() => toggleArrayValue("behavior_tags", word)}>
+                              {word}
+                            </Chip>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="mb-2 text-sm font-semibold">Palavras a evitar</p>
+                        <div className="flex flex-wrap gap-2">
+                          {avoidOptions.map((word) => (
+                            <Chip key={word} active={profile.avoid_words.includes(word)} onClick={() => toggleArrayValue("avoid_words", word)}>
+                              {word}
+                            </Chip>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </button>
-              ))}
+                </section>
+
+                <aside className="space-y-5">
+                  <div className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                    <h2 className="font-display text-xl font-semibold">Voz</h2>
+                    <p className="mt-2 text-sm leading-6 text-[#73736B]">
+                      Escolha a voz que o Coevo usara nas proximas reunioes.
+                    </p>
+                    <div className="mt-4 grid gap-3">
+                      {voices.map((voice) => (
+                        <div
+                          className={`rounded-lg border p-3 transition ${
+                            profile.voice === voice.id
+                              ? "border-[#F97316] bg-[#FFF3EA]"
+                              : "border-[#E7E7E2] bg-[#FCFCFB]"
+                          }`}
+                          key={voice.id}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <button
+                              className="min-w-0 flex-1 text-left"
+                              type="button"
+                              onClick={() => setProfile((current) => ({ ...current, voice: voice.id }))}
+                            >
+                              <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${voice.color}`}>
+                                {voice.label}
+                              </span>
+                              <span className="mt-2 block text-sm text-[#73736B]">
+                                {voice.description}
+                              </span>
+                            </button>
+                            <button
+                              className="rounded-lg border border-[#E7E7E2] bg-white px-3 py-2 text-xs font-bold text-[#11110F] transition hover:border-[#F97316] hover:bg-[#FFF3EA]"
+                              type="button"
+                              onClick={() => playVoiceDemo(voice.id)}
+                            >
+                              {isGeneratingVoice === voice.id ? "..." : "Demo"}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {voiceDemoUrl ? (
+                      <audio className="mt-4 w-full" controls src={voiceDemoUrl}>
+                        Demo de voz
+                      </audio>
+                    ) : null}
+                  </div>
+
+                  <div className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                    <h2 className="font-display text-xl font-semibold">Idioma</h2>
+                    <select
+                      className="mt-4 w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm outline-none focus:border-[#F97316]"
+                      value={profile.language_policy}
+                      onChange={(event) => setProfile((current) => ({ ...current, language_policy: event.target.value }))}
+                    >
+                      {languagePolicies.map((policy) => (
+                        <option key={policy} value={policy}>
+                          {policy}
+                        </option>
+                      ))}
+                    </select>
+                    <label className="mt-4 block">
+                      <span className="mb-2 block text-sm font-semibold">
+                        Instrucao adicional
+                      </span>
+                      <textarea
+                        className="h-32 w-full resize-none rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm outline-none focus:border-[#F97316]"
+                        value={profile.custom_instructions}
+                        onChange={(event) => setProfile((current) => ({ ...current, custom_instructions: event.target.value }))}
+                        placeholder="Ex.: nunca interrompa; sempre pergunte antes de aprofundar."
+                      />
+                    </label>
+                    <button
+                      className="mt-4 w-full rounded-lg bg-[#11110F] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#F97316]"
+                      type="button"
+                      onClick={saveProfile}
+                    >
+                      Salvar personalidade
+                    </button>
+                    {profileStatus ? (
+                      <p className="mt-3 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-3 py-2 text-xs leading-5 text-[#73736B]">
+                        {profileStatus}
+                      </p>
+                    ) : null}
+                  </div>
+                </aside>
+              </div>
             </div>
-          </section>
+          ) : null}
+
+          {activeSection === "knowledge" ? (
+            <div className="space-y-6">
+              <div>
+                <p className="font-mono text-xs uppercase text-[#F97316]">Base institucional</p>
+                <h1 className="mt-2 font-display text-4xl font-semibold text-[#11110F]">
+                  Ensine o Coevo sobre a empresa, produtos e posicionamento.
+                </h1>
+                <p className="mt-3 max-w-3xl text-sm leading-6 text-[#73736B]">
+                  Esta base e generica e vale para todas as reunioes. A base enviada
+                  no lobby continua sendo exclusiva daquela sala.
+                </p>
+              </div>
+
+              <form
+                className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]"
+                onSubmit={uploadInstitutionalKnowledge}
+              >
+                <section className="space-y-5 rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">
+                      <span className="block text-sm font-semibold">Documentos</span>
+                      <span className="mt-1 block text-xs leading-5 text-[#73736B]">
+                        PDF, DOCX, TXT e MD sobre empresa, produtos, cases e playbooks.
+                      </span>
+                      <input
+                        ref={companyDocsRef}
+                        className="mt-4 w-full text-sm text-[#73736B] file:mr-3 file:rounded-md file:border-0 file:bg-[#11110F] file:px-3 file:py-2 file:text-sm file:font-bold file:text-white"
+                        type="file"
+                        multiple
+                        accept=".pdf,.doc,.docx,.txt,.md"
+                      />
+                    </label>
+
+                    <label className="rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">
+                      <span className="block text-sm font-semibold">Audios e videos</span>
+                      <span className="mt-1 block text-xs leading-5 text-[#73736B]">
+                        Gravacoes de treinamento, pitch, entrevistas ou webinars.
+                      </span>
+                      <input
+                        ref={companyMediaRef}
+                        className="mt-4 w-full text-sm text-[#73736B] file:mr-3 file:rounded-md file:border-0 file:bg-[#F8F8F6] file:px-3 file:py-2 file:text-sm file:font-bold file:text-[#11110F]"
+                        type="file"
+                        multiple
+                        accept="audio/*,video/*"
+                      />
+                    </label>
+                  </div>
+
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-semibold">Links da web</span>
+                    <textarea
+                      ref={companyLinksRef}
+                      className="h-28 w-full resize-none rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm outline-none focus:border-[#F97316]"
+                      placeholder="Cole links de site, paginas de produto, cases ou materiais publicos."
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-semibold">Conhecimento manual</span>
+                    <textarea
+                      ref={companyNotesRef}
+                      className="h-40 w-full resize-none rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm outline-none focus:border-[#F97316]"
+                      placeholder="Escreva aqui fatos sobre empresa, produtos, diferenciais, publico-alvo, objecoes comuns e respostas ideais."
+                    />
+                  </label>
+                </section>
+
+                <aside className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                  <p className="font-mono text-xs uppercase text-[#F97316]">Escopo</p>
+                  <h2 className="mt-2 font-display text-2xl font-semibold">
+                    Base global do Coevo
+                  </h2>
+                  <div className="mt-5 space-y-3">
+                    {["Empresa", "Produtos", "Cases", "Playbooks", "Objecoes", "Concorrentes"].map((item) => (
+                      <div className="rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm font-semibold text-[#11110F]" key={item}>
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    className="mt-5 w-full rounded-lg bg-[#11110F] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#F97316] disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isUploadingKnowledge}
+                    type="submit"
+                  >
+                    {isUploadingKnowledge ? "Enviando..." : "Atualizar base"}
+                  </button>
+                  {knowledgeStatus ? (
+                    <p className="mt-3 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-3 py-2 text-xs leading-5 text-[#73736B]">
+                      {knowledgeStatus}
+                    </p>
+                  ) : null}
+                </aside>
+              </form>
+            </div>
+          ) : null}
         </div>
       </section>
     </main>
