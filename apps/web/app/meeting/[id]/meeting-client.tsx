@@ -246,8 +246,8 @@ function MeetingGrid({ meetingId }: { meetingId: string }) {
   const elapsedTime = formatElapsedTime(elapsedSeconds);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
-      <div className="min-h-0 flex-1 px-4 pb-3 pt-16 sm:px-6 sm:pt-20">
+    <div className="um-meeting-layout flex h-full min-h-0 flex-col bg-white">
+      <div className="um-video-stage-shell min-h-0 flex-1 px-4 pb-3 pt-16 sm:px-6 sm:pt-20">
         <AgentPresence />
         <div className="absolute left-4 top-16 z-10 rounded-full border border-[#E7E7E2] bg-white/92 px-3 py-2 font-mono text-xs font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.08)] backdrop-blur-xl sm:left-6 sm:top-20">
           {elapsedTime}

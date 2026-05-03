@@ -554,6 +554,19 @@ select {
 }
 
 @media (max-width: 1023px) {
+  .lk-room-container.um-room-shell {
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
+
+  .lk-room-container.um-room-shell > section {
+    min-height: 0;
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
+
   .lk-control-bar {
     right: 0.75rem;
     bottom: 0.75rem;
@@ -568,6 +581,27 @@ select {
     padding: 0;
   }
 
+  .um-meeting-layout {
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
+
+  .um-video-stage-shell {
+    flex: 0 0 calc(100dvh - 5.75rem);
+    height: calc(100dvh - 5.75rem);
+    max-height: calc(100dvh - 5.75rem);
+    overflow: hidden;
+    padding: 4.5rem 1rem 0.75rem;
+  }
+
+  .um-meeting-footer {
+    min-height: 5.75rem;
+    max-height: 5.75rem;
+    padding: 0.875rem 1rem;
+    overflow: hidden;
+  }
+
   .um-desktop-grid {
     display: none;
   }
@@ -577,6 +611,8 @@ select {
     display: block;
     height: 100%;
     min-height: 0;
+    max-height: 100%;
+    overflow: hidden;
   }
 
   .um-mobile-grid {
@@ -589,6 +625,8 @@ select {
     grid-template-columns: none;
     grid-template-rows: repeat(2, minmax(0, 1fr));
     gap: 0.75rem;
+    height: 100%;
+    max-height: 100%;
     overflow-x: auto;
     overflow-y: hidden;
     overscroll-behavior-x: contain;
@@ -602,6 +640,7 @@ select {
 
   .um-mobile-grid .lk-participant-tile {
     height: 100%;
+    max-height: 100%;
     aspect-ratio: auto;
     scroll-snap-align: start;
     scroll-snap-stop: always;
@@ -609,23 +648,55 @@ select {
 
   .um-mobile-grid .um-agent-video-tile {
     height: 100%;
+    max-height: 100%;
     aspect-ratio: auto;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+
+  .um-local-pip {
+    right: 1rem;
+    bottom: 0.875rem;
+    width: min(42vw, 9rem);
+    max-height: calc(50% - 1.25rem);
+    aspect-ratio: 9 / 13;
+    border-radius: 0.875rem;
+  }
+
+  .um-mobile-grid .lk-participant-media-video,
+  .um-mobile-grid .lk-participant-tile video,
+  .um-local-pip .lk-participant-media-video,
+  .um-local-pip .lk-participant-tile video {
+    object-fit: cover;
+  }
+
+  .um-agent-video-orb-wrap .um-agent-orb {
+    width: clamp(4.75rem, 24vw, 6.25rem);
+    height: clamp(4.75rem, 24vw, 6.25rem);
+  }
+
+  .um-agent-video-label {
+    right: 0.625rem;
+    bottom: 0.625rem;
+    left: 0.625rem;
+    padding: 0.35rem 0.625rem;
   }
 
   .um-meeting-controls {
-    justify-content: flex-start;
+    justify-content: center;
+    gap: 0.625rem;
   }
 
   .um-control-button {
-    width: 3rem;
-    height: 3rem;
-    min-width: 3rem;
-    min-height: 3rem;
-    font-size: 0.72rem;
+    width: 2.9rem;
+    height: 2.9rem;
+    min-width: 2.9rem;
+    min-height: 2.9rem;
+    font-size: 0.68rem;
   }
 
   .um-control-button.is-leave {
-    width: 4.25rem;
-    min-width: 4.25rem;
+    width: 4rem;
+    min-width: 4rem;
   }
 }
