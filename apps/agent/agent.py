@@ -39,7 +39,19 @@ OPENAI_TRANSCRIPTION_MODEL = os.getenv(
 API_URL = os.getenv("API_URL", "http://localhost:8000").rstrip("/")
 AGENT_API_KEY = os.getenv("AGENT_API_KEY")
 KNOWLEDGE_MIN_SCORE = float(os.getenv("KNOWLEDGE_MIN_SCORE", "0.25"))
-WAKE_WORDS = ("jarvis", "jervis", "jarves", "javes", "jarviz", "jarvys")
+WAKE_WORDS = (
+    "coevo",
+    "co evo",
+    "coebo",
+    "coeva",
+    "jarvis",
+    "jervis",
+    "jarves",
+    "javes",
+    "jarviz",
+    "jarvys",
+)
+SILENCE_WORDS = ("silencie", "silencio", "silenciar", "cale", "pare")
 INITIAL_ACTIVE_LISTEN_SECONDS = 15.0
 POST_REPLY_ACTIVE_SECONDS = 10.0
 FOLLOW_UP_SILENCE_SECONDS = 5.0
@@ -69,6 +81,13 @@ def contains_wake_word(value: str) -> bool:
         return True
 
     return any(wake_word in normalized for wake_word in WAKE_WORDS)
+
+
+def contains_silence_command(value: str) -> bool:
+    normalized = normalize_text(value)
+    return contains_wake_word(value) and any(
+        silence_word in normalized for silence_word in SILENCE_WORDS
+    )
 
 
 def is_meaningful_transcript(value: str) -> bool:
@@ -255,6 +274,10 @@ async def jarvis(ctx: agents.JobContext):
         task.add_done_callback(log_task_failure)
 
         now = time.monotonic()
+        if contains_silence_command(transcript):
+            active_until = 0.0
+            return
+
         was_called = contains_wake_word(transcript)
         is_active_follow_up = now <= active_until
 
@@ -268,13 +291,15 @@ async def jarvis(ctx: agents.JobContext):
         session.generate_reply(
             user_input=transcript,
             instructions=(
-                "Voce e Jarvis. Responda ao participante de forma breve, em "
+                "Voce e Coevo. Responda ao participante de forma breve, em "
                 "voz/tom masculino, calmo e profissional. Responda na mesma "
                 "lingua usada pelo participante que acabou de falar. Nao traduza "
                 "nem mude de lingua a menos que o participante peca explicitamente. "
-                "Depois de ser chamado por Jarvis, trate falas subsequentes como "
+                "Depois de ser chamado por Coevo, trate falas subsequentes como "
                 "continuidade da conversa por ate 10 segundos apos a sua resposta "
                 "e enquanto a janela ativa estiver aberta. "
+                "Se o participante disser 'Coevo silencie', encerre a escuta "
+                "ativa e nao responda ate uma nova chamada por Coevo. "
                 "Se a pergunta depender de informacao documental, "
                 "consulte a ferramenta search_knowledge_base antes de responder. "
                 "Se a ferramenta retornar NO_MATCH, diga que nao encontrou "

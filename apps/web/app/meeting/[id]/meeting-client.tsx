@@ -52,7 +52,7 @@ type MeetingSummary = {
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const CHAT_TOPIC = "um-meeting-chat";
-const agentNameMatchers = ["jarvis", "um copilot", "copilot"];
+const agentNameMatchers = ["coevo", "jarvis", "um copilot", "copilot"];
 const commercialUserEmails = new Set(["renato@coevo.ai", "marina@coevo.ai"]);
 
 function inferParticipantRole(email: string, isHostCreator: boolean): ParticipantRole {
@@ -83,7 +83,7 @@ function AgentOrb({ isSpeaking }: { isSpeaking: boolean }) {
   return (
     <div
       className={`um-agent-orb ${isSpeaking ? "is-speaking" : ""}`}
-      aria-label={isSpeaking ? "Jarvis esta falando" : "Jarvis esta ouvindo"}
+      aria-label={isSpeaking ? "Coevo esta falando" : "Coevo esta ouvindo"}
     >
       <span className="um-agent-orb-ring" />
       <span className="um-agent-orb-ring" />
@@ -98,7 +98,7 @@ function AgentOrb({ isSpeaking }: { isSpeaking: boolean }) {
   );
 }
 
-function JarvisPresence() {
+function AgentPresence() {
   const participants = useParticipants();
   const agent = participants.find((roomParticipant) => {
     const label = `${roomParticipant.name ?? ""} ${roomParticipant.identity ?? ""}`
@@ -116,7 +116,7 @@ function JarvisPresence() {
       <div className="flex items-center gap-3">
         <AgentOrb isSpeaking={Boolean(agent.isSpeaking)} />
         <div>
-          <p className="text-sm font-semibold text-[#11110F]">Jarvis</p>
+          <p className="text-sm font-semibold text-[#11110F]">Coevo</p>
           <p className="text-xs text-[#73736B]">
             {agent.isSpeaking ? "Falando agora" : "Ouvindo a reuniao"}
           </p>
@@ -155,7 +155,7 @@ function MeetingGrid({ meetingId }: { meetingId: string }) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-white">
       <div className="min-h-0 flex-1 px-4 pb-3 pt-16 sm:px-6 sm:pt-20">
-        <JarvisPresence />
+        <AgentPresence />
         <GridLayout
           tracks={tracks}
           className="um-meeting-grid h-full min-h-0"
@@ -360,7 +360,7 @@ function MeetingChatPanel({ participantName }: { participantName: string }) {
         {messages.length === 0 ? (
           <p className="text-sm leading-6 text-[#73736B]">
             Use o chat para mensagens escritas durante a reuniao. A transcricao
-            continua sendo processada em segundo plano pelo Jarvis.
+            continua sendo processada em segundo plano pelo Coevo.
           </p>
         ) : null}
 

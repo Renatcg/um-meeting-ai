@@ -37,7 +37,7 @@ async def dispatch_copilot(
                     {
                         "meeting_id": meeting.id,
                         "meeting_title": meeting.title,
-                        "display_name": "Jarvis",
+                        "display_name": "Coevo",
                     }
                 ),
             )
@@ -49,7 +49,7 @@ async def dispatch_copilot(
         )
         return True, None
     except Exception as exc:
-        logger.warning("failed to dispatch Jarvis", exc_info=exc)
+        logger.warning("failed to dispatch Coevo", exc_info=exc)
         return False, str(exc)
     finally:
         await livekit_api.aclose()
