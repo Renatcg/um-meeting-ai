@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { type ComponentProps, FormEvent, useEffect, useRef, useState } from "react";
 import {
   GridLayout,
   LiveKitRoom,
@@ -55,6 +55,16 @@ const CHAT_TOPIC = "um-meeting-chat";
 const agentNameMatchers = ["coevo", "jarvis", "um copilot", "copilot"];
 const commercialUserEmails = new Set(["renato@coevo.ai", "marina@coevo.ai"]);
 
+type MeetingParticipantTileProps = ComponentProps<typeof ParticipantTile> & {
+  trackRef?: {
+    participant?: {
+      identity?: string;
+      isSpeaking?: boolean;
+      name?: string;
+    };
+  };
+};
+
 function inferParticipantRole(email: string, isHostCreator: boolean): ParticipantRole {
   if (isHostCreator) {
     return "host";
@@ -79,6 +89,11 @@ function roleLabel(role: ParticipantRole) {
   return "Participante";
 }
 
+function isAgentParticipant(name?: string, identity?: string) {
+  const label = `${name ?? ""} ${identity ?? ""}`.toLowerCase().trim();
+  return agentNameMatchers.some((matcher) => label.includes(matcher));
+}
+
 function AgentOrb({ isSpeaking }: { isSpeaking: boolean }) {
   return (
     <div
@@ -100,12 +115,9 @@ function AgentOrb({ isSpeaking }: { isSpeaking: boolean }) {
 
 function AgentPresence() {
   const participants = useParticipants();
-  const agent = participants.find((roomParticipant) => {
-    const label = `${roomParticipant.name ?? ""} ${roomParticipant.identity ?? ""}`
-      .toLowerCase()
-      .trim();
-    return agentNameMatchers.some((matcher) => label.includes(matcher));
-  });
+  const agent = participants.find((roomParticipant) =>
+    isAgentParticipant(roomParticipant.name, roomParticipant.identity),
+  );
 
   if (!agent) {
     return null;
@@ -121,6 +133,29 @@ function AgentPresence() {
             {agent.isSpeaking ? "Falando agora" : "Ouvindo a reuniao"}
           </p>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function MeetingParticipantTile(props: MeetingParticipantTileProps) {
+  const participant = props.trackRef?.participant;
+  const isAgent = isAgentParticipant(participant?.name, participant?.identity);
+
+  if (!isAgent) {
+    return <ParticipantTile {...props} />;
+  }
+
+  return (
+    <div className="um-agent-video-tile">
+      <div className="um-agent-video-orb-wrap">
+        <AgentOrb isSpeaking={Boolean(participant?.isSpeaking)} />
+      </div>
+      <div className="um-agent-video-label">
+        <p>Coevo</p>
+        <span>
+          {participant?.isSpeaking ? "Falando agora" : "Ouvindo a reuniao"}
+        </span>
       </div>
     </div>
   );
@@ -168,7 +203,7 @@ function MeetingGrid({ meetingId }: { meetingId: string }) {
           tracks={tracks}
           className="um-meeting-grid um-desktop-grid h-full min-h-0"
         >
-          <ParticipantTile />
+          <MeetingParticipantTile />
         </GridLayout>
 
         <div className="um-mobile-video-stage">
@@ -177,7 +212,7 @@ function MeetingGrid({ meetingId }: { meetingId: string }) {
               tracks={mobileTracks}
               className="um-meeting-grid um-mobile-grid h-full min-h-0"
             >
-              <ParticipantTile />
+              <MeetingParticipantTile />
             </GridLayout>
           ) : (
             <div className="um-mobile-empty-state">
