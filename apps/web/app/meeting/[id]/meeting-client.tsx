@@ -135,6 +135,14 @@ function MeetingGrid({ meetingId }: { meetingId: string }) {
     ],
     { onlySubscribed: false },
   );
+  const localCameraTrack = tracks.find(
+    (trackRef) =>
+      trackRef.participant.isLocal && trackRef.source === Track.Source.Camera,
+  );
+  const mobileTracks = tracks.filter(
+    (trackRef) =>
+      !(trackRef.participant.isLocal && trackRef.source === Track.Source.Camera),
+  );
 
   useEffect(() => {
     function updateClock() {
@@ -158,10 +166,31 @@ function MeetingGrid({ meetingId }: { meetingId: string }) {
         <AgentPresence />
         <GridLayout
           tracks={tracks}
-          className="um-meeting-grid h-full min-h-0"
+          className="um-meeting-grid um-desktop-grid h-full min-h-0"
         >
           <ParticipantTile />
         </GridLayout>
+
+        <div className="um-mobile-video-stage">
+          {mobileTracks.length > 0 ? (
+            <GridLayout
+              tracks={mobileTracks}
+              className="um-meeting-grid um-mobile-grid h-full min-h-0"
+            >
+              <ParticipantTile />
+            </GridLayout>
+          ) : (
+            <div className="um-mobile-empty-state">
+              Aguardando outros participantes
+            </div>
+          )}
+
+          {localCameraTrack ? (
+            <div className="um-local-pip">
+              <ParticipantTile trackRef={localCameraTrack} />
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <footer className="um-meeting-footer grid min-h-24 shrink-0 grid-cols-1 items-center gap-4 border-t border-[#E7E7E2] bg-white px-4 py-4 text-[#11110F] md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:px-6">
