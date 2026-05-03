@@ -2,7 +2,6 @@
 
 import { type ComponentProps, FormEvent, useEffect, useRef, useState } from "react";
 import {
-  GridLayout,
   LiveKitRoom,
   ParticipantTile,
   RoomAudioRenderer,
@@ -56,12 +55,19 @@ const agentNameMatchers = ["coevo", "jarvis", "um copilot", "copilot"];
 const commercialUserEmails = new Set(["renato@coevo.ai", "marina@coevo.ai"]);
 
 type MeetingParticipantTileProps = ComponentProps<typeof ParticipantTile> & {
+  agentParticipant?: {
+    identity?: string;
+    isSpeaking?: boolean;
+    name?: string;
+  };
   trackRef?: {
     participant?: {
       identity?: string;
       isSpeaking?: boolean;
+      isLocal?: boolean;
       name?: string;
     };
+    source?: Track.Source;
   };
 };
 
@@ -139,7 +145,7 @@ function AgentPresence() {
 }
 
 function MeetingParticipantTile(props: MeetingParticipantTileProps) {
-  const participant = props.trackRef?.participant;
+  const participant = props.agentParticipant ?? props.trackRef?.participant;
   const isAgent = isAgentParticipant(participant?.name, participant?.identity);
 
   if (!isAgent) {
@@ -161,8 +167,13 @@ function MeetingParticipantTile(props: MeetingParticipantTileProps) {
   );
 }
 
+function trackKey(trackRef: MeetingParticipantTileProps["trackRef"], fallback: string) {
+  return `${trackRef?.participant?.identity ?? fallback}-${trackRef?.source ?? fallback}`;
+}
+
 function MeetingGrid({ meetingId }: { meetingId: string }) {
   const [clock, setClock] = useState("");
+  const participants = useParticipants();
   const tracks = useTracks(
     [
       { source: Track.Source.ScreenShare, withPlaceholder: false },
@@ -177,6 +188,12 @@ function MeetingGrid({ meetingId }: { meetingId: string }) {
   const mobileTracks = tracks.filter(
     (trackRef) =>
       !(trackRef.participant.isLocal && trackRef.source === Track.Source.Camera),
+  );
+  const agentParticipant = participants.find((roomParticipant) =>
+    isAgentParticipant(roomParticipant.name, roomParticipant.identity),
+  );
+  const agentAlreadyHasTile = tracks.some((trackRef) =>
+    isAgentParticipant(trackRef.participant.name, trackRef.participant.identity),
   );
 
   useEffect(() => {
@@ -199,21 +216,37 @@ function MeetingGrid({ meetingId }: { meetingId: string }) {
     <div className="flex h-full min-h-0 flex-col bg-white">
       <div className="min-h-0 flex-1 px-4 pb-3 pt-16 sm:px-6 sm:pt-20">
         <AgentPresence />
-        <GridLayout
-          tracks={tracks}
-          className="um-meeting-grid um-desktop-grid h-full min-h-0"
-        >
-          <MeetingParticipantTile />
-        </GridLayout>
+        <div className="um-meeting-grid um-desktop-grid h-full min-h-0">
+          {tracks.map((trackRef, index) => (
+            <MeetingParticipantTile
+              key={trackKey(trackRef, `desktop-${index}`)}
+              trackRef={trackRef}
+            />
+          ))}
+          {agentParticipant && !agentAlreadyHasTile ? (
+            <MeetingParticipantTile
+              agentParticipant={agentParticipant}
+              key="desktop-agent-orb"
+            />
+          ) : null}
+        </div>
 
         <div className="um-mobile-video-stage">
-          {mobileTracks.length > 0 ? (
-            <GridLayout
-              tracks={mobileTracks}
-              className="um-meeting-grid um-mobile-grid h-full min-h-0"
-            >
-              <MeetingParticipantTile />
-            </GridLayout>
+          {mobileTracks.length > 0 || (agentParticipant && !agentAlreadyHasTile) ? (
+            <div className="um-meeting-grid um-mobile-grid h-full min-h-0">
+              {mobileTracks.map((trackRef, index) => (
+                <MeetingParticipantTile
+                  key={trackKey(trackRef, `mobile-${index}`)}
+                  trackRef={trackRef}
+                />
+              ))}
+              {agentParticipant && !agentAlreadyHasTile ? (
+                <MeetingParticipantTile
+                  agentParticipant={agentParticipant}
+                  key="mobile-agent-orb"
+                />
+              ) : null}
+            </div>
           ) : (
             <div className="um-mobile-empty-state">
               Aguardando outros participantes
