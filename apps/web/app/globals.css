@@ -76,8 +76,9 @@ select {
 .um-meeting-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
-  grid-auto-rows: minmax(0, 1fr);
-  align-items: stretch;
+  grid-auto-rows: minmax(0, auto);
+  align-content: center;
+  align-items: center;
   width: 100%;
   height: 100%;
   max-height: 100%;
@@ -89,8 +90,9 @@ select {
 .um-meeting-grid .lk-participant-tile {
   position: relative;
   width: 100%;
-  height: 100%;
+  height: auto;
   min-height: 0;
+  aspect-ratio: 16 / 9;
   border-color: rgba(17, 17, 15, 0.12);
   border-radius: 0.75rem;
   background: #11110f;
@@ -170,8 +172,9 @@ select {
   position: relative;
   display: grid;
   width: 100%;
-  height: 100%;
+  height: auto;
   min-height: 0;
+  aspect-ratio: 16 / 9;
   place-items: center;
   overflow: hidden;
   border: 1px solid rgba(17, 17, 15, 0.12);
@@ -503,6 +506,53 @@ select {
   background: #f97316;
 }
 
+.um-panel-toggle-icon {
+  position: relative;
+  display: block;
+  width: 1.3rem;
+  height: 1rem;
+  border: 2px solid currentColor;
+  border-radius: 0.2rem;
+}
+
+.um-panel-toggle-icon::before {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 0.32rem;
+  content: "";
+  background: currentColor;
+  opacity: 0.22;
+}
+
+.um-panel-toggle-icon::after {
+  position: absolute;
+  top: 50%;
+  width: 0.38rem;
+  height: 0.38rem;
+  border-top: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  content: "";
+}
+
+.um-panel-toggle-icon.is-open::before {
+  right: -2px;
+}
+
+.um-panel-toggle-icon.is-open::after {
+  right: 0.16rem;
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.um-panel-toggle-icon.is-closed::before {
+  right: -2px;
+}
+
+.um-panel-toggle-icon.is-closed::after {
+  right: 0.04rem;
+  transform: translateY(-50%) rotate(225deg);
+}
+
 @media (max-width: 1023px) {
   .lk-control-bar {
     right: 0.75rem;
@@ -534,6 +584,8 @@ select {
     grid-auto-columns: 100%;
     grid-auto-flow: column;
     grid-auto-rows: minmax(0, 1fr);
+    align-content: stretch;
+    align-items: stretch;
     grid-template-columns: none;
     grid-template-rows: repeat(2, minmax(0, 1fr));
     gap: 0.75rem;
@@ -549,8 +601,15 @@ select {
   }
 
   .um-mobile-grid .lk-participant-tile {
+    height: 100%;
+    aspect-ratio: auto;
     scroll-snap-align: start;
     scroll-snap-stop: always;
+  }
+
+  .um-mobile-grid .um-agent-video-tile {
+    height: 100%;
+    aspect-ratio: auto;
   }
 
   .um-meeting-controls {

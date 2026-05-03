@@ -228,6 +228,7 @@ async def jarvis(ctx: agents.JobContext):
     current_meeting_id.set(meeting_id)
     started_at = time.monotonic()
     active_until = 0.0
+    silenced_until_new_wake = False
 
     session = AgentSession(
         llm=openai.realtime.RealtimeModel(
@@ -249,7 +250,7 @@ async def jarvis(ctx: agents.JobContext):
 
     @session.on("user_input_transcribed")
     def on_user_input_transcribed(event: UserInputTranscribedEvent) -> None:
-        nonlocal active_until
+        nonlocal active_until, silenced_until_new_wake
 
         if not event.is_final:
             return
@@ -276,9 +277,20 @@ async def jarvis(ctx: agents.JobContext):
         now = time.monotonic()
         if contains_silence_command(transcript):
             active_until = 0.0
+            silenced_until_new_wake = True
+            session.generate_reply(
+                user_input=transcript,
+                instructions="Responda exatamente e apenas: OK",
+            )
             return
 
         was_called = contains_wake_word(transcript)
+        if was_called:
+            silenced_until_new_wake = False
+
+        if silenced_until_new_wake:
+            return
+
         is_active_follow_up = now <= active_until
 
         if not was_called and not is_active_follow_up:
@@ -314,6 +326,7 @@ async def jarvis(ctx: agents.JobContext):
         if (
             getattr(event, "old_state", None) == "speaking"
             and getattr(event, "new_state", None) == "listening"
+            and not silenced_until_new_wake
         ):
             active_until = time.monotonic() + POST_REPLY_ACTIVE_SECONDS
 
