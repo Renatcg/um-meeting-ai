@@ -96,6 +96,11 @@ function roleLabel(role: ParticipantRole) {
 }
 
 function isAgentParticipant(name?: string, identity?: string) {
+  const normalizedIdentity = identity?.toLowerCase().trim() ?? "";
+  if (normalizedIdentity.startsWith("agent-")) {
+    return true;
+  }
+
   const label = `${name ?? ""} ${identity ?? ""}`.toLowerCase().trim();
   return agentNameMatchers.some((matcher) => label.includes(matcher));
 }
@@ -522,7 +527,8 @@ function MeetingChatPanel({ participantName }: { participantName: string }) {
 
 function MeetingSidePanel({
   canViewSalesPanel,
-  isOpen,
+  isDesktopVisible,
+  isMobileOpen,
   onClose,
   participantName,
   recommendations,
@@ -530,7 +536,8 @@ function MeetingSidePanel({
   setSidePanelTab,
 }: {
   canViewSalesPanel: boolean;
-  isOpen: boolean;
+  isDesktopVisible: boolean;
+  isMobileOpen: boolean;
   onClose: () => void;
   participantName: string;
   recommendations: SalesRecommendation[];
@@ -539,9 +546,9 @@ function MeetingSidePanel({
 }) {
   return (
     <aside
-      className={`fixed inset-y-0 right-0 z-40 flex h-full w-full max-w-[360px] min-h-0 flex-col overflow-hidden border-l border-[#E7E7E2] bg-[#FCFCFB] text-[#11110F] shadow-[0_24px_90px_rgba(17,17,15,0.18)] transition-transform duration-200 lg:static lg:z-auto lg:flex lg:w-auto lg:max-w-none lg:translate-x-0 lg:shadow-none ${
-        isOpen ? "translate-x-0" : "translate-x-full"
-      }`}
+      className={`fixed inset-y-0 right-0 z-40 flex h-full w-full max-w-[360px] min-h-0 flex-col overflow-hidden border-l border-[#E7E7E2] bg-[#FCFCFB] text-[#11110F] shadow-[0_24px_90px_rgba(17,17,15,0.18)] transition-transform duration-200 lg:static lg:z-auto lg:w-auto lg:max-w-none lg:translate-x-0 lg:shadow-none ${
+        isMobileOpen ? "translate-x-0" : "translate-x-full"
+      } ${isDesktopVisible ? "lg:flex" : "lg:hidden"}`}
     >
       <div className="border-b border-[#E7E7E2] bg-white px-5 py-4">
         <div className="flex items-start justify-between gap-3">
@@ -642,7 +649,8 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
     [],
   );
   const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>("chat");
-  const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
+  const [isDesktopSidePanelVisible, setIsDesktopSidePanelVisible] = useState(true);
+  const [isMobileSidePanelOpen, setIsMobileSidePanelOpen] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isHostCreator, setIsHostCreator] = useState<boolean | null>(null);
@@ -949,7 +957,9 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
           token={connection.token}
           serverUrl={connection.url}
           data-lk-theme="default"
-          className="um-room-shell h-screen overflow-hidden bg-white text-[#11110F] [height:100dvh]"
+          className={`um-room-shell h-screen overflow-hidden bg-white text-[#11110F] [height:100dvh] ${
+            isDesktopSidePanelVisible ? "" : "is-panel-hidden"
+          }`}
           onDisconnected={leaveMeeting}
         >
           <section className="relative min-h-0 overflow-hidden">
@@ -963,17 +973,27 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
             <button
               className="absolute right-4 top-4 z-20 rounded-lg border border-[#E7E7E2] bg-white/90 px-4 py-2 text-sm font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-[#F97316] hover:bg-[#FFF3EA] lg:hidden"
               type="button"
-              onClick={() => setIsSidePanelOpen(true)}
+              onClick={() => setIsMobileSidePanelOpen(true)}
             >
               Chat
+            </button>
+            <button
+              className="absolute right-4 top-4 z-20 hidden rounded-lg border border-[#E7E7E2] bg-white/90 px-4 py-2 text-sm font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-[#F97316] hover:bg-[#FFF3EA] lg:block"
+              type="button"
+              onClick={() =>
+                setIsDesktopSidePanelVisible((isVisible) => !isVisible)
+              }
+            >
+              {isDesktopSidePanelVisible ? "Ocultar painel" : "Mostrar painel"}
             </button>
             <MeetingGrid meetingId={meetingId} />
           </section>
 
           <MeetingSidePanel
             canViewSalesPanel={canViewSalesPanel}
-            isOpen={isSidePanelOpen}
-            onClose={() => setIsSidePanelOpen(false)}
+            isDesktopVisible={isDesktopSidePanelVisible}
+            isMobileOpen={isMobileSidePanelOpen}
+            onClose={() => setIsMobileSidePanelOpen(false)}
             participantName={participant.name}
             recommendations={recommendations}
             sidePanelTab={sidePanelTab}

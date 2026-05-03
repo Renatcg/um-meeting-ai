@@ -56,6 +56,10 @@ select {
   .lk-room-container.um-room-shell {
     grid-template-columns: minmax(0, 1fr) 360px;
   }
+
+  .lk-room-container.um-room-shell.is-panel-hidden {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .lk-grid-layout {
@@ -77,6 +81,7 @@ select {
   width: 100%;
   height: 100%;
   max-height: 100%;
+  gap: 0.75rem;
   padding: 0;
   overflow: hidden;
 }
