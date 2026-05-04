@@ -370,6 +370,21 @@ export default function MeetingEndedPage() {
           from { transform: translateX(0); }
           to { transform: translateX(-50%); }
         }
+        @keyframes voice-orb-core {
+          0%, 100% { transform: scale(.94); box-shadow: 0 0 22px rgba(245,199,107,.26), inset 0 0 18px rgba(245,199,107,.16); }
+          45% { transform: scale(1.06); box-shadow: 0 0 58px rgba(245,199,107,.42), inset 0 0 28px rgba(245,199,107,.26); }
+          70% { transform: scale(.99); box-shadow: 0 0 36px rgba(245,199,107,.34), inset 0 0 20px rgba(245,199,107,.20); }
+        }
+        @keyframes voice-orb-ring {
+          0% { transform: scale(.72); opacity: .62; }
+          70% { transform: scale(1.42); opacity: .08; }
+          100% { transform: scale(1.55); opacity: 0; }
+        }
+        @keyframes voice-orb-bar {
+          0%, 100% { transform: scaleY(.45); opacity: .58; }
+          35% { transform: scaleY(1); opacity: 1; }
+          65% { transform: scaleY(.68); opacity: .74; }
+        }
       `}</style>
       <div className="fixed inset-0 pointer-events-none opacity-[0.055] [background-image:linear-gradient(to_right,white_1px,transparent_1px),linear-gradient(to_bottom,white_1px,transparent_1px)] [background-size:48px_48px]" />
       <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(circle_at_12%_18%,rgba(245,199,107,.20),transparent_30%),radial-gradient(circle_at_82%_10%,rgba(96,165,250,.13),transparent_26%),radial-gradient(circle_at_72%_82%,rgba(200,164,93,.15),transparent_32%),linear-gradient(180deg,#0B0D12_0%,#111827_48%,#0B0D12_100%)]" />
@@ -472,9 +487,19 @@ export default function MeetingEndedPage() {
                 </div>
 
                 <div className="min-h-56 rounded-2xl border border-white/10 bg-[#111827] p-4 transition duration-500 hover:-translate-y-1 hover:border-[#60A5FA]/50">
-                  <div className="mb-3 grid h-28 place-items-center rounded-xl bg-[#0B0D12]">
-                    <span className="relative h-16 w-16 rounded-full border border-[#C8A45D]/50 bg-[#F5C76B]/15 shadow-[0_0_60px_rgba(200,164,93,.20)]">
-                      <span className="absolute inset-[-10px] rounded-full border border-[#F5C76B]/25 [animation:ping_2.2s_cubic-bezier(0,0,.2,1)_infinite]" />
+                  <div className="mb-3 grid h-28 place-items-center overflow-hidden rounded-xl bg-[radial-gradient(circle_at_50%_50%,rgba(245,199,107,.16),transparent_36%),#0B0D12]">
+                    <span className="relative grid h-20 w-20 place-items-center rounded-full">
+                      <span className="absolute inset-0 rounded-full border border-[#F5C76B]/40 [animation:voice-orb-ring_2.4s_ease-out_infinite]" />
+                      <span className="absolute inset-0 rounded-full border border-[#C8A45D]/35 [animation:voice-orb-ring_2.4s_ease-out_.55s_infinite]" />
+                      <span className="absolute inset-[-10px] rounded-full border border-[#F97316]/20 [animation:voice-orb-ring_2.4s_ease-out_1.1s_infinite]" />
+                      <span className="absolute inset-[10px] rounded-full bg-[#F5C76B]/10 blur-xl" />
+                      <span className="relative grid h-14 w-14 place-items-center rounded-full border border-[#F5C76B]/70 bg-[#0B0D12] [animation:voice-orb-core_1.8s_ease-in-out_infinite]">
+                        <span className="flex h-7 items-center gap-1.5">
+                          <span className="h-5 w-1.5 rounded-full bg-[#F5C76B] [animation:voice-orb-bar_.82s_ease-in-out_infinite]" />
+                          <span className="h-7 w-1.5 rounded-full bg-[#F5C76B] [animation:voice-orb-bar_.96s_ease-in-out_.12s_infinite]" />
+                          <span className="h-4 w-1.5 rounded-full bg-[#F5C76B] [animation:voice-orb-bar_.74s_ease-in-out_.22s_infinite]" />
+                        </span>
+                      </span>
                     </span>
                   </div>
                   <p className="font-semibold">Copiloto privado</p>
