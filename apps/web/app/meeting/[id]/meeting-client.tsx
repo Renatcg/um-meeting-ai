@@ -1467,7 +1467,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
     endMeetingIfGatekeeper();
     setConnection(null);
     setStep("lobby");
-    router.push("/meeting-ended");
+    router.push("/coevo-meet?ended=true");
   }
 
   useEffect(() => {
