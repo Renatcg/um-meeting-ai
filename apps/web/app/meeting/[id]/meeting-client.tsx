@@ -327,9 +327,31 @@ function AgentPresence() {
 function MeetingParticipantTile(props: MeetingParticipantTileProps) {
   const participant = props.agentParticipant ?? props.trackRef?.participant;
   const isAgent = isAgentParticipant(participant?.name, participant?.identity);
+  const tileRef = useRef<HTMLDivElement | null>(null);
+
+  async function openFullscreen() {
+    await tileRef.current?.requestFullscreen?.();
+  }
 
   if (!isAgent) {
-    return <ParticipantTile {...props} />;
+    if (props.trackRef?.source !== Track.Source.ScreenShare) {
+      return <ParticipantTile {...props} />;
+    }
+
+    return (
+      <div className="um-screen-share-tile" ref={tileRef}>
+        <ParticipantTile {...props} />
+        <button
+          className="um-fullscreen-button"
+          type="button"
+          aria-label="Abrir tela compartilhada em tela cheia"
+          title="Tela cheia"
+          onClick={openFullscreen}
+        >
+          <span aria-hidden="true">Tela cheia</span>
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -1445,7 +1467,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
     endMeetingIfGatekeeper();
     setConnection(null);
     setStep("lobby");
-    router.push("/");
+    router.push("/meeting-ended");
   }
 
   useEffect(() => {
