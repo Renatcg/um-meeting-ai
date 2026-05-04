@@ -1,6 +1,14 @@
 "use client";
 
-import { type ComponentProps, FormEvent, useEffect, useRef, useState } from "react";
+import {
+  type ComponentProps,
+  type Dispatch,
+  FormEvent,
+  type SetStateAction,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   LiveKitRoom,
   ParticipantTile,
@@ -70,6 +78,18 @@ type MeetingParticipantTileProps = ComponentProps<typeof ParticipantTile> & {
     source?: Track.Source;
   };
 };
+
+type MeetingTileItem =
+  | {
+      agentParticipant?: never;
+      key: string;
+      trackRef: NonNullable<MeetingParticipantTileProps["trackRef"]>;
+    }
+  | {
+      agentParticipant: NonNullable<MeetingParticipantTileProps["agentParticipant"]>;
+      key: string;
+      trackRef?: never;
+    };
 
 function inferParticipantRole(email: string, isHostCreator: boolean): ParticipantRole {
   if (isHostCreator) {
@@ -188,9 +208,70 @@ function trackKey(trackRef: MeetingParticipantTileProps["trackRef"], fallback: s
   return `${trackRef?.participant?.identity ?? fallback}-${trackRef?.source ?? fallback}`;
 }
 
+function TilePagination({
+  currentPage,
+  label,
+  setCurrentPage,
+  totalPages,
+  variant,
+}: {
+  currentPage: number;
+  label: string;
+  setCurrentPage: Dispatch<SetStateAction<number>>;
+  totalPages: number;
+  variant: "desktop" | "mobile";
+}) {
+  if (totalPages <= 1) {
+    return null;
+  }
+
+  return (
+    <div className={`um-meeting-pagination is-${variant}`} aria-label={label}>
+      <button
+        className="um-page-button"
+        type="button"
+        aria-label="Pagina anterior"
+        onClick={() => setCurrentPage((page) => Math.max(0, page - 1))}
+        disabled={currentPage === 0}
+      >
+        {"<"}
+      </button>
+      <span className="font-mono text-xs font-semibold text-[#73736B]">
+        {currentPage + 1}/{totalPages}
+      </span>
+      <button
+        className="um-page-button"
+        type="button"
+        aria-label="Proxima pagina"
+        onClick={() =>
+          setCurrentPage((page) => Math.min(totalPages - 1, page + 1))
+        }
+        disabled={currentPage === totalPages - 1}
+      >
+        {">"}
+      </button>
+    </div>
+  );
+}
+
+function renderMeetingTile(tile: MeetingTileItem) {
+  if (tile.trackRef) {
+    return <MeetingParticipantTile key={tile.key} trackRef={tile.trackRef} />;
+  }
+
+  return (
+    <MeetingParticipantTile
+      agentParticipant={tile.agentParticipant}
+      key={tile.key}
+    />
+  );
+}
+
 function MeetingGrid({ meetingId }: { meetingId: string }) {
   const [clock, setClock] = useState("");
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [desktopPage, setDesktopPage] = useState(0);
+  const [mobilePage, setMobilePage] = useState(0);
   const participants = useParticipants();
   const tracks = useTracks(
     [
@@ -212,6 +293,37 @@ function MeetingGrid({ meetingId }: { meetingId: string }) {
   );
   const agentAlreadyHasTile = tracks.some((trackRef) =>
     isAgentParticipant(trackRef.participant.name, trackRef.participant.identity),
+  );
+  const desktopTiles: MeetingTileItem[] = tracks.map((trackRef, index) => ({
+    key: trackKey(trackRef, `desktop-${index}`),
+    trackRef,
+  }));
+  const mobileTiles: MeetingTileItem[] = mobileTracks.map((trackRef, index) => ({
+    key: trackKey(trackRef, `mobile-${index}`),
+    trackRef,
+  }));
+
+  if (agentParticipant && !agentAlreadyHasTile) {
+    desktopTiles.push({
+      agentParticipant,
+      key: "desktop-agent-orb",
+    });
+    mobileTiles.push({
+      agentParticipant,
+      key: "mobile-agent-orb",
+    });
+  }
+
+  const pageSize = 4;
+  const desktopTotalPages = Math.max(1, Math.ceil(desktopTiles.length / pageSize));
+  const mobileTotalPages = Math.max(1, Math.ceil(mobileTiles.length / pageSize));
+  const visibleDesktopTiles = desktopTiles.slice(
+    desktopPage * pageSize,
+    desktopPage * pageSize + pageSize,
+  );
+  const visibleMobileTiles = mobileTiles.slice(
+    mobilePage * pageSize,
+    mobilePage * pageSize + pageSize,
   );
 
   useEffect(() => {
@@ -243,7 +355,21 @@ function MeetingGrid({ meetingId }: { meetingId: string }) {
     return () => window.clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    setDesktopPage((page) => Math.min(page, desktopTotalPages - 1));
+  }, [desktopTotalPages]);
+
+  useEffect(() => {
+    setMobilePage((page) => Math.min(page, mobileTotalPages - 1));
+  }, [mobileTotalPages]);
+
   const elapsedTime = formatElapsedTime(elapsedSeconds);
+  const desktopGridDensity =
+    visibleDesktopTiles.length === 1
+      ? "is-page-single"
+      : visibleDesktopTiles.length <= 2
+        ? "is-page-compact"
+        : "";
 
   return (
     <div className="um-meeting-layout flex h-full min-h-0 flex-col bg-white">
@@ -252,42 +378,36 @@ function MeetingGrid({ meetingId }: { meetingId: string }) {
         <div className="absolute left-4 top-16 z-10 rounded-full border border-[#E7E7E2] bg-white/92 px-3 py-2 font-mono text-xs font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.08)] backdrop-blur-xl sm:left-6 sm:top-20">
           {elapsedTime}
         </div>
-        <div className="um-meeting-grid um-desktop-grid h-full min-h-0">
-          {tracks.map((trackRef, index) => (
-            <MeetingParticipantTile
-              key={trackKey(trackRef, `desktop-${index}`)}
-              trackRef={trackRef}
-            />
-          ))}
-          {agentParticipant && !agentAlreadyHasTile ? (
-            <MeetingParticipantTile
-              agentParticipant={agentParticipant}
-              key="desktop-agent-orb"
-            />
-          ) : null}
+        <div
+          className={`um-meeting-grid um-desktop-grid h-full min-h-0 ${desktopGridDensity}`}
+        >
+          {visibleDesktopTiles.map(renderMeetingTile)}
         </div>
+        <TilePagination
+          currentPage={desktopPage}
+          label="Paginas de videos"
+          setCurrentPage={setDesktopPage}
+          totalPages={desktopTotalPages}
+          variant="desktop"
+        />
 
         <div className="um-mobile-video-stage">
-          {mobileTracks.length > 0 || (agentParticipant && !agentAlreadyHasTile) ? (
+          {mobileTiles.length > 0 ? (
             <div className="um-meeting-grid um-mobile-grid h-full min-h-0">
-              {mobileTracks.map((trackRef, index) => (
-                <MeetingParticipantTile
-                  key={trackKey(trackRef, `mobile-${index}`)}
-                  trackRef={trackRef}
-                />
-              ))}
-              {agentParticipant && !agentAlreadyHasTile ? (
-                <MeetingParticipantTile
-                  agentParticipant={agentParticipant}
-                  key="mobile-agent-orb"
-                />
-              ) : null}
+              {visibleMobileTiles.map(renderMeetingTile)}
             </div>
           ) : (
             <div className="um-mobile-empty-state">
               Aguardando outros participantes
             </div>
           )}
+          <TilePagination
+            currentPage={mobilePage}
+            label="Paginas de videos no celular"
+            setCurrentPage={setMobilePage}
+            totalPages={mobileTotalPages}
+            variant="mobile"
+          />
 
           {localCameraTrack ? (
             <div className="um-local-pip">
@@ -993,7 +1113,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
           }`}
           onDisconnected={leaveMeeting}
         >
-          <section className="relative min-h-0 overflow-hidden">
+          <section className="relative h-full min-h-0 overflow-hidden">
             <button
               className="absolute left-4 top-4 z-20 rounded-lg border border-[#E7E7E2] bg-white/90 px-4 py-2 text-sm font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-[#F97316] hover:bg-[#FFF3EA]"
               type="button"
