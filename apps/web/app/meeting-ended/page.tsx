@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useState } from "react";
 
 const metrics = [
   "Menos follow-up perdido",
@@ -29,18 +32,18 @@ const comparisons = [
 ];
 
 const features = [
-  "IA participante na sala",
-  "Respostas por voz em tempo real",
-  "Transcricao processada em segundo plano",
-  "Painel comercial privado",
-  "Cards de objecao, risco e oportunidade",
-  "Base de conhecimento por empresa",
-  "Base especifica por reuniao",
-  "Personalidade treinavel do agente",
-  "Historico e memoria de reunioes",
-  "Efeitos de camera e fundo corporativo",
-  "Compartilhamento de tela com foco total",
-  "Controle de acesso por papel",
+  { title: "IA participante na sala", icon: "orb" },
+  { title: "Respostas por voz em tempo real", icon: "voice" },
+  { title: "Transcricao processada em segundo plano", icon: "lines" },
+  { title: "Painel comercial privado", icon: "panel" },
+  { title: "Cards de objecao, risco e oportunidade", icon: "cards" },
+  { title: "Base de conhecimento por empresa", icon: "database" },
+  { title: "Base especifica por reuniao", icon: "folder" },
+  { title: "Personalidade treinavel do agente", icon: "sliders" },
+  { title: "Historico e memoria de reunioes", icon: "timeline" },
+  { title: "Efeitos de camera e fundo corporativo", icon: "camera" },
+  { title: "Compartilhamento de tela com foco total", icon: "screen" },
+  { title: "Controle de acesso por papel", icon: "lock" },
 ];
 
 const losses = [
@@ -63,29 +66,90 @@ const losses = [
 ];
 
 const sdrSteps = [
-  "Abertura com contexto do lead",
-  "Perguntas sugeridas conforme dor",
-  "Alertas quando o prospect foge do ICP",
-  "Resumo pronto para handoff",
-  "Proxima acao recomendada",
+  {
+    title: "Abertura com contexto do lead",
+    detail:
+      "Antes do SDR falar, Coevo mostra origem, dor provavel, setor, cargo e o historico que importa. A abertura deixa de ser fria.",
+    screen: "Lead score 84 | Segmento SaaS B2B | Dor provavel: perda de follow-up",
+  },
+  {
+    title: "Perguntas sugeridas conforme dor",
+    detail:
+      "Enquanto o prospect responde, a IA sugere perguntas que aprofundam impacto, urgencia e criterio de decisao.",
+    screen: "Pergunte agora: quanto tempo o time perde recuperando contexto?",
+  },
+  {
+    title: "Alertas quando o prospect foge do ICP",
+    detail:
+      "Se o lead nao tem budget, autoridade ou fit, o SDR recebe alerta discreto para qualificar sem desperdicar agenda.",
+    screen: "Alerta ICP: sem decisor na sala | Risco: medio | Proxima acao: validar autoridade",
+  },
+  {
+    title: "Resumo pronto para handoff",
+    detail:
+      "O closer recebe contexto claro, com dores, objecoes, prioridades e frases reais do prospect. Nada chega mastigado pela memoria.",
+    screen: "Handoff: dor financeira + urgencia alta + integracao CRM como criterio",
+  },
+  {
+    title: "Proxima acao recomendada",
+    detail:
+      "Coevo recomenda o proximo passo, o argumento central e o material que deve ir no follow-up.",
+    screen: "Enviar case ROI + agendar demo tecnica + confirmar decisor economico",
+  },
 ];
 
 const companyBenefits = [
-  "Padroniza conversas comerciais sem engessar o time",
-  "Reduz perda de contexto entre reuniao, CRM e follow-up",
-  "Acelera onboarding de novos vendedores",
-  "Cria inteligencia coletiva a partir de cada chamada",
-  "Melhora compliance, governanca e rastreabilidade",
-  "Aumenta qualidade da decisao em deals complexos",
+  {
+    label: "Receita",
+    text: "Padroniza conversas comerciais sem engessar o time e aumenta a chance de cada call virar avanco real.",
+  },
+  {
+    label: "Operacao",
+    text: "Reduz perda de contexto entre reuniao, CRM e follow-up, tirando trabalho invisivel da equipe.",
+  },
+  {
+    label: "Treinamento",
+    text: "Acelera onboarding de novos vendedores com exemplos reais, objecoes reais e playbooks vivos.",
+  },
+  {
+    label: "Gestao",
+    text: "Cria inteligencia coletiva a partir de cada chamada e mostra onde o time esta ganhando ou sangrando.",
+  },
+  {
+    label: "Governanca",
+    text: "Melhora compliance, rastreabilidade e controle de acesso em conversas sensiveis.",
+  },
+  {
+    label: "Decisao",
+    text: "Aumenta qualidade da decisao em deals complexos, com dados vivos em vez de opiniao solta.",
+  },
 ];
 
 const publicBenefits = [
-  "Atendimentos remotos com registro confiavel",
-  "Auditoria de reunioes sensiveis",
-  "Memoria institucional preservada",
-  "Acessibilidade para cidadaos e servidores",
-  "Reducao de deslocamentos e retrabalho",
-  "Padronizacao de respostas com base oficial",
+  {
+    label: "Atendimento",
+    text: "Atendimentos remotos com registro confiavel, menos perda de informacao e mais continuidade.",
+  },
+  {
+    label: "Auditoria",
+    text: "Reunioes sensiveis com trilha, horario, participantes e resumo institucional.",
+  },
+  {
+    label: "Memoria",
+    text: "Memoria institucional preservada mesmo quando equipes, gestores e contratos mudam.",
+  },
+  {
+    label: "Acesso",
+    text: "Mais acessibilidade para cidadaos e servidores, com assistencia e contexto em tempo real.",
+  },
+  {
+    label: "Eficiencia",
+    text: "Reducao de deslocamentos, retrabalho, filas internas e repeticao de orientacoes.",
+  },
+  {
+    label: "Padrao",
+    text: "Respostas padronizadas com base oficial, reduzindo improviso e desalinhamento.",
+  },
 ];
 
 const securityLayers = [
@@ -166,7 +230,139 @@ const plans = [
   },
 ];
 
+function FeatureIcon({ icon }: { icon: string }) {
+  const common =
+    "relative grid h-14 w-14 place-items-center rounded-2xl border border-[#C8A45D]/35 bg-[#F5C76B]/10 text-[#F5C76B] shadow-[0_0_60px_rgba(200,164,93,.14)]";
+
+  if (icon === "orb") {
+    return (
+      <span className={common}>
+        <span className="h-6 w-6 rounded-full bg-[#F5C76B]" />
+        <span className="absolute inset-2 rounded-full border border-[#F5C76B]/35 [animation:ping_2.4s_cubic-bezier(0,0,.2,1)_infinite]" />
+      </span>
+    );
+  }
+
+  if (icon === "voice") {
+    return (
+      <span className={common}>
+        <span className="h-7 w-1 rounded-full bg-[#F5C76B] [animation:pulse_1.2s_ease-in-out_infinite]" />
+        <span className="ml-1 h-10 w-1 rounded-full bg-[#F5C76B]/70 [animation:pulse_1.5s_ease-in-out_infinite]" />
+        <span className="ml-1 h-5 w-1 rounded-full bg-[#F5C76B]/50 [animation:pulse_1s_ease-in-out_infinite]" />
+      </span>
+    );
+  }
+
+  if (icon === "lines") {
+    return (
+      <span className={common}>
+        <span className="grid w-8 gap-1">
+          <span className="h-1 w-8 rounded-full bg-[#F5C76B]" />
+          <span className="h-1 w-6 rounded-full bg-[#F5C76B]/70 [animation:pulse_1.4s_ease-in-out_infinite]" />
+          <span className="h-1 w-7 rounded-full bg-[#F5C76B]/45" />
+        </span>
+      </span>
+    );
+  }
+
+  if (icon === "panel") {
+    return (
+      <span className={common}>
+        <span className="grid h-8 w-8 grid-cols-[1fr_10px] gap-1">
+          <span className="rounded-md bg-[#F5C76B]/80" />
+          <span className="grid gap-1">
+            <span className="rounded bg-[#60A5FA]/80" />
+            <span className="rounded bg-[#10B981]/80" />
+          </span>
+        </span>
+      </span>
+    );
+  }
+
+  if (icon === "cards") {
+    return (
+      <span className={common}>
+        <span className="absolute h-7 w-8 -rotate-6 rounded-lg border border-[#EF4444]/60 bg-[#EF4444]/20" />
+        <span className="absolute h-7 w-8 rotate-6 rounded-lg border border-[#10B981]/60 bg-[#10B981]/20 [animation:pulse_1.8s_ease-in-out_infinite]" />
+      </span>
+    );
+  }
+
+  if (icon === "database") {
+    return (
+      <span className={common}>
+        <span className="grid gap-1">
+          <span className="h-2 w-8 rounded-full bg-[#F5C76B]" />
+          <span className="h-2 w-8 rounded-full bg-[#F5C76B]/70" />
+          <span className="h-2 w-8 rounded-full bg-[#F5C76B]/45" />
+        </span>
+      </span>
+    );
+  }
+
+  if (icon === "folder") {
+    return (
+      <span className={common}>
+        <span className="h-7 w-9 rounded-lg rounded-tl-sm bg-[#F5C76B]" />
+        <span className="absolute left-4 top-4 h-2 w-5 rounded-t bg-[#F5C76B]/70" />
+      </span>
+    );
+  }
+
+  if (icon === "sliders") {
+    return (
+      <span className={common}>
+        <span className="grid w-8 gap-2">
+          <span className="h-px w-8 bg-[#F5C76B]" />
+          <span className="h-px w-8 bg-[#F5C76B]" />
+          <span className="h-px w-8 bg-[#F5C76B]" />
+        </span>
+        <span className="absolute left-6 top-4 h-3 w-3 rounded-full bg-[#F5C76B] [animation:pulse_1.5s_ease-in-out_infinite]" />
+        <span className="absolute right-5 top-7 h-3 w-3 rounded-full bg-[#60A5FA]" />
+      </span>
+    );
+  }
+
+  if (icon === "timeline") {
+    return (
+      <span className={common}>
+        <span className="h-8 w-px bg-[#F5C76B]/60" />
+        <span className="absolute top-3 h-3 w-3 rounded-full bg-[#F5C76B]" />
+        <span className="absolute bottom-3 h-3 w-3 rounded-full bg-[#60A5FA] [animation:pulse_1.6s_ease-in-out_infinite]" />
+      </span>
+    );
+  }
+
+  if (icon === "camera") {
+    return (
+      <span className={common}>
+        <span className="h-7 w-9 rounded-lg border border-[#F5C76B] bg-[#F5C76B]/15" />
+        <span className="absolute right-3 h-4 w-4 rotate-45 rounded-sm bg-[#F5C76B]" />
+      </span>
+    );
+  }
+
+  if (icon === "screen") {
+    return (
+      <span className={common}>
+        <span className="h-7 w-9 rounded-md border border-[#F5C76B] bg-[#F5C76B]/10" />
+        <span className="absolute bottom-3 h-px w-7 bg-[#F5C76B]" />
+      </span>
+    );
+  }
+
+  return (
+    <span className={common}>
+      <span className="h-8 w-6 rounded-md border border-[#F5C76B]" />
+      <span className="absolute top-4 h-4 w-5 rounded-t-full border border-b-0 border-[#F5C76B]" />
+    </span>
+  );
+}
+
 export default function MeetingEndedPage() {
+  const [activeSdrStep, setActiveSdrStep] = useState(0);
+  const selectedSdrStep = sdrSteps[activeSdrStep];
+
   return (
     <main className="min-h-screen overflow-hidden bg-[#0B0D12] text-[#FAF7EF]">
       <style>{`
@@ -305,9 +501,9 @@ export default function MeetingEndedPage() {
             {[...features, ...features].map((feature, index) => (
               <span
                 className="rounded-full border border-white/10 bg-white/[.04] px-4 py-2"
-                key={`${feature}-${index}`}
+                key={`${feature.title}-${index}`}
               >
-                {feature}
+                {feature.title}
               </span>
             ))}
           </div>
@@ -319,25 +515,29 @@ export default function MeetingEndedPage() {
               Features
             </p>
             <h2 className="mt-3 font-display text-4xl font-semibold">
-              Nove recursos seriam pouco. Entao colocamos doze.
+              Tudo que uma reuniao critica deveria ter desde o primeiro minuto.
             </h2>
+            <p className="mt-4 text-lg leading-8 text-[#A8B0BF]">
+              Video, contexto, memoria, controle e inteligencia comercial no
+              mesmo fluxo. A chamada deixa de ser evento e vira ativo.
+            </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {features.map((feature, index) => (
               <article
                 className="group rounded-2xl border border-white/10 bg-white/[.055] p-5 transition duration-500 hover:-translate-y-1 hover:border-[#C8A45D]/60 hover:bg-white/[.08]"
-                key={feature}
+                key={feature.title}
               >
-                <span className="font-mono text-xs text-[#F5C76B]">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-                <p className="mt-6 font-display text-2xl font-semibold">
-                  {feature}
-                </p>
-                <div className="mt-5 h-1 rounded-full bg-white/10">
-                  <div className="h-1 w-1/2 rounded-full bg-gradient-to-r from-[#C8A45D] to-[#F5C76B] transition-all duration-500 group-hover:w-full" />
+                <div className="flex items-start justify-between gap-4">
+                  <FeatureIcon icon={feature.icon} />
+                  <span className="font-mono text-xs text-[#F5C76B]">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
                 </div>
+                <p className="mt-6 font-display text-2xl font-semibold">
+                  {feature.title}
+                </p>
               </article>
             ))}
           </div>
@@ -386,75 +586,202 @@ export default function MeetingEndedPage() {
             </h2>
           </div>
 
-          <div className="grid gap-5 lg:grid-cols-[1fr_1.2fr]">
-            <div className="rounded-[1.5rem] border border-white/10 bg-[#FAF7EF] p-6 text-[#0B0D12]">
+          <div className="grid gap-5 lg:grid-cols-[1.05fr_1.15fr]">
+            <div className="relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#FAF7EF] p-6 text-[#0B0D12] shadow-[0_30px_120px_rgba(0,0,0,.30)]">
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#C8A45D] via-[#F5C76B] to-[#60A5FA]" />
               <p className="font-mono text-xs uppercase tracking-[0.18em] text-[#C8A45D]">
-                Playbook vivo
+                Tela do sistema
               </p>
-              <p className="mt-6 font-display text-4xl font-semibold">
-                O SDR entra menos sozinho. Sai mais preparado.
-              </p>
-              <p className="mt-5 leading-7 text-[#374151]">
-                Coevo transforma cada call em treinamento, cada lead em dado e
-                cada objecao em material para melhorar o proximo contato.
-              </p>
+              <div className="mt-5 rounded-2xl border border-[#0B0D12]/10 bg-[#0B0D12] p-4 text-[#FAF7EF]">
+                <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                  <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#F5C76B]">
+                    Coevo SDR cockpit
+                  </span>
+                  <span className="rounded-full bg-[#10B981]/15 px-3 py-1 text-xs font-bold text-[#10B981]">
+                    Ao vivo
+                  </span>
+                </div>
+
+                <div className="mt-5 grid gap-3">
+                  <div className="rounded-xl border border-white/10 bg-white/[.06] p-4">
+                    <p className="font-display text-2xl font-semibold">
+                      {selectedSdrStep.title}
+                    </p>
+                    <p className="mt-3 text-sm leading-6 text-[#A8B0BF]">
+                      {selectedSdrStep.screen}
+                    </p>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {["Fit", "Dor", "Acao"].map((item, index) => (
+                      <div
+                        className="rounded-xl border border-white/10 bg-white/[.05] p-3"
+                        key={item}
+                      >
+                        <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#A8B0BF]">
+                          {item}
+                        </span>
+                        <div className="mt-3 h-2 rounded-full bg-white/10">
+                          <div
+                            className="h-2 rounded-full bg-gradient-to-r from-[#C8A45D] to-[#F5C76B] transition-all duration-500"
+                            style={{
+                              width: `${68 + activeSdrStep * 5 + index * 4}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="rounded-xl border border-[#C8A45D]/25 bg-[#C8A45D]/10 p-4">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#F5C76B]">
+                      Recomendacao privada
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-[#FAF7EF]">
+                      {selectedSdrStep.detail}
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="space-y-3">
               {sdrSteps.map((step, index) => (
-                <div
-                  className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[.055] p-4 transition duration-500 hover:translate-x-2 hover:border-[#60A5FA]/50"
-                  key={step}
+                <button
+                  className={`w-full rounded-2xl border p-4 text-left transition duration-500 hover:translate-x-2 ${
+                    activeSdrStep === index
+                      ? "border-[#F5C76B]/70 bg-[#F5C76B]/10"
+                      : "border-white/10 bg-white/[.055] hover:border-[#60A5FA]/50"
+                  }`}
+                  key={step.title}
+                  onClick={() => setActiveSdrStep(index)}
+                  type="button"
                 >
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#60A5FA]/15 font-mono text-xs text-[#60A5FA]">
-                    {index + 1}
+                  <span className="flex items-center gap-4">
+                    <span
+                      className={`grid h-10 w-10 shrink-0 place-items-center rounded-full font-mono text-xs ${
+                        activeSdrStep === index
+                          ? "bg-[#F5C76B] text-[#0B0D12]"
+                          : "bg-[#60A5FA]/15 text-[#60A5FA]"
+                      }`}
+                    >
+                      {index + 1}
+                    </span>
+                    <span className="font-semibold">{step.title}</span>
                   </span>
-                  <p className="font-semibold">{step}</p>
-                </div>
+                  <span
+                    className={`grid overflow-hidden pl-14 text-sm leading-6 text-[#A8B0BF] transition-all duration-500 ${
+                      activeSdrStep === index
+                        ? "mt-3 max-h-32 opacity-100"
+                        : "max-h-0 opacity-0"
+                    }`}
+                  >
+                    {step.detail}
+                  </span>
+                </button>
               ))}
             </div>
           </div>
         </section>
 
         <section className="border-t border-white/10 px-6 py-16 md:px-10 lg:px-16">
-          <div className="grid gap-5 lg:grid-cols-2">
-            <article className="rounded-[1.5rem] border border-white/10 bg-white/[.055] p-6">
+          <div className="grid items-center gap-10 lg:grid-cols-[.95fr_1.05fr]">
+            <div>
               <p className="font-mono text-xs uppercase tracking-[0.18em] text-[#F5C76B]">
                 Empresas
               </p>
-              <h2 className="mt-3 font-display text-4xl font-semibold">
-                Beneficios para empresas que vivem de conversa critica.
+              <h2 className="mt-3 font-display text-4xl font-semibold md:text-5xl">
+                A empresa deixa de depender da memoria do vendedor.
               </h2>
-              <ul className="mt-8 grid gap-3">
-                {companyBenefits.map((benefit) => (
-                  <li
-                    className="rounded-xl border border-white/10 bg-[#0B0D12]/60 px-4 py-3 text-sm font-semibold text-[#FAF7EF]/85"
-                    key={benefit}
-                  >
-                    {benefit}
-                  </li>
-                ))}
-              </ul>
-            </article>
+              <p className="mt-5 text-lg leading-8 text-[#A8B0BF]">
+                Coevo captura o que hoje escapa: sinais de compra, perguntas
+                sem resposta, riscos, promessas feitas, pontos de autoridade e
+                proximos passos. O gestor para de operar no escuro.
+              </p>
 
-            <article className="rounded-[1.5rem] border border-[#10B981]/20 bg-[#10B981]/[.07] p-6">
+              <div className="mt-8 grid grid-cols-3 gap-3">
+                {["+ contexto", "+ padrao", "+ receita"].map((item) => (
+                  <div
+                    className="rounded-2xl border border-[#C8A45D]/25 bg-[#C8A45D]/10 p-4 text-center"
+                    key={item}
+                  >
+                    <p className="font-display text-2xl font-semibold text-[#F5C76B]">
+                      {item}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              {companyBenefits.map((benefit) => (
+                <article
+                  className="rounded-2xl border border-white/10 bg-white/[.055] p-5 transition duration-500 hover:-translate-y-1 hover:border-[#C8A45D]/60 hover:bg-white/[.08]"
+                  key={benefit.label}
+                >
+                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#F5C76B]">
+                    {benefit.label}
+                  </p>
+                  <p className="mt-4 text-sm leading-6 text-[#A8B0BF]">
+                    {benefit.text}
+                  </p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="relative border-t border-white/10 px-6 py-16 md:px-10 lg:px-16">
+          <div className="absolute inset-y-10 right-0 w-1/2 rounded-l-[4rem] bg-[#10B981]/[.06] blur-3xl" />
+          <div className="relative grid items-center gap-10 lg:grid-cols-[1.05fr_.95fr]">
+            <div className="order-2 grid gap-4 sm:grid-cols-2 lg:order-1">
+              {publicBenefits.map((benefit) => (
+                <article
+                  className="rounded-2xl border border-[#10B981]/20 bg-[#10B981]/[.07] p-5 transition duration-500 hover:-translate-y-1 hover:border-[#10B981]/60"
+                  key={benefit.label}
+                >
+                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#10B981]">
+                    {benefit.label}
+                  </p>
+                  <p className="mt-4 text-sm leading-6 text-[#A8B0BF]">
+                    {benefit.text}
+                  </p>
+                </article>
+              ))}
+            </div>
+
+            <div className="order-1 lg:order-2">
               <p className="font-mono text-xs uppercase tracking-[0.18em] text-[#10B981]">
                 Setor publico
               </p>
-              <h2 className="mt-3 font-display text-4xl font-semibold">
-                Atendimento, transparencia e memoria institucional.
+              <h2 className="mt-3 font-display text-4xl font-semibold md:text-5xl">
+                Atendimento publico com memoria, auditoria e menos retrabalho.
               </h2>
-              <ul className="mt-8 grid gap-3">
-                {publicBenefits.map((benefit) => (
-                  <li
-                    className="rounded-xl border border-[#10B981]/20 bg-[#0B0D12]/50 px-4 py-3 text-sm font-semibold text-[#FAF7EF]/85"
-                    key={benefit}
-                  >
-                    {benefit}
-                  </li>
-                ))}
-              </ul>
-            </article>
+              <p className="mt-5 text-lg leading-8 text-[#A8B0BF]">
+                Para orgaos que precisam atender melhor, prestar contas e
+                preservar conhecimento institucional, Coevo transforma reunioes
+                remotas em registros vivos, consultaveis e mais seguros.
+              </p>
+
+              <div className="mt-8 rounded-[1.5rem] border border-[#10B981]/25 bg-[#0B0D12]/70 p-5">
+                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#10B981]">
+                  Impacto operacional
+                </p>
+                <div className="mt-5 grid gap-3">
+                  {["Menos deslocamento", "Menos repeticao", "Mais transparencia"].map(
+                    (item) => (
+                      <div
+                        className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[.04] px-4 py-3"
+                        key={item}
+                      >
+                        <span className="text-sm font-semibold">{item}</span>
+                        <span className="h-2 w-24 rounded-full bg-gradient-to-r from-[#10B981] to-[#60A5FA]" />
+                      </div>
+                    ),
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
