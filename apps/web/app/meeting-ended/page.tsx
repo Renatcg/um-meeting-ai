@@ -127,38 +127,38 @@ const companyBenefits = [
 
 const publicBenefits = [
   {
-    label: "Atendimento",
-    text: "Atendimentos remotos com registro confiavel, menos perda de informacao e mais continuidade.",
+    label: "Times internos",
+    text: "Reunioes entre secretarias, diretorias, coordenacoes e equipes tecnicas com memoria clara do que foi decidido.",
   },
   {
     label: "Auditoria",
-    text: "Reunioes sensiveis com trilha, horario, participantes e resumo institucional.",
+    text: "Reunioes sensiveis com trilha, horario, participantes, papeis e resumo institucional para prestacao de contas.",
   },
   {
-    label: "Memoria",
-    text: "Memoria institucional preservada mesmo quando equipes, gestores e contratos mudam.",
+    label: "Rede escolar",
+    text: "Encontros entre gestores escolares, equipes pedagogicas, secretarias e regionais sem perder contexto entre uma pauta e outra.",
   },
   {
-    label: "Acesso",
-    text: "Mais acessibilidade para cidadaos e servidores, com assistencia e contexto em tempo real.",
+    label: "Gestao",
+    text: "Planos, metas, problemas e encaminhamentos ficam registrados para que a execucao nao dependa de anotacoes soltas.",
   },
   {
     label: "Eficiencia",
-    text: "Reducao de deslocamentos, retrabalho, filas internas e repeticao de orientacoes.",
+    text: "Reducao de deslocamentos internos, retrabalho, reunioes repetidas e desalinhamento entre areas.",
   },
   {
     label: "Padrao",
-    text: "Respostas padronizadas com base oficial, reduzindo improviso e desalinhamento.",
+    text: "Orientacoes internas padronizadas com base oficial, reduzindo improviso em reunioes de gestao.",
   },
 ];
 
 const securityLayers = [
-  "Controle de acesso por host, comercial, cliente e observador",
-  "Separacao entre chat aberto e painel comercial privado",
-  "Base de conhecimento segmentada por empresa e por reuniao",
-  "Auditoria de participantes, horarios e encerramento",
-  "Politicas para impedir vazamento de recomendacoes ao cliente",
-  "Arquitetura pronta para SSO, logs e governanca corporativa",
+  "Dados, transcricoes, reunioes e arquivos criptografados em repouso e em transito",
+  "Conteudo corporativo isolado, sem compartilhamento aberto com IAs externas",
+  "Armazenamento protegido para impedir acesso indevido a dados sensiveis",
+  "Controle interno de acesso por papel, permissao e nivel de responsabilidade",
+  "Auditoria de quem acessou reunioes, transcricoes, arquivos e historicos",
+  "Backups automaticos para evitar perda de dados e preservar continuidade",
 ];
 
 const plans = [
@@ -780,12 +780,14 @@ export default function MeetingEndedPage() {
                 Setor publico
               </p>
               <h2 className="mt-3 font-display text-4xl font-semibold md:text-5xl">
-                Atendimento publico com memoria, auditoria e menos retrabalho.
+                Reunioes internas do setor publico com memoria, auditoria e
+                execucao.
               </h2>
               <p className="mt-5 text-lg leading-8 text-[#A8B0BF]">
-                Para orgaos que precisam atender melhor, prestar contas e
-                preservar conhecimento institucional, Coevo transforma reunioes
-                remotas em registros vivos, consultaveis e mais seguros.
+                Para orgaos, secretarias, equipes internas e redes escolares
+                que precisam alinhar times, acompanhar decisoes e preservar
+                conhecimento institucional. Coevo nao e atendimento ao cidadao:
+                e inteligencia para reunioes de gestao, coordenacao e execucao.
               </p>
 
               <div className="mt-8 rounded-[1.5rem] border border-[#10B981]/25 bg-[#0B0D12]/70 p-5">
@@ -793,7 +795,7 @@ export default function MeetingEndedPage() {
                   Impacto operacional
                 </p>
                 <div className="mt-5 grid gap-3">
-                  {["Menos deslocamento", "Menos repeticao", "Mais transparencia"].map(
+                  {["Menos desalinhamento", "Mais continuidade", "Mais governanca"].map(
                     (item) => (
                       <div
                         className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[.04] px-4 py-3"
@@ -814,16 +816,23 @@ export default function MeetingEndedPage() {
           <div className="grid items-center gap-10 lg:grid-cols-[1fr_.9fr]">
             <div>
               <p className="font-mono text-xs uppercase tracking-[0.18em] text-[#F5C76B]">
-                Cyber seguranca
+                Seguranca dos dados
               </p>
               <h2 className="mt-3 font-display text-4xl font-semibold md:text-5xl">
-                IA em reuniao corporativa sem seguranca e so vazamento com
-                microfone.
+                Reuniao corporativa tem dado sensivel. Aqui ele nao vira
+                territorio aberto.
               </h2>
               <p className="mt-5 text-lg leading-8 text-[#A8B0BF]">
-                Coevo foi pensado para separar o que cada pessoa pode ver,
-                registrar auditoria e impedir que recomendacoes internas
-                aparecam para quem nao deveria recebe-las.
+                Transcricoes, reunioes armazenadas, arquivos, historicos e
+                informacoes sensiveis precisam ser protegidos por desenho. A
+                proposta do Coevo e manter dados criptografados, armazenados com
+                seguranca, isolados por cliente e acessiveis apenas por quem
+                realmente tem permissao interna.
+              </p>
+              <p className="mt-4 text-lg leading-8 text-[#A8B0BF]">
+                E mais: backups automaticos preservam continuidade e reduzem a
+                chance de perda de dados. O cliente nao pode correr o risco de
+                perder a memoria das suas reunioes.
               </p>
             </div>
 
