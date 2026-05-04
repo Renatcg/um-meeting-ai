@@ -946,7 +946,7 @@ export default function MeetingEndedPage() {
             A proxima reuniao pode ser comum. Ou pode virar inteligencia.
           </p>
           <h2 className="mx-auto mt-4 max-w-4xl font-display text-4xl font-semibold md:text-6xl">
-            Pare de pagar por videochamada muda. Coloque IA na mesa.
+            Pare de pagar por videochamada. Coloque IA na mesa.
           </h2>
           <Link
             className="mt-8 inline-flex rounded-xl bg-gradient-to-r from-[#C8A45D] to-[#F5C76B] px-7 py-4 text-sm font-extrabold text-[#0B0D12] shadow-[0_0_60px_rgba(200,164,93,.20)] transition hover:translate-y-[-1px]"
