@@ -930,7 +930,7 @@ export default function MeetingEndedPage() {
                 </p>
                 <ul className="mt-6 space-y-3">
                   {plan.items.map((item) => (
-                    <li className="flex gap-3 text-sm font-semibold" key={item}>
+                    <li className="flex gap-3 text-sm font-normal" key={item}>
                       <span className="mt-1 h-2 w-2 rounded-full bg-[#10B981]" />
                       <span>{item}</span>
                     </li>
