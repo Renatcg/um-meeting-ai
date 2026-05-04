@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import logging
 from uuid import uuid4
 
 from contextlib import asynccontextmanager
@@ -27,6 +28,7 @@ from app.database import (
     insert_meeting,
     list_sales_recommendations,
     list_transcript_segments,
+    mark_meeting_ended,
     register_meeting_participant,
     upsert_agent_profile,
 )
@@ -54,11 +56,15 @@ from app.store import meeting_store
 
 settings = get_settings()
 MEETING_JOIN_GRACE_PERIOD = timedelta(minutes=15)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    await init_database(settings)
+    try:
+        await init_database(settings)
+    except Exception:
+        logger.exception("database initialization failed")
     yield
 
 
@@ -198,6 +204,15 @@ async def create_meeting(payload: CreateMeetingRequest) -> Meeting:
 @app.get("/meetings/{meeting_id}", response_model=Meeting)
 async def get_meeting(meeting_id: str) -> Meeting:
     return await ensure_meeting(settings=settings, meeting_id=meeting_id)
+
+
+@app.post("/meetings/{meeting_id}/end", response_model=Meeting)
+async def end_meeting(
+    meeting_id: str,
+    claims: ParticipantClaims = Depends(get_participant_claims),
+) -> Meeting:
+    require_sales_panel_access(claims, meeting_id)
+    return await mark_meeting_ended(settings=settings, meeting_id=meeting_id)
 
 
 @app.post("/meetings/{meeting_id}/token", response_model=LiveKitTokenResponse)

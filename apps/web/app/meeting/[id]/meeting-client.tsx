@@ -1422,11 +1422,47 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
     router.push("/");
   }
 
+  function endMeetingIfGatekeeper(currentConnection = connection) {
+    if (
+      !currentConnection ||
+      (currentConnection.role !== "host" && currentConnection.role !== "commercial")
+    ) {
+      return;
+    }
+
+    void fetch(`${apiUrl}/meetings/${meetingId}/end`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${currentConnection.participant_access_token}`,
+      },
+      keepalive: true,
+    }).catch(() => {
+      // Leaving the room should not be blocked if the expiration ping fails.
+    });
+  }
+
   function leaveMeeting() {
+    endMeetingIfGatekeeper();
     setConnection(null);
     setStep("lobby");
     router.push("/");
   }
+
+  useEffect(() => {
+    if (step !== "room" || !connection) {
+      return;
+    }
+
+    function handlePageHide() {
+      endMeetingIfGatekeeper(connection);
+    }
+
+    window.addEventListener("pagehide", handlePageHide);
+
+    return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+    };
+  }, [connection, meetingId, step]);
 
   if (step === "room" && connection) {
     return (

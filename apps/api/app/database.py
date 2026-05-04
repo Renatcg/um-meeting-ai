@@ -243,6 +243,28 @@ async def mark_meeting_copilot_dispatched(
         await conn.execute(query, (meeting_id,))
 
 
+async def mark_meeting_ended(*, settings: Settings, meeting_id: str) -> Meeting:
+    query = """
+    UPDATE meetings
+    SET ended_at = COALESCE(ended_at, now())
+    WHERE id = %s
+    RETURNING id, title, created_at, started_at, ended_at, recording_url, copilot_dispatched;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (meeting_id,))
+            row = await cur.fetchone()
+
+    if row is None:
+        return await ensure_meeting(settings=settings, meeting_id=meeting_id)
+
+    return Meeting.model_validate(row)
+
+
 async def register_meeting_participant(
     *,
     settings: Settings,
