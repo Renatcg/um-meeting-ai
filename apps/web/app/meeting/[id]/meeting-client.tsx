@@ -24,6 +24,7 @@ import { useRouter } from "next/navigation";
 type Step = "lobby" | "room";
 type ParticipantRole = "host" | "commercial" | "client" | "observer";
 type SidePanelTab = "chat" | "sales";
+type VideoEffectMode = "none" | "blur" | "coevo" | "image";
 
 type Participant = {
   name: string;
@@ -59,6 +60,7 @@ type MeetingSummary = {
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const CHAT_TOPIC = "um-meeting-chat";
+const COEVO_BACKGROUND_URL = "/backgrounds/coevo-meeting.svg";
 const agentNameMatchers = ["coevo", "jarvis", "um copilot", "copilot"];
 const commercialUserEmails = new Set(["renato@coevo.ai", "marina@coevo.ai"]);
 
@@ -90,6 +92,36 @@ type MeetingTileItem =
       key: string;
       trackRef?: never;
     };
+
+type LocalParticipantWithTracks = {
+  getTrackPublication?: (source: Track.Source) => {
+    track?: LocalVideoTrackWithProcessor;
+  };
+  setCameraEnabled: (enabled: boolean) => Promise<void> | void;
+  videoTrackPublications?: Map<
+    string,
+    {
+      source?: Track.Source;
+      track?: LocalVideoTrackWithProcessor;
+    }
+  >;
+};
+
+type LocalVideoTrackWithProcessor = {
+  setProcessor?: (processor: unknown) => Promise<void> | void;
+  stopProcessor?: () => Promise<void> | void;
+};
+
+type TrackProcessorsModule = {
+  BackgroundBlur?: (blurRadius?: number) => unknown;
+  BackgroundProcessor?: (options: {
+    blurRadius?: number;
+    imagePath?: string;
+    mode: "background-blur" | "disabled" | "virtual-background";
+  }) => unknown;
+  VirtualBackground?: (imagePath: string) => unknown;
+  supportsBackgroundProcessors?: () => boolean | Promise<boolean>;
+};
 
 function inferParticipantRole(email: string, isHostCreator: boolean): ParticipantRole {
   if (isHostCreator) {
@@ -125,6 +157,117 @@ function formatElapsedTime(totalSeconds: number) {
   }
 
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function videoEffectLabel(effect: VideoEffectMode) {
+  if (effect === "blur") {
+    return "Blur";
+  }
+
+  if (effect === "coevo") {
+    return "Fundo Coevo";
+  }
+
+  if (effect === "image") {
+    return "Imagem";
+  }
+
+  return "Sem efeito";
+}
+
+function getLocalCameraTrack(localParticipant: unknown) {
+  const participant = localParticipant as LocalParticipantWithTracks;
+  const publication = participant.getTrackPublication?.(Track.Source.Camera);
+  if (publication?.track) {
+    return publication.track;
+  }
+
+  const publications = Array.from(participant.videoTrackPublications?.values() ?? []);
+  return publications.find((item) => item.source === Track.Source.Camera)?.track;
+}
+
+async function createVideoProcessor(
+  effect: VideoEffectMode,
+  customBackgroundUrl: string | null,
+) {
+  const processors = (await import("@livekit/track-processors")) as TrackProcessorsModule;
+  const isSupported = await processors.supportsBackgroundProcessors?.();
+  if (isSupported === false) {
+    throw new Error("Este dispositivo nao suporta efeitos de video.");
+  }
+
+  if (effect === "blur") {
+    if (processors.BackgroundProcessor) {
+      return processors.BackgroundProcessor({
+        blurRadius: 12,
+        mode: "background-blur",
+      });
+    }
+
+    if (!processors.BackgroundBlur) {
+      throw new Error("Blur de fundo indisponivel nesta versao.");
+    }
+
+    return processors.BackgroundBlur(12);
+  }
+
+  if (effect === "coevo" || effect === "image") {
+    const imagePath = effect === "coevo" ? COEVO_BACKGROUND_URL : customBackgroundUrl;
+    if (!imagePath) {
+      throw new Error("Escolha uma imagem de fundo.");
+    }
+
+    if (processors.BackgroundProcessor) {
+      return processors.BackgroundProcessor({
+        imagePath,
+        mode: "virtual-background",
+      });
+    }
+
+    if (!processors.VirtualBackground) {
+      throw new Error("Fundo virtual indisponivel nesta versao.");
+    }
+
+    return processors.VirtualBackground(imagePath);
+  }
+
+  return null;
+}
+
+async function applyVideoEffectToLocalCamera({
+  customBackgroundUrl,
+  effect,
+  localParticipant,
+}: {
+  customBackgroundUrl: string | null;
+  effect: VideoEffectMode;
+  localParticipant: unknown;
+}) {
+  const participant = localParticipant as LocalParticipantWithTracks;
+  let track = getLocalCameraTrack(participant);
+
+  if (!track) {
+    await participant.setCameraEnabled(true);
+    await new Promise((resolve) => window.setTimeout(resolve, 450));
+    track = getLocalCameraTrack(participant);
+  }
+
+  if (!track) {
+    throw new Error("Nao encontrei a camera local para aplicar o efeito.");
+  }
+
+  await track.stopProcessor?.();
+
+  if (effect === "none") {
+    return;
+  }
+
+  const processor = await createVideoProcessor(effect, customBackgroundUrl);
+  if (!processor || !track.setProcessor) {
+    throw new Error("Nao foi possivel aplicar este efeito.");
+  }
+
+  await track.setProcessor(processor);
 }
 
 function isAgentParticipant(name?: string, identity?: string) {
@@ -267,7 +410,70 @@ function renderMeetingTile(tile: MeetingTileItem) {
   );
 }
 
-function MeetingGrid({ meetingId }: { meetingId: string }) {
+function VideoEffectPicker({
+  customBackgroundName,
+  onCustomImageChange,
+  setVideoEffect,
+  videoEffect,
+}: {
+  customBackgroundName: string | null;
+  onCustomImageChange: (file: File | null) => void;
+  setVideoEffect: (effect: VideoEffectMode) => void;
+  videoEffect: VideoEffectMode;
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {(["none", "blur", "coevo"] as VideoEffectMode[]).map((effect) => (
+        <button
+          className={`um-effect-option ${
+            videoEffect === effect ? "is-selected" : ""
+          }`}
+          key={effect}
+          type="button"
+          onClick={() => setVideoEffect(effect)}
+        >
+          <span className={`um-effect-preview is-${effect}`} />
+          <span>{videoEffectLabel(effect)}</span>
+        </button>
+      ))}
+
+      <label
+        className={`um-effect-option cursor-pointer ${
+          videoEffect === "image" ? "is-selected" : ""
+        }`}
+      >
+        <span className="um-effect-preview is-image" />
+        <span className="truncate">
+          {customBackgroundName ? customBackgroundName : "Imagem personalizada"}
+        </span>
+        <input
+          className="sr-only"
+          type="file"
+          accept="image/*"
+          onChange={(event) =>
+            onCustomImageChange(event.target.files?.item(0) ?? null)
+          }
+        />
+      </label>
+    </div>
+  );
+}
+
+function MeetingGrid({
+  customBackgroundName,
+  customBackgroundUrl,
+  meetingId,
+  onCustomBackgroundChange,
+  setVideoEffect,
+  videoEffect,
+}: {
+  customBackgroundName: string | null;
+  customBackgroundUrl: string | null;
+  meetingId: string;
+  onCustomBackgroundChange: (file: File | null) => void;
+  setVideoEffect: (effect: VideoEffectMode) => void;
+  videoEffect: VideoEffectMode;
+}) {
   const [clock, setClock] = useState("");
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [desktopPage, setDesktopPage] = useState(0);
@@ -424,7 +630,13 @@ function MeetingGrid({ meetingId }: { meetingId: string }) {
           </p>
         </div>
 
-        <MeetingControls />
+        <MeetingControls
+          customBackgroundName={customBackgroundName}
+          customBackgroundUrl={customBackgroundUrl}
+          onCustomBackgroundChange={onCustomBackgroundChange}
+          setVideoEffect={setVideoEffect}
+          videoEffect={videoEffect}
+        />
 
         <div className="hidden justify-end gap-3 md:flex">
           <span className="rounded-full border border-[#E7E7E2] bg-[#FCFCFB] px-3 py-2 text-xs text-[#73736B]">
@@ -438,7 +650,19 @@ function MeetingGrid({ meetingId }: { meetingId: string }) {
   );
 }
 
-function MeetingControls() {
+function MeetingControls({
+  customBackgroundName,
+  customBackgroundUrl,
+  onCustomBackgroundChange,
+  setVideoEffect,
+  videoEffect,
+}: {
+  customBackgroundName: string | null;
+  customBackgroundUrl: string | null;
+  onCustomBackgroundChange: (file: File | null) => void;
+  setVideoEffect: (effect: VideoEffectMode) => void;
+  videoEffect: VideoEffectMode;
+}) {
   const room = useRoomContext();
   const {
     isMicrophoneEnabled,
@@ -446,47 +670,125 @@ function MeetingControls() {
     isScreenShareEnabled,
     localParticipant,
   } = useLocalParticipant();
+  const [isEffectsOpen, setIsEffectsOpen] = useState(false);
+  const [effectStatus, setEffectStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function applySelectedEffect() {
+      if (!isCameraEnabled && videoEffect === "none") {
+        return;
+      }
+
+      setEffectStatus(null);
+
+      try {
+        await applyVideoEffectToLocalCamera({
+          customBackgroundUrl,
+          effect: videoEffect,
+          localParticipant,
+        });
+      } catch (err) {
+        if (!cancelled) {
+          setEffectStatus(
+            err instanceof Error ? err.message : "Nao foi possivel aplicar o efeito.",
+          );
+        }
+      }
+    }
+
+    applySelectedEffect();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [customBackgroundUrl, isCameraEnabled, localParticipant, videoEffect]);
 
   return (
-    <div className="um-meeting-controls min-w-0" aria-label="Controles da reuniao">
-      <button
-        className={`um-control-button ${isMicrophoneEnabled ? "" : "is-off"}`}
-        type="button"
-        aria-label={isMicrophoneEnabled ? "Desligar microfone" : "Ligar microfone"}
-        title={isMicrophoneEnabled ? "Desligar microfone" : "Ligar microfone"}
-        onClick={() => localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}
-      >
-        <span aria-hidden="true">Mic</span>
-      </button>
-      <button
-        className={`um-control-button ${isCameraEnabled ? "" : "is-off"}`}
-        type="button"
-        aria-label={isCameraEnabled ? "Desligar camera" : "Ligar camera"}
-        title={isCameraEnabled ? "Desligar camera" : "Ligar camera"}
-        onClick={() => localParticipant.setCameraEnabled(!isCameraEnabled)}
-      >
-        <span aria-hidden="true">Cam</span>
-      </button>
-      <button
-        className={`um-control-button ${isScreenShareEnabled ? "is-on" : ""}`}
-        type="button"
-        aria-label={
-          isScreenShareEnabled ? "Parar compartilhamento" : "Compartilhar tela"
-        }
-        title={isScreenShareEnabled ? "Parar compartilhamento" : "Compartilhar tela"}
-        onClick={() => localParticipant.setScreenShareEnabled(!isScreenShareEnabled)}
-      >
-        <span aria-hidden="true">Tela</span>
-      </button>
-      <button
-        className="um-control-button is-leave"
-        type="button"
-        aria-label="Sair da reuniao"
-        title="Sair da reuniao"
-        onClick={() => room.disconnect()}
-      >
-        Sair
-      </button>
+    <div className="um-controls-shell">
+      {isEffectsOpen ? (
+        <div className="um-effects-panel">
+          <div className="mb-3 flex items-start justify-between gap-4">
+            <div>
+              <p className="font-mono text-xs uppercase text-[#F97316]">
+                Efeitos
+              </p>
+              <p className="mt-1 text-sm font-semibold text-[#11110F]">
+                {videoEffectLabel(videoEffect)}
+              </p>
+            </div>
+            <button
+              className="rounded-lg border border-[#E7E7E2] bg-white px-3 py-2 text-xs font-bold text-[#11110F] transition hover:border-[#F97316] hover:bg-[#FFF3EA]"
+              type="button"
+              onClick={() => setIsEffectsOpen(false)}
+            >
+              Fechar
+            </button>
+          </div>
+          <VideoEffectPicker
+            customBackgroundName={customBackgroundName}
+            onCustomImageChange={onCustomBackgroundChange}
+            setVideoEffect={setVideoEffect}
+            videoEffect={videoEffect}
+          />
+          {effectStatus ? (
+            <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs leading-5 text-red-700">
+              {effectStatus}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="um-meeting-controls min-w-0" aria-label="Controles da reuniao">
+        <button
+          className={`um-control-button ${isMicrophoneEnabled ? "" : "is-off"}`}
+          type="button"
+          aria-label={isMicrophoneEnabled ? "Desligar microfone" : "Ligar microfone"}
+          title={isMicrophoneEnabled ? "Desligar microfone" : "Ligar microfone"}
+          onClick={() => localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}
+        >
+          <span aria-hidden="true">Mic</span>
+        </button>
+        <button
+          className={`um-control-button ${isCameraEnabled ? "" : "is-off"}`}
+          type="button"
+          aria-label={isCameraEnabled ? "Desligar camera" : "Ligar camera"}
+          title={isCameraEnabled ? "Desligar camera" : "Ligar camera"}
+          onClick={() => localParticipant.setCameraEnabled(!isCameraEnabled)}
+        >
+          <span aria-hidden="true">Cam</span>
+        </button>
+        <button
+          className={`um-control-button ${isScreenShareEnabled ? "is-on" : ""}`}
+          type="button"
+          aria-label={
+            isScreenShareEnabled ? "Parar compartilhamento" : "Compartilhar tela"
+          }
+          title={isScreenShareEnabled ? "Parar compartilhamento" : "Compartilhar tela"}
+          onClick={() => localParticipant.setScreenShareEnabled(!isScreenShareEnabled)}
+        >
+          <span aria-hidden="true">Tela</span>
+        </button>
+        <button
+          className={`um-control-button ${videoEffect !== "none" ? "is-on" : ""}`}
+          type="button"
+          aria-label="Abrir efeitos de video"
+          title="Efeitos de video"
+          onClick={() => setIsEffectsOpen((isOpen) => !isOpen)}
+        >
+          <span aria-hidden="true">Fx</span>
+        </button>
+        <button
+          className="um-control-button is-leave"
+          type="button"
+          aria-label="Sair da reuniao"
+          title="Sair da reuniao"
+          onClick={() => room.disconnect()}
+        >
+          Sair
+        </button>
+      </div>
     </div>
   );
 }
@@ -809,6 +1111,13 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
   const [inviteLink, setInviteLink] = useState("");
   const [copiedInviteLink, setCopiedInviteLink] = useState(false);
   const [cameraError, setCameraError] = useState(false);
+  const [videoEffect, setVideoEffect] = useState<VideoEffectMode>("none");
+  const [customBackgroundUrl, setCustomBackgroundUrl] = useState<string | null>(
+    null,
+  );
+  const [customBackgroundName, setCustomBackgroundName] = useState<string | null>(
+    null,
+  );
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
   const previewStreamRef = useRef<MediaStream | null>(null);
   const knowledgeDocumentsRef = useRef<HTMLInputElement | null>(null);
@@ -826,6 +1135,17 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
 
   const canViewSalesPanel =
     connection?.role === "host" || connection?.role === "commercial";
+
+  function handleCustomBackgroundChange(file: File | null) {
+    if (!file) {
+      return;
+    }
+
+    const nextUrl = URL.createObjectURL(file);
+    setCustomBackgroundUrl(nextUrl);
+    setCustomBackgroundName(file.name);
+    setVideoEffect("image");
+  }
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -952,6 +1272,14 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
       window.clearInterval(interval);
     };
   }, [canViewSalesPanel, connection, meetingId, step]);
+
+  useEffect(() => {
+    return () => {
+      if (customBackgroundUrl) {
+        URL.revokeObjectURL(customBackgroundUrl);
+      }
+    };
+  }, [customBackgroundUrl]);
 
   async function joinMeeting(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1148,7 +1476,14 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
                 aria-hidden="true"
               />
             </button>
-            <MeetingGrid meetingId={meetingId} />
+            <MeetingGrid
+              customBackgroundName={customBackgroundName}
+              customBackgroundUrl={customBackgroundUrl}
+              meetingId={meetingId}
+              onCustomBackgroundChange={handleCustomBackgroundChange}
+              setVideoEffect={setVideoEffect}
+              videoEffect={videoEffect}
+            />
           </section>
 
           <MeetingSidePanel
@@ -1172,7 +1507,9 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
         autoPlay
         muted
         playsInline
-        className="absolute inset-0 h-full w-full scale-x-[-1] object-cover opacity-20 grayscale"
+        className={`absolute inset-0 h-full w-full scale-x-[-1] object-cover opacity-20 grayscale ${
+          videoEffect === "blur" ? "blur-sm" : ""
+        }`}
       />
       <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(17,17,15,0.055)_1px,transparent_1px),linear-gradient(to_bottom,rgba(17,17,15,0.055)_1px,transparent_1px)] bg-[length:42px_42px]" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_10%,rgba(249,115,22,0.12),transparent_35%),linear-gradient(90deg,rgba(255,255,255,0.96),rgba(255,255,255,0.84))]" />
@@ -1247,6 +1584,28 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
             />
           </label>
         </div>
+
+        <section className="mt-4 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-mono text-xs uppercase text-[#F97316]">
+                Efeitos de video
+              </p>
+              <p className="mt-1 text-sm font-semibold text-[#11110F]">
+                {videoEffectLabel(videoEffect)}
+              </p>
+            </div>
+            <span className="rounded-full border border-[#E7E7E2] bg-white px-3 py-1 font-mono text-xs uppercase text-[#73736B]">
+              Camera local
+            </span>
+          </div>
+          <VideoEffectPicker
+            customBackgroundName={customBackgroundName}
+            onCustomImageChange={handleCustomBackgroundChange}
+            setVideoEffect={setVideoEffect}
+            videoEffect={videoEffect}
+          />
+        </section>
 
         {isHostLobby ? (
           <div className="mt-4 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">

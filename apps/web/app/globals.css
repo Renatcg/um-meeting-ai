@@ -85,6 +85,7 @@ select {
 .um-meeting-footer {
   position: relative;
   z-index: 8;
+  overflow: visible;
 }
 
 .lk-grid-layout {
@@ -496,6 +497,99 @@ select {
   backdrop-filter: blur(18px);
 }
 
+.um-controls-shell {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  justify-content: center;
+}
+
+.um-effects-panel {
+  position: absolute;
+  bottom: calc(100% + 0.875rem);
+  left: 50%;
+  z-index: 30;
+  width: min(92vw, 28rem);
+  transform: translateX(-50%);
+  border: 1px solid #e7e7e2;
+  border-radius: 0.875rem;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 1rem;
+  box-shadow: 0 24px 90px rgba(17, 17, 15, 0.18);
+  backdrop-filter: blur(18px);
+}
+
+.um-effect-option {
+  display: grid;
+  min-height: 4.75rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid #e7e7e2;
+  border-radius: 0.75rem;
+  background: #ffffff;
+  padding: 0.75rem;
+  color: #11110f;
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-align: left;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.um-effect-option:hover {
+  transform: translateY(-1px);
+  border-color: #fdba74;
+  background: #fffaf5;
+}
+
+.um-effect-option.is-selected {
+  border-color: #f97316;
+  background: #fff3ea;
+  color: #f97316;
+}
+
+.um-effect-preview {
+  position: relative;
+  display: block;
+  width: 3rem;
+  height: 3rem;
+  overflow: hidden;
+  border-radius: 0.625rem;
+  background: #f1f1ee;
+}
+
+.um-effect-preview::before {
+  position: absolute;
+  inset: 0.5rem 0.75rem;
+  border-radius: 999px 999px 0.5rem 0.5rem;
+  background: #11110f;
+  content: "";
+  opacity: 0.72;
+}
+
+.um-effect-preview.is-blur {
+  background:
+    linear-gradient(45deg, rgba(249, 115, 22, 0.35), transparent),
+    repeating-linear-gradient(90deg, #e7e7e2 0 0.25rem, #ffffff 0.25rem 0.5rem);
+  filter: blur(0.35px);
+}
+
+.um-effect-preview.is-coevo {
+  background:
+    radial-gradient(circle at 80% 15%, rgba(249, 115, 22, 0.46), transparent 42%),
+    #fff3ea;
+}
+
+.um-effect-preview.is-image {
+  background:
+    linear-gradient(135deg, rgba(17, 17, 15, 0.08), transparent),
+    #ffffff;
+  border: 1px dashed #f97316;
+}
+
 .um-meeting-controls {
   display: flex;
   min-width: 0;
@@ -707,7 +801,7 @@ select {
     min-height: 5.75rem;
     max-height: 5.75rem;
     padding: 0.875rem 1rem;
-    overflow: hidden;
+    overflow: visible;
   }
 
   .um-desktop-grid {
@@ -802,19 +896,36 @@ select {
 
   .um-meeting-controls {
     justify-content: center;
-    gap: 0.625rem;
+    gap: 0.5rem;
   }
 
   .um-control-button {
-    width: 2.9rem;
-    height: 2.9rem;
-    min-width: 2.9rem;
-    min-height: 2.9rem;
+    width: 2.65rem;
+    height: 2.65rem;
+    min-width: 2.65rem;
+    min-height: 2.65rem;
     font-size: 0.68rem;
   }
 
   .um-control-button.is-leave {
-    width: 4rem;
-    min-width: 4rem;
+    width: 3.65rem;
+    min-width: 3.65rem;
+  }
+
+  .um-effects-panel {
+    bottom: calc(100% + 0.65rem);
+    width: min(92vw, 23rem);
+    max-height: calc(100dvh - 8rem);
+    overflow-y: auto;
+  }
+
+  .um-effect-option {
+    min-height: 4.25rem;
+    padding: 0.625rem;
+  }
+
+  .um-effect-preview {
+    width: 2.65rem;
+    height: 2.65rem;
   }
 }

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <rect width="1920" height="1080" fill="#fffaf5"/>
+  <path d="M0 0h1920v1080H0z" fill="url(#grid)"/>
+  <circle cx="1540" cy="120" r="420" fill="#f97316" opacity=".14"/>
+  <circle cx="330" cy="920" r="360" fill="#11110f" opacity=".06"/>
+  <rect x="140" y="120" width="1640" height="840" rx="40" fill="#ffffff" opacity=".72"/>
+  <text x="180" y="220" font-family="Arial, Helvetica, sans-serif" font-size="52" font-weight="700" fill="#11110f">Grupo Coevo</text>
+  <text x="180" y="286" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="500" fill="#f97316">Videochamadas Assistidas</text>
+  <defs>
+    <pattern id="grid" width="64" height="64" patternUnits="userSpaceOnUse">
+      <path d="M64 0H0v64" fill="none" stroke="#11110f" stroke-opacity=".055" stroke-width="2"/>
+    </pattern>
+  </defs>
+</svg>
