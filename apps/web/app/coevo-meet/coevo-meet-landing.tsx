@@ -1107,11 +1107,11 @@ export default function CoevoMeetLanding({
             </p>
           </div>
 
-          <div className="overflow-hidden pb-3">
-            <div className="group/pricing grid gap-4 lg:flex lg:items-stretch">
+          <div className="overflow-visible pb-6">
+            <div className="grid gap-4 lg:grid-cols-4 lg:items-stretch">
               {plans.map((plan) => (
                 <article
-                  className={`flex min-h-[460px] flex-col rounded-2xl border p-5 transition-[flex,transform,opacity,box-shadow,border-color] duration-500 ease-out lg:flex-1 lg:group-hover/pricing:opacity-75 lg:hover:flex-[1.42] lg:hover:-translate-y-2 lg:hover:opacity-100 ${
+                  className={`relative flex min-h-[460px] flex-col rounded-2xl border p-5 transition-[transform,box-shadow,border-color] duration-500 ease-out lg:hover:z-20 lg:hover:scale-110 ${
                     plan.featured
                       ? "border-[#C8A45D] bg-[#FAF7EF] text-[#0B0D12] shadow-[0_0_60px_rgba(200,164,93,.20)]"
                       : "border-white/10 bg-white/[.06] text-[#FAF7EF]"
