@@ -1108,6 +1108,98 @@ export default function CoevoMeetLanding({
           </p>
         </section>
 
+        <section className="border-t border-white/10 px-6 py-16 md:px-10 lg:px-16">
+          <div className="mb-8 flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
+            <div className="max-w-3xl">
+              <p className="font-mono text-xs uppercase tracking-[0.18em] text-[#F5C76B]">
+                Planos em uma linha
+              </p>
+              <h2 className="mt-3 font-display text-4xl font-semibold">
+                Compare rapido e escolha onde sua operacao entra.
+              </h2>
+            </div>
+            <p className="max-w-md text-sm leading-7 text-[#A8B0BF]">
+              A degustacao prova o valor. Os planos pagos transformam reuniao em
+              rotina operacional, com historico, gestao, integracoes e suporte.
+            </p>
+          </div>
+
+          <div className="-mx-6 overflow-x-auto px-6 pb-3 md:-mx-10 md:px-10 lg:-mx-16 lg:px-16">
+            <div className="flex min-w-max gap-4">
+              {plans.map((plan) => (
+                <article
+                  className={`flex min-h-[460px] w-[270px] flex-col rounded-2xl border p-5 transition duration-500 hover:-translate-y-1 ${
+                    plan.featured
+                      ? "border-[#C8A45D] bg-[#FAF7EF] text-[#0B0D12] shadow-[0_0_60px_rgba(200,164,93,.20)]"
+                      : "border-white/10 bg-white/[.06] text-[#FAF7EF]"
+                  }`}
+                  key={`inline-${plan.name}`}
+                >
+                  <div className="flex min-h-12 items-start justify-between gap-3">
+                    <p className="font-mono text-xs uppercase tracking-[0.18em] text-[#C8A45D]">
+                      {plan.name}
+                    </p>
+                    {plan.badge ? (
+                      <span className="rounded-full bg-[#C8A45D] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[#0B0D12]">
+                        {plan.badge}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-4">
+                    <span className="font-display text-3xl font-semibold">
+                      {plan.price}
+                    </span>
+                    <span
+                      className={`ml-2 text-sm ${
+                        plan.featured ? "text-[#374151]" : "text-[#A8B0BF]"
+                      }`}
+                    >
+                      {plan.unit}
+                    </span>
+                  </div>
+
+                  <p
+                    className={`mt-2 text-xs font-semibold uppercase tracking-[0.14em] ${
+                      plan.featured ? "text-[#C8A45D]" : "text-[#F5C76B]"
+                    }`}
+                  >
+                    {plan.users ?? "usuarios liberados para testar"}
+                  </p>
+
+                  <p
+                    className={`mt-4 text-sm leading-6 ${
+                      plan.featured ? "text-[#374151]" : "text-[#A8B0BF]"
+                    }`}
+                  >
+                    {plan.description}
+                  </p>
+
+                  <ul className="mt-6 space-y-3">
+                    {plan.items.slice(0, 5).map((item) => (
+                      <li className="flex gap-3 text-sm font-normal" key={item}>
+                        <span className="mt-1 h-2 w-2 rounded-full bg-[#10B981]" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <Link
+                    className={`mt-auto inline-flex w-full justify-center rounded-xl px-4 py-3 text-center text-sm font-bold transition ${
+                      plan.featured
+                        ? "bg-[#0B0D12] text-[#FAF7EF] hover:bg-[#1F2937]"
+                        : "border border-white/15 bg-white/5 text-[#FAF7EF] hover:border-[#C8A45D] hover:bg-[#C8A45D] hover:text-[#0B0D12]"
+                    }`}
+                    href="/"
+                  >
+                    {plan.cta}
+                  </Link>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
         <section className="border-t border-white/10 px-6 py-16 text-center md:px-10 lg:px-16">
           <p className="font-mono text-xs uppercase tracking-[0.18em] text-[#F5C76B]">
             A proxima reuniao pode ser comum. Ou pode virar inteligencia.
