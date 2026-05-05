@@ -952,7 +952,7 @@ export default function CoevoMeetLanding({
           <div className="mb-8 flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
             <div className="max-w-3xl">
               <p className="font-mono text-xs uppercase tracking-[0.18em] text-[#F5C76B]">
-                Planos em uma linha
+                Preços e Planos
               </p>
               <h2 className="mt-3 font-display text-4xl font-semibold">
                 Pague por reunioes que trabalham. Nao por chamadas que somem.
