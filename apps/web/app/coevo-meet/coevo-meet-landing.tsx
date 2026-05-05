@@ -161,72 +161,143 @@ const securityLayers = [
   "Backups automaticos para evitar perda de dados e preservar continuidade",
 ];
 
-const plans = [
+type PricingPlan = {
+  name: string;
+  price: string;
+  unit: string;
+  users?: string;
+  description: string;
+  details?: string[];
+  items: string[];
+  limits?: string[];
+  cta: string;
+  microcopy?: string;
+  featured?: boolean;
+  badge?: string;
+};
+
+const plans: PricingPlan[] = [
   {
-    name: "Team",
-    price: "R$ 39",
-    unit: "usuario/mes",
-    description: "Para times que querem parar de perder contexto em reunioes.",
-    items: [
-      "Videochamadas com IA participante",
-      "Transcricao processada em segundo plano",
-      "Chat da reuniao",
-      "Base institucional inicial",
-      "Historico de reunioes",
-      "Resumo automatico",
-      "Controle de host e participante",
-      "Lobby com aceite LGPD",
-      "Convite por link",
-      "Efeitos de camera",
-      "Tela de encerramento comercial",
-      "Suporte de implantacao leve",
+    name: "Teste Gratis",
+    price: "R$ 0",
+    unit: "degustacao",
+    description: "Experimente o Coevo Meet completo em uma reuniao real.",
+    details: [
+      "Todos os recursos liberados para demonstracao",
+      "Usuarios liberados para testar",
+      "1 reuniao por semana",
+      "Ate 30 minutos por reuniao",
+      "Historico disponivel por 48h",
     ],
+    items: [
+      "IA que participa on-line da reuniao",
+      "Responde por voz em tempo real",
+      "Painel privado",
+      "Cards de objecao, risco e oportunidade",
+      "Resumo automatico",
+      "Proximos passos",
+      "Transcricao",
+      "Follow-up sugerido",
+    ],
+    limits: [
+      "1 reuniao por semana",
+      "Ate 30 minutos",
+      "Historico por 48h",
+      "1 workspace gratuito por empresa",
+      "Sem integracoes permanentes",
+      "Sem suporte prioritario",
+      "Sem SLA",
+      "Sem uso recorrente em operacao comercial",
+    ],
+    cta: "Testar gratis",
+    microcopy:
+      "O plano gratuito e destinado a demonstracao do produto. Para uso recorrente, historico permanente, integracoes e gestao de equipe, escolha um plano pago.",
+  },
+  {
+    name: "Essencial",
+    price: "R$ 490",
+    unit: "/mes",
+    users: "ate 5 usuarios",
+    description:
+      "Para times pequenos que querem reunioes assistidas por IA, registro automatico, resumo, proximos passos e memoria basica das conversas.",
+    items: [
+      "IA que participa on-line da reuniao",
+      "Responde por voz em tempo real",
+      "Registro automatico da conversa",
+      "Resumo automatico",
+      "Proximos passos",
+      "Memoria basica das reunioes",
+      "Historico permanente",
+      "Base de conhecimento inicial",
+    ],
+    cta: "Comecar com Essencial",
   },
   {
     name: "Business",
-    price: "R$ 89",
-    unit: "usuario/mes",
-    description: "Para comerciais que precisam vender com mais precisao.",
+    price: "R$ 1.490",
+    unit: "/mes",
+    users: "ate 10 usuarios",
+    description:
+      "Para equipes comerciais e operacoes consultivas que precisam de IA ao vivo, voz, painel privado, cards de objecao e follow-up inteligente.",
     items: [
-      "Tudo do Team",
-      "Painel comercial privado",
-      "Recomendacoes ao vivo",
-      "Deteccao de objecao, risco e oportunidade",
-      "RAG por produto, proposta e playbook",
+      "Tudo do Essencial",
+      "IA ao vivo com voz",
+      "Painel privado",
+      "Cards de objecao, risco e oportunidade",
+      "Follow-up inteligente",
+      "Recomendacoes comerciais ao vivo",
       "Personalidade treinavel do agente",
       "Base por reuniao antes da chamada",
       "Handoff para SDR e closer",
       "Relatorios de reuniao",
       "Insights para lideranca",
-      "Biblioteca de argumentos",
-      "Templates de follow-up",
-      "Governanca por papeis",
-      "Prioridade de roadmap",
     ],
     featured: true,
+    badge: "Mais recomendado",
+    cta: "Implantar no comercial",
+  },
+  {
+    name: "Scale",
+    price: "R$ 3.490",
+    unit: "/mes",
+    users: "ate 25 usuarios",
+    description:
+      "Para operacoes que precisam padronizar reunioes criticas, treinar equipes e gerar inteligencia gerencial a partir das conversas.",
+    items: [
+      "Tudo do Business",
+      "Padronizacao de reunioes criticas",
+      "Treinamento de equipes",
+      "Inteligencia gerencial",
+      "Playbooks por area",
+      "Base de conhecimento ampliada",
+      "Relatorios por equipe",
+      "Governanca por papeis",
+      "Historico e memoria operacional",
+      "Suporte de implantacao",
+    ],
+    cta: "Escalar operacao",
   },
   {
     name: "Enterprise",
-    price: "Sob consulta",
-    unit: "contrato corporativo",
-    description: "Para empresas que querem padronizar conversas criticas.",
+    price: "A partir de R$ 8.900",
+    unit: "/mes",
+    users: "sob medida",
+    description:
+      "Para empresas, grupos, setor publico e operacoes que precisam de governanca, integracoes, compliance, ambientes dedicados e implantacao assistida.",
     items: [
-      "Tudo do Business",
+      "Tudo do Scale",
       "SSO e permissoes avancadas",
-      "Politicas corporativas de IA",
-      "Ambientes por unidade ou secretaria",
-      "Logs e auditoria expandida",
       "Integracoes com CRM e BI",
-      "Base de conhecimento governada",
-      "Retencao configuravel",
-      "Suporte a compliance interno",
-      "Playbooks por area",
+      "Compliance e governanca",
+      "Ambientes dedicados",
+      "Implantacao assistida",
+      "Logs e auditoria expandida",
       "Painel executivo",
       "SLA corporativo",
-      "Treinamento de administradores",
-      "Implantacao assistida",
-      "Roadmap dedicado",
+      "Suporte prioritario",
+      "Politicas corporativas de IA",
     ],
+    cta: "Falar com especialista",
   },
 ];
 
@@ -907,18 +978,25 @@ export default function CoevoMeetLanding({
           <div className="grid gap-5 lg:grid-cols-3">
             {plans.map((plan) => (
               <article
-                className={`rounded-2xl border p-6 transition duration-500 hover:-translate-y-1 ${
+                className={`flex rounded-2xl border p-6 transition duration-500 hover:-translate-y-1 ${
                   plan.featured
                     ? "border-[#C8A45D] bg-[#FAF7EF] text-[#0B0D12] shadow-[0_0_60px_rgba(200,164,93,.20)]"
                     : "border-white/10 bg-white/[.06] text-[#FAF7EF]"
-                }`}
+                } flex-col`}
                 key={plan.name}
               >
-                <p className="font-mono text-xs uppercase tracking-[0.18em] text-[#C8A45D]">
-                  {plan.name}
-                </p>
+                <div className="flex min-h-12 items-start justify-between gap-3">
+                  <p className="font-mono text-xs uppercase tracking-[0.18em] text-[#C8A45D]">
+                    {plan.name}
+                  </p>
+                  {plan.badge ? (
+                    <span className="rounded-full bg-[#C8A45D] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[#0B0D12]">
+                      {plan.badge}
+                    </span>
+                  ) : null}
+                </div>
                 <div className="mt-4">
-                  <span className="font-display text-4xl font-semibold">
+                  <span className="font-display text-3xl font-semibold xl:text-4xl">
                     {plan.price}
                   </span>
                   <span
@@ -929,6 +1007,15 @@ export default function CoevoMeetLanding({
                     {plan.unit}
                   </span>
                 </div>
+                {plan.users ? (
+                  <p
+                    className={`mt-2 text-xs font-semibold uppercase tracking-[0.14em] ${
+                      plan.featured ? "text-[#C8A45D]" : "text-[#F5C76B]"
+                    }`}
+                  >
+                    {plan.users}
+                  </p>
+                ) : null}
                 <p
                   className={`mt-4 text-sm leading-6 ${
                     plan.featured ? "text-[#374151]" : "text-[#A8B0BF]"
@@ -936,6 +1023,27 @@ export default function CoevoMeetLanding({
                 >
                   {plan.description}
                 </p>
+                {plan.details ? (
+                  <div
+                    className={`mt-5 rounded-xl border p-4 ${
+                      plan.featured
+                        ? "border-[#0B0D12]/10 bg-[#0B0D12]/[.04]"
+                        : "border-white/10 bg-[#0B0D12]/40"
+                    }`}
+                  >
+                    <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#C8A45D]">
+                      Detalhes principais
+                    </p>
+                    <ul className="mt-3 space-y-2">
+                      {plan.details.map((item) => (
+                        <li className="flex gap-2 text-xs leading-5" key={item}>
+                          <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-[#10B981]" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
                 <ul className="mt-6 space-y-3">
                   {plan.items.map((item) => (
                     <li className="flex gap-3 text-sm font-normal" key={item}>
@@ -944,9 +1052,60 @@ export default function CoevoMeetLanding({
                     </li>
                   ))}
                 </ul>
+                {plan.limits ? (
+                  <div className="mt-6">
+                    <p
+                      className={`font-mono text-[10px] uppercase tracking-[0.18em] ${
+                        plan.featured ? "text-[#C8A45D]" : "text-[#F5C76B]"
+                      }`}
+                    >
+                      Limites
+                    </p>
+                    <ul className="mt-3 space-y-2">
+                      {plan.limits.map((item) => (
+                        <li
+                          className={`flex gap-2 text-xs leading-5 ${
+                            plan.featured ? "text-[#374151]" : "text-[#A8B0BF]"
+                          }`}
+                          key={item}
+                        >
+                          <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-[#EF4444]" />
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {plan.microcopy ? (
+                  <p
+                    className={`mt-6 rounded-xl border p-3 text-xs leading-5 ${
+                      plan.featured
+                        ? "border-[#0B0D12]/10 text-[#374151]"
+                        : "border-white/10 text-[#A8B0BF]"
+                    }`}
+                  >
+                    {plan.microcopy}
+                  </p>
+                ) : null}
+                <Link
+                  className={`mt-6 inline-flex w-full justify-center rounded-xl px-4 py-3 text-center text-sm font-bold transition ${
+                    plan.featured
+                      ? "bg-[#0B0D12] text-[#FAF7EF] hover:bg-[#1F2937]"
+                      : "border border-white/15 bg-white/5 text-[#FAF7EF] hover:border-[#C8A45D] hover:bg-[#C8A45D] hover:text-[#0B0D12]"
+                  } ${plan.microcopy ? "" : "mt-auto"}`}
+                  href="/"
+                >
+                  {plan.cta}
+                </Link>
               </article>
             ))}
           </div>
+          <p className="mx-auto mt-8 max-w-4xl text-center text-sm leading-7 text-[#A8B0BF]">
+            O Coevo Meet pode ser testado gratuitamente com todos os recursos
+            liberados em uma reuniao de ate 30 minutos por semana. Quando suas
+            reunioes virarem operacao, escolha um plano com historico
+            permanente, gestao de equipe, integracoes e suporte.
+          </p>
         </section>
 
         <section className="border-t border-white/10 px-6 py-16 text-center md:px-10 lg:px-16">
