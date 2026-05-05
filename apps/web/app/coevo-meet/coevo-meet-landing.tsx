@@ -1111,7 +1111,7 @@ export default function CoevoMeetLanding({
             <div className="grid gap-4 lg:grid-cols-4 lg:items-stretch">
               {plans.map((plan) => (
                 <article
-                  className={`relative flex min-h-[460px] flex-col rounded-2xl border p-5 transition-[transform,box-shadow,border-color] duration-500 ease-out lg:hover:z-20 lg:hover:scale-110 ${
+                  className={`relative flex min-h-[760px] flex-col rounded-2xl border p-6 transition-[transform,box-shadow,border-color] duration-500 ease-out lg:hover:z-20 lg:hover:scale-105 ${
                     plan.featured
                       ? "border-[#C8A45D] bg-[#FAF7EF] text-[#0B0D12] shadow-[0_0_60px_rgba(200,164,93,.20)]"
                       : "border-white/10 bg-white/[.06] text-[#FAF7EF]"
@@ -1157,15 +1157,73 @@ export default function CoevoMeetLanding({
                   >
                     {plan.description}
                   </p>
+                  {plan.details ? (
+                    <div
+                      className={`mt-5 rounded-xl border p-4 ${
+                        plan.featured
+                          ? "border-[#0B0D12]/10 bg-[#0B0D12]/[.04]"
+                          : "border-white/10 bg-[#0B0D12]/40"
+                      }`}
+                    >
+                      <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#C8A45D]">
+                        Detalhes principais
+                      </p>
+                      <ul className="mt-3 space-y-2">
+                        {plan.details.map((item) => (
+                          <li className="flex gap-2 text-xs leading-5" key={item}>
+                            <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-[#10B981]" />
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
 
                   <ul className="mt-6 space-y-3">
-                    {plan.items.slice(0, 5).map((item) => (
+                    {plan.items.map((item) => (
                       <li className="flex gap-3 text-sm font-normal" key={item}>
                         <span className="mt-1 h-2 w-2 rounded-full bg-[#10B981]" />
                         <span>{item}</span>
                       </li>
                     ))}
                   </ul>
+                  {plan.limits ? (
+                    <div className="mt-6">
+                      <p
+                        className={`font-mono text-[10px] uppercase tracking-[0.18em] ${
+                          plan.featured ? "text-[#C8A45D]" : "text-[#F5C76B]"
+                        }`}
+                      >
+                        Limites
+                      </p>
+                      <ul className="mt-3 space-y-2">
+                        {plan.limits.map((item) => (
+                          <li
+                            className={`flex gap-2 text-xs leading-5 ${
+                              plan.featured
+                                ? "text-[#374151]"
+                                : "text-[#A8B0BF]"
+                            }`}
+                            key={item}
+                          >
+                            <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-[#EF4444]" />
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  {plan.microcopy ? (
+                    <p
+                      className={`mt-6 rounded-xl border p-3 text-xs leading-5 ${
+                        plan.featured
+                          ? "border-[#0B0D12]/10 text-[#374151]"
+                          : "border-white/10 text-[#A8B0BF]"
+                      }`}
+                    >
+                      {plan.microcopy}
+                    </p>
+                  ) : null}
 
                   <Link
                     className={`mt-auto inline-flex w-full justify-center rounded-xl px-4 py-3 text-center text-sm font-bold transition ${
