@@ -234,11 +234,11 @@ const plans: PricingPlan[] = [
   },
   {
     name: "Business",
-    price: "R$ 1.490",
+    price: "R$ 1.990",
     unit: "/mes",
-    users: "ate 10 usuarios",
+    users: "ate 15 usuarios",
     description:
-      "Para equipes comerciais e operacoes consultivas que precisam de IA ao vivo, voz, painel privado, cards de objecao e follow-up inteligente.",
+      "Para equipes comerciais e operacoes consultivas que precisam de IA ao vivo, voz, painel privado, cards de objecao, padronizacao e follow-up inteligente.",
     items: [
       "Tudo do Essencial",
       "IA ao vivo com voz",
@@ -251,41 +251,24 @@ const plans: PricingPlan[] = [
       "Handoff para SDR e closer",
       "Relatorios de reuniao",
       "Insights para lideranca",
+      "Padronizacao de reunioes criticas",
+      "Treinamento de equipes",
+      "Inteligencia gerencial",
+      "Playbooks por area",
     ],
     featured: true,
     badge: "Mais recomendado",
     cta: "Implantar no comercial",
   },
   {
-    name: "Scale",
-    price: "R$ 3.490",
-    unit: "/mes",
-    users: "ate 25 usuarios",
-    description:
-      "Para operacoes que precisam padronizar reunioes criticas, treinar equipes e gerar inteligencia gerencial a partir das conversas.",
-    items: [
-      "Tudo do Business",
-      "Padronizacao de reunioes criticas",
-      "Treinamento de equipes",
-      "Inteligencia gerencial",
-      "Playbooks por area",
-      "Base de conhecimento ampliada",
-      "Relatorios por equipe",
-      "Governanca por papeis",
-      "Historico e memoria operacional",
-      "Suporte de implantacao",
-    ],
-    cta: "Escalar operacao",
-  },
-  {
     name: "Enterprise",
-    price: "A partir de R$ 8.900",
-    unit: "/mes",
+    price: "Sob Medida",
+    unit: "",
     users: "sob medida",
     description:
       "Para empresas, grupos, setor publico e operacoes que precisam de governanca, integracoes, compliance, ambientes dedicados e implantacao assistida.",
     items: [
-      "Tudo do Scale",
+      "Tudo do Business",
       "SSO e permissoes avancadas",
       "Integracoes com CRM e BI",
       "Compliance e governanca",
@@ -1124,11 +1107,11 @@ export default function CoevoMeetLanding({
             </p>
           </div>
 
-          <div className="-mx-6 overflow-x-auto px-6 pb-3 md:-mx-10 md:px-10 lg:-mx-16 lg:px-16">
-            <div className="flex min-w-max gap-4">
+          <div className="overflow-hidden pb-3">
+            <div className="group/pricing grid gap-4 lg:flex lg:items-stretch">
               {plans.map((plan) => (
                 <article
-                  className={`flex min-h-[460px] w-[270px] flex-col rounded-2xl border p-5 transition duration-500 hover:-translate-y-1 ${
+                  className={`flex min-h-[460px] flex-col rounded-2xl border p-5 transition-[flex,transform,opacity,box-shadow,border-color] duration-500 ease-out lg:flex-1 lg:group-hover/pricing:opacity-75 lg:hover:flex-[1.42] lg:hover:-translate-y-2 lg:hover:opacity-100 ${
                     plan.featured
                       ? "border-[#C8A45D] bg-[#FAF7EF] text-[#0B0D12] shadow-[0_0_60px_rgba(200,164,93,.20)]"
                       : "border-white/10 bg-white/[.06] text-[#FAF7EF]"
