@@ -26,6 +26,7 @@ from app.database import (
     insert_sales_recommendations,
     insert_transcript_segment,
     insert_meeting,
+    insert_trial_request,
     list_sales_recommendations,
     list_transcript_segments,
     mark_meeting_ended,
@@ -44,6 +45,8 @@ from app.models import (
     SalesRecommendation,
     TranscriptSegment,
     TranscriptSegmentCreate,
+    TrialRequest,
+    TrialRequestCreate,
     VoiceDemoRequest,
 )
 from app.knowledge_service import (
@@ -82,6 +85,17 @@ app.add_middleware(
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/trial-requests", response_model=TrialRequest, status_code=201)
+async def create_trial_request(payload: TrialRequestCreate) -> TrialRequest:
+    if not payload.lgpd_accepted:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="LGPD acceptance is required.",
+        )
+
+    return await insert_trial_request(settings=settings, payload=payload)
 
 
 @app.post("/knowledge/documents", response_model=KnowledgeUploadResponse, status_code=201)

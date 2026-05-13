@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import type { FormEvent } from "react";
 import { useState } from "react";
+
+const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 const metrics = [
   "Menos follow-up perdido",
@@ -421,7 +424,68 @@ export default function CoevoMeetLanding({
   isMeetingEnded,
 }: CoevoMeetLandingProps) {
   const [activeSdrStep, setActiveSdrStep] = useState(0);
+  const [isTrialModalOpen, setIsTrialModalOpen] = useState(false);
+  const [trialForm, setTrialForm] = useState({
+    fullName: "",
+    phone: "",
+    corporateEmail: "",
+    companyName: "",
+    lgpdAccepted: false,
+  });
+  const [trialFormStatus, setTrialFormStatus] = useState<
+    "idle" | "submitting" | "success" | "error"
+  >("idle");
   const selectedSdrStep = sdrSteps[activeSdrStep];
+
+  function updateTrialForm(
+    field: keyof typeof trialForm,
+    value: string | boolean,
+  ) {
+    setTrialForm((current) => ({ ...current, [field]: value }));
+    setTrialFormStatus("idle");
+  }
+
+  async function submitTrialRequest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!trialForm.lgpdAccepted) {
+      setTrialFormStatus("error");
+      return;
+    }
+
+    setTrialFormStatus("submitting");
+
+    try {
+      const response = await fetch(`${apiUrl}/trial-requests`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          full_name: trialForm.fullName,
+          phone: trialForm.phone,
+          corporate_email: trialForm.corporateEmail,
+          company_name: trialForm.companyName,
+          lgpd_accepted: trialForm.lgpdAccepted,
+          source: "meeting-ended-landing",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Trial request failed.");
+      }
+
+      setTrialFormStatus("success");
+      setTrialForm({
+        fullName: "",
+        phone: "",
+        corporateEmail: "",
+        companyName: "",
+        lgpdAccepted: false,
+      });
+    } catch {
+      setTrialFormStatus("error");
+    }
+  }
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#0B0D12] text-[#FAF7EF]">
@@ -492,12 +556,22 @@ export default function CoevoMeetLanding({
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link
-                className="rounded-xl bg-gradient-to-r from-[#C8A45D] to-[#F5C76B] px-6 py-4 text-center text-sm font-extrabold text-[#0B0D12] shadow-[0_0_60px_rgba(200,164,93,.20)] transition hover:translate-y-[-1px]"
-                href="/"
-              >
-                Testar Coevo Meet agora
-              </Link>
+              {isMeetingEnded ? (
+                <button
+                  className="rounded-xl bg-gradient-to-r from-[#C8A45D] to-[#F5C76B] px-6 py-4 text-center text-sm font-extrabold text-[#0B0D12] shadow-[0_0_60px_rgba(200,164,93,.20)] transition hover:translate-y-[-1px]"
+                  onClick={() => setIsTrialModalOpen(true)}
+                  type="button"
+                >
+                  Solicitar teste gratuito
+                </button>
+              ) : (
+                <Link
+                  className="rounded-xl bg-gradient-to-r from-[#C8A45D] to-[#F5C76B] px-6 py-4 text-center text-sm font-extrabold text-[#0B0D12] shadow-[0_0_60px_rgba(200,164,93,.20)] transition hover:translate-y-[-1px]"
+                  href="/"
+                >
+                  Testar Coevo Meet agora
+                </Link>
+              )}
               <a
                 className="rounded-xl border border-white/15 bg-white/5 px-6 py-4 text-center text-sm font-bold text-[#FAF7EF] transition hover:border-[#60A5FA] hover:bg-white/10"
                 href="#planos"
@@ -1113,6 +1187,137 @@ export default function CoevoMeetLanding({
           </Link>
         </section>
       </section>
+
+      {isMeetingEnded && isTrialModalOpen ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-[#0B0D12]/80 px-4 py-8 backdrop-blur-xl">
+          <div className="w-full max-w-2xl overflow-hidden rounded-[1.5rem] border border-white/15 bg-[#111827] shadow-[0_30px_120px_rgba(0,0,0,.55)]">
+            <div className="flex items-start justify-between gap-5 border-b border-white/10 p-6">
+              <div>
+                <p className="font-mono text-xs uppercase tracking-[0.18em] text-[#F5C76B]">
+                  Teste gratuito
+                </p>
+                <h2 className="mt-2 font-display text-3xl font-semibold text-[#FAF7EF]">
+                  Solicitar teste gratuito
+                </h2>
+                <p className="mt-3 text-sm leading-6 text-[#A8B0BF]">
+                  Preencha os dados para entrarmos em contato e configurarmos
+                  uma demonstração do Coevo Meet.
+                </p>
+              </div>
+              <button
+                aria-label="Fechar"
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 bg-white/[.04] text-xl text-[#FAF7EF] transition hover:border-[#C8A45D] hover:text-[#F5C76B]"
+                onClick={() => setIsTrialModalOpen(false)}
+                type="button"
+              >
+                x
+              </button>
+            </div>
+
+            <form className="grid gap-4 p-6" onSubmit={submitTrialRequest}>
+              <label className="grid gap-2 text-sm font-semibold text-[#FAF7EF]">
+                Nome Completo
+                <input
+                  className="rounded-xl border border-white/10 bg-[#0B0D12] px-4 py-3 text-sm font-normal text-[#FAF7EF] outline-none transition placeholder:text-[#A8B0BF]/60 focus:border-[#C8A45D]"
+                  minLength={3}
+                  onChange={(event) =>
+                    updateTrialForm("fullName", event.target.value)
+                  }
+                  placeholder="Seu nome"
+                  required
+                  type="text"
+                  value={trialForm.fullName}
+                />
+              </label>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="grid gap-2 text-sm font-semibold text-[#FAF7EF]">
+                  Telefone
+                  <input
+                    className="rounded-xl border border-white/10 bg-[#0B0D12] px-4 py-3 text-sm font-normal text-[#FAF7EF] outline-none transition placeholder:text-[#A8B0BF]/60 focus:border-[#C8A45D]"
+                    minLength={8}
+                    onChange={(event) =>
+                      updateTrialForm("phone", event.target.value)
+                    }
+                    placeholder="(00) 00000-0000"
+                    required
+                    type="tel"
+                    value={trialForm.phone}
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-semibold text-[#FAF7EF]">
+                  E-mail Corporativo
+                  <input
+                    className="rounded-xl border border-white/10 bg-[#0B0D12] px-4 py-3 text-sm font-normal text-[#FAF7EF] outline-none transition placeholder:text-[#A8B0BF]/60 focus:border-[#C8A45D]"
+                    onChange={(event) =>
+                      updateTrialForm("corporateEmail", event.target.value)
+                    }
+                    placeholder="voce@empresa.com"
+                    required
+                    type="email"
+                    value={trialForm.corporateEmail}
+                  />
+                </label>
+              </div>
+
+              <label className="grid gap-2 text-sm font-semibold text-[#FAF7EF]">
+                Nome da Empresa
+                <input
+                  className="rounded-xl border border-white/10 bg-[#0B0D12] px-4 py-3 text-sm font-normal text-[#FAF7EF] outline-none transition placeholder:text-[#A8B0BF]/60 focus:border-[#C8A45D]"
+                  minLength={2}
+                  onChange={(event) =>
+                    updateTrialForm("companyName", event.target.value)
+                  }
+                  placeholder="Empresa"
+                  required
+                  type="text"
+                  value={trialForm.companyName}
+                />
+              </label>
+
+              <label className="flex gap-3 rounded-xl border border-white/10 bg-white/[.04] p-4 text-sm leading-6 text-[#A8B0BF]">
+                <input
+                  checked={trialForm.lgpdAccepted}
+                  className="mt-1 h-4 w-4 accent-[#C8A45D]"
+                  onChange={(event) =>
+                    updateTrialForm("lgpdAccepted", event.target.checked)
+                  }
+                  required
+                  type="checkbox"
+                />
+                <span>
+                  Aceito o uso dos meus dados segundo a LGPD para que a equipe
+                  da Coevo entre em contato sobre o teste gratuito.
+                </span>
+              </label>
+
+              {trialFormStatus === "success" ? (
+                <p className="rounded-xl border border-[#10B981]/25 bg-[#10B981]/10 px-4 py-3 text-sm font-semibold text-[#10B981]">
+                  Solicitação enviada. Entraremos em contato em breve.
+                </p>
+              ) : null}
+
+              {trialFormStatus === "error" ? (
+                <p className="rounded-xl border border-[#EF4444]/25 bg-[#EF4444]/10 px-4 py-3 text-sm font-semibold text-[#EF4444]">
+                  Não foi possível enviar agora. Verifique os dados e tente
+                  novamente.
+                </p>
+              ) : null}
+
+              <button
+                className="mt-2 rounded-xl bg-gradient-to-r from-[#C8A45D] to-[#F5C76B] px-6 py-4 text-sm font-extrabold text-[#0B0D12] shadow-[0_0_60px_rgba(200,164,93,.20)] transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={trialFormStatus === "submitting"}
+                type="submit"
+              >
+                {trialFormStatus === "submitting"
+                  ? "Enviando..."
+                  : "Solicitar teste gratuito"}
+              </button>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

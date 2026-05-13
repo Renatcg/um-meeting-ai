@@ -13,6 +13,8 @@ from app.models import (
     SalesRecommendation,
     TranscriptSegment,
     TranscriptSegmentCreate,
+    TrialRequest,
+    TrialRequestCreate,
 )
 from app.sales_coach_service import RecommendationDraft
 
@@ -133,6 +135,24 @@ CREATE TABLE IF NOT EXISTS agent_profile (
 );
 """
 
+CREATE_TRIAL_REQUESTS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS trial_requests (
+    id BIGSERIAL PRIMARY KEY,
+    full_name TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    corporate_email TEXT NOT NULL,
+    company_name TEXT NOT NULL,
+    lgpd_accepted BOOLEAN NOT NULL,
+    source TEXT NOT NULL DEFAULT 'meeting-ended',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
+
+CREATE_TRIAL_REQUESTS_CREATED_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_trial_requests_created
+ON trial_requests (created_at DESC, id DESC);
+"""
+
 
 async def init_database(settings: Settings) -> None:
     async with await psycopg.AsyncConnection.connect(settings.database_url) as conn:
@@ -141,6 +161,8 @@ async def init_database(settings: Settings) -> None:
         await conn.execute(CREATE_MEETING_PARTICIPANTS_TABLE_SQL)
         await conn.execute(CREATE_MEETING_PARTICIPANTS_INDEX_SQL)
         await conn.execute(CREATE_AGENT_PROFILE_TABLE_SQL)
+        await conn.execute(CREATE_TRIAL_REQUESTS_TABLE_SQL)
+        await conn.execute(CREATE_TRIAL_REQUESTS_CREATED_INDEX_SQL)
         await conn.execute(CREATE_TRANSCRIPT_TABLE_SQL)
         await conn.execute(CREATE_TRANSCRIPT_INDEX_SQL)
         await conn.execute(CREATE_RECOMMENDATIONS_TABLE_SQL)
@@ -155,6 +177,56 @@ async def init_database(settings: Settings) -> None:
         )
         await conn.execute(CREATE_KNOWLEDGE_CHUNKS_DOCUMENT_INDEX_SQL)
         await conn.execute(CREATE_KNOWLEDGE_CHUNKS_VECTOR_INDEX_SQL)
+
+
+async def insert_trial_request(
+    *,
+    settings: Settings,
+    payload: TrialRequestCreate,
+) -> TrialRequest:
+    query = """
+    INSERT INTO trial_requests (
+        full_name,
+        phone,
+        corporate_email,
+        company_name,
+        lgpd_accepted,
+        source
+    )
+    VALUES (%s, %s, %s, %s, %s, %s)
+    RETURNING
+        id,
+        full_name,
+        phone,
+        corporate_email,
+        company_name,
+        lgpd_accepted,
+        source,
+        created_at;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                query,
+                (
+                    payload.full_name,
+                    payload.phone,
+                    str(payload.corporate_email),
+                    payload.company_name,
+                    payload.lgpd_accepted,
+                    payload.source,
+                ),
+            )
+            row = await cur.fetchone()
+
+    if row is None:
+        raise RuntimeError("Trial request insert did not return a row.")
+
+    return TrialRequest.model_validate(row)
 
 
 async def insert_meeting(*, settings: Settings, meeting: Meeting) -> Meeting:

@@ -158,3 +158,23 @@ class VoiceDemoRequest(BaseModel):
         min_length=3,
         max_length=240,
     )
+
+
+class TrialRequestCreate(BaseModel):
+    full_name: str = Field(min_length=3, max_length=120)
+    phone: str = Field(min_length=8, max_length=40)
+    corporate_email: EmailStr
+    company_name: str = Field(min_length=2, max_length=140)
+    lgpd_accepted: bool
+    source: str = Field(default="meeting-ended", max_length=80)
+
+
+class TrialRequest(BaseModel):
+    id: int
+    full_name: str
+    phone: str
+    corporate_email: EmailStr
+    company_name: str
+    lgpd_accepted: bool
+    source: str
+    created_at: datetime
