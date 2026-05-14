@@ -212,19 +212,24 @@ export default function CoevoLabsLandingPage() {
         .labs-title {
           margin: 0;
           color: #f7f8fb;
-          font-family: var(--font-main);
-          font-size: clamp(52px, 5.1vw, 90px);
-          font-weight: 500;
-          line-height: 1.17;
-          letter-spacing: -.035em;
+          font-family: "Michroma", sans-serif;
+          font-size: clamp(48px, 6vw, 92px);
+          font-weight: 400;
+          line-height: 1.18;
+          letter-spacing: -.055em;
           text-shadow: 0 0 28px rgba(255,255,255,.16);
         }
 
-        .glyph-e-inline {
+        .glyph-e {
           display: inline-block;
-          margin: 0 .02em;
-          color: rgba(255,255,255,.72);
-          transform: translateY(-.04em) scaleX(1.2);
+          width: .72em;
+          height: .52em;
+          margin: 0 .03em;
+          vertical-align: -.02em;
+          background:
+            linear-gradient(currentColor, currentColor) left top / 100% .12em no-repeat,
+            linear-gradient(currentColor, currentColor) left center / 100% .12em no-repeat,
+            linear-gradient(currentColor, currentColor) left bottom / 100% .12em no-repeat;
           text-shadow: 0 0 22px rgba(255,255,255,.22);
         }
 
@@ -407,7 +412,7 @@ export default function CoevoLabsLandingPage() {
             min-height: auto;
             padding-top: 38px;
           }
-          .labs-title { font-size: clamp(44px, 13vw, 66px); }
+          .labs-title { font-size: clamp(40px, 11vw, 62px); }
           .labs-description br { display: none; }
           .labs-ctas { margin-top: 34px; }
           .labs-btn { width: 100%; }
@@ -469,9 +474,9 @@ export default function CoevoLabsLandingPage() {
             <h1 className="labs-title">
               Ideias que
               <br />
-              t<span className="glyph-e-inline">≡</span>ansformam.
+              transformam.
               <br />
-              F<span className="glyph-e-inline">≡</span>rramentas que
+              F<span className="glyph-e" aria-hidden="true" />rramentas que
               <br />
               multiplicam.
             </h1>
