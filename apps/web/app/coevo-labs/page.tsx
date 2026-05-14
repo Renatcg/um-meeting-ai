@@ -599,8 +599,8 @@ export default function CoevoLabsLandingPage() {
           z-index: 0;
           pointer-events: none;
           user-select: none;
-          opacity: .34;
-          filter: saturate(.75) contrast(.9);
+          opacity: .72;
+          filter: saturate(.95) contrast(1.04);
         }
 
         .how-deco-left {
