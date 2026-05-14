@@ -38,11 +38,29 @@ const howSteps = [
     number: "02",
     title: (
       <>
-        Crie apps, agentes
-        <br />e automações
+        Inscreva-se
       </>
     ),
-    text: "Transforme sua ideia em soluções práticas que resolvem esses desafios.",
+    text: "Cadastre sua proposta para participar do fluxo de construção da Coevo Labs.",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none">
+        <path d="M7 4h10" />
+        <path d="M7 20h10" />
+        <rect x="5" y="4" width="14" height="16" rx="2" />
+        <path d="M8 9h8" />
+        <path d="M8 13h5" />
+        <path d="M15 16l1.5 1.5L20 14" />
+      </svg>
+    ),
+  },
+  {
+    number: "03",
+    title: (
+      <>
+        Crie apps
+      </>
+    ),
+    text: "Transforme sua ideia em apps, agentes e automações que resolvem esses desafios.",
     icon: (
       <svg viewBox="0 0 24 24" fill="none">
         <rect x="4" y="4" width="6" height="6" rx="1.5" />
@@ -53,7 +71,7 @@ const howSteps = [
     ),
   },
   {
-    number: "03",
+    number: "04",
     title: (
       <>
         Teste
@@ -71,12 +89,10 @@ const howSteps = [
     ),
   },
   {
-    number: "04",
+    number: "05",
     title: (
       <>
-        Disponibilize para
-        <br />
-        testes no grupo
+        Disponibilize
       </>
     ),
     text: "Leve sua solução para uso real nas empresas do grupo e acompanhe os resultados.",
@@ -86,40 +102,6 @@ const howSteps = [
         <circle cx="16" cy="9" r="3" />
         <path d="M4 20c.7-3.2 2.3-5 4-5s3.3 1.8 4 5" />
         <path d="M12 20c.7-3.2 2.3-5 4-5s3.3 1.8 4 5" />
-      </svg>
-    ),
-  },
-  {
-    number: "05",
-    title: (
-      <>
-        Valide
-        <br />
-        impacto
-      </>
-    ),
-    text: "Comprove ganhos em produtividade, eficiência, receita ou experiência.",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none">
-        <circle cx="12" cy="12" r="8" />
-        <path d="M8.5 12.2l2.2 2.2 4.8-5" />
-      </svg>
-    ),
-  },
-  {
-    number: "06",
-    title: (
-      <>
-        Escale
-        <br />
-        com a gente
-      </>
-    ),
-    text: "Soluções com aderência podem se tornar produtos de mercado em parceria com você.",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none">
-        <path d="M4 18L10 12L14 16L21 8" />
-        <path d="M15 8h6v6" />
       </svg>
     ),
   },
@@ -599,7 +581,7 @@ export default function CoevoLabsLandingPage() {
         }
 
         .how-header {
-          max-width: 1040px;
+          max-width: 1180px;
           margin: 0 auto 72px;
           text-align: center;
         }
@@ -626,9 +608,9 @@ export default function CoevoLabsLandingPage() {
         .how-header h2 {
           margin: 0;
           font-family: "Michroma", sans-serif;
-          font-size: clamp(36px, 4vw, 68px);
+          font-size: clamp(24px, 2.6vw, 42px);
           line-height: 1.18;
-          letter-spacing: -.06em;
+          letter-spacing: -.035em;
           font-weight: 400;
           color: var(--how-text);
         }
@@ -654,7 +636,6 @@ export default function CoevoLabsLandingPage() {
           position: relative;
           display: grid;
           grid-template-columns:
-            minmax(170px, 1fr) 28px
             minmax(170px, 1fr) 28px
             minmax(170px, 1fr) 28px
             minmax(170px, 1fr) 28px
@@ -894,7 +875,7 @@ export default function CoevoLabsLandingPage() {
           }
 
           .how-header h2 {
-            font-size: 34px;
+            font-size: 30px;
             letter-spacing: -.04em;
           }
 
