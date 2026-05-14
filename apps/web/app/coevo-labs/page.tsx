@@ -245,136 +245,22 @@ export default function CoevoLabsLandingPage() {
 
         .labs-visual {
           position: relative;
-          min-height: 610px;
+          min-height: 620px;
+          overflow: visible;
         }
 
-        .labs-network {
+        .labs-hero-image {
           position: absolute;
-          inset: 0;
-          transform: translateY(8px);
+          left: 50%;
+          top: 48%;
+          width: min(980px, 112%);
+          max-width: none;
+          height: auto;
+          transform: translate(-47%, -50%);
+          filter: drop-shadow(0 34px 90px rgba(0,0,0,.55));
+          opacity: .96;
+          user-select: none;
         }
-
-        .network-line {
-          position: absolute;
-          height: 1px;
-          background: linear-gradient(90deg, transparent, rgba(255,255,255,.62), transparent);
-          opacity: .86;
-          box-shadow: 0 0 12px rgba(255,255,255,.28);
-          transform-origin: left center;
-        }
-
-        .network-line--a { width: 270px; left: 35%; top: 34%; transform: rotate(-22deg); }
-        .network-line--b { width: 250px; left: 52%; top: 30%; transform: rotate(25deg); }
-        .network-line--c { width: 245px; left: 54%; top: 46%; transform: rotate(-8deg); }
-        .network-line--d { width: 260px; left: 28%; top: 55%; transform: rotate(-7deg); }
-        .network-line--e { width: 230px; left: 52%; top: 58%; transform: rotate(42deg); }
-
-        .core-card,
-        .labs-node {
-          position: absolute;
-          border: 1px solid rgba(255,255,255,.16);
-          background: linear-gradient(145deg, rgba(32,35,42,.98), rgba(10,12,17,.98));
-          box-shadow:
-            0 26px 50px rgba(0,0,0,.55),
-            inset 0 1px 0 rgba(255,255,255,.08);
-        }
-
-        .core-card {
-          left: 46%;
-          top: 39%;
-          width: 250px;
-          height: 180px;
-          border-radius: 30px;
-          transform: translate(-50%, -50%) rotateX(54deg) rotateZ(-45deg);
-        }
-
-        .core-card::after,
-        .labs-node::after {
-          content: "";
-          position: absolute;
-          left: 14px;
-          right: 14px;
-          bottom: -12px;
-          height: 11px;
-          border-radius: 0 0 18px 18px;
-          background: rgba(255,255,255,.88);
-          filter: blur(.2px) drop-shadow(0 0 16px rgba(255,255,255,.55));
-        }
-
-        .core-card__glow {
-          position: absolute;
-          inset: 22px;
-          border-radius: 24px;
-          background: radial-gradient(circle, rgba(255,255,255,.16), transparent 68%);
-        }
-
-        .core-card__icon {
-          position: absolute;
-          inset: 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 16px;
-          transform: rotateZ(45deg) rotateX(-54deg);
-        }
-
-        .core-card__icon span,
-        .metric-icon--lines span {
-          display: block;
-          width: 10px;
-          height: 70px;
-          border-radius: 999px;
-          background: #fff;
-          box-shadow: 0 0 22px rgba(255,255,255,.46);
-        }
-
-        .labs-node {
-          width: 118px;
-          height: 92px;
-          border-radius: 21px;
-          transform: rotateX(54deg) rotateZ(-45deg);
-        }
-
-        .labs-node__icon {
-          position: absolute;
-          inset: 0;
-          display: grid;
-          place-items: center;
-          color: rgba(255,255,255,.9);
-          font-family: var(--font-main);
-          font-size: 37px;
-          transform: rotateZ(45deg) rotateX(-54deg);
-        }
-
-        .node--impactar { left: 25%; top: 25%; }
-        .node--criar { left: 66%; top: 11%; }
-        .node--validar { left: 82%; top: 32%; }
-        .node--compartilhar { left: 17%; top: 57%; }
-        .node--crescer { left: 68%; top: 67%; }
-
-        .labs-callout {
-          position: absolute;
-          max-width: 190px;
-          color: var(--muted);
-          font-size: 15px;
-          line-height: 1.35;
-        }
-
-        .labs-callout strong {
-          display: block;
-          margin-bottom: 8px;
-          color: #fff;
-          font-family: var(--font-main);
-          font-size: 14px;
-          letter-spacing: .16em;
-          text-transform: uppercase;
-        }
-
-        .callout--impactar { left: 6%; top: 31%; text-align: right; }
-        .callout--criar { right: 9%; top: 10%; }
-        .callout--validar { right: 3%; top: 51%; }
-        .callout--compartilhar { left: 9%; top: 73%; }
-        .callout--crescer { right: 7%; top: 79%; }
 
         .labs-metrics {
           position: relative;
@@ -475,8 +361,12 @@ export default function CoevoLabsLandingPage() {
         }
 
         .metric-icon--lines span {
+          display: block;
           width: 38px;
           height: 4px;
+          border-radius: 999px;
+          background: #fff;
+          box-shadow: 0 0 22px rgba(255,255,255,.46);
         }
 
         .scroll-hint {
@@ -498,7 +388,13 @@ export default function CoevoLabsLandingPage() {
           .labs-brand img { width: 180px; transform: translateY(-27px); }
           .labs-links { gap: 24px; }
           .labs-content { grid-template-columns: 1fr; }
-          .labs-visual { min-height: 540px; }
+          .labs-visual { min-height: 560px; }
+          .labs-hero-image {
+            left: 50%;
+            top: 50%;
+            width: min(980px, 120%);
+            transform: translate(-50%, -50%);
+          }
           .labs-metrics { grid-template-columns: repeat(2, 1fr); }
         }
 
@@ -516,10 +412,13 @@ export default function CoevoLabsLandingPage() {
           .labs-ctas { margin-top: 34px; }
           .labs-btn { width: 100%; }
           .labs-visual {
-            min-height: 520px;
-            margin-bottom: -80px;
-            transform: scale(.82);
-            transform-origin: top center;
+            min-height: 360px;
+            margin-bottom: -24px;
+            overflow: hidden;
+          }
+          .labs-hero-image {
+            width: 130%;
+            transform: translate(-50%, -50%);
           }
           .labs-metrics { grid-template-columns: 1fr; }
           .labs-metric {
@@ -596,59 +495,11 @@ export default function CoevoLabsLandingPage() {
           </div>
 
           <div className="labs-visual" aria-label="Rede de solucoes Coevo Labs">
-            <div className="labs-network">
-              <div className="network-line network-line--a" />
-              <div className="network-line network-line--b" />
-              <div className="network-line network-line--c" />
-              <div className="network-line network-line--d" />
-              <div className="network-line network-line--e" />
-
-              <div className="core-card">
-                <div className="core-card__glow" />
-                <div className="core-card__icon">
-                  <span />
-                  <span />
-                  <span />
-                </div>
-              </div>
-
-              <article className="labs-node node--impactar">
-                <div className="labs-node__icon">⌁</div>
-              </article>
-              <article className="labs-node node--criar">
-                <div className="labs-node__icon">✦</div>
-              </article>
-              <article className="labs-node node--validar">
-                <div className="labs-node__icon">⌁</div>
-              </article>
-              <article className="labs-node node--compartilhar">
-                <div className="labs-node__icon">⌘</div>
-              </article>
-              <article className="labs-node node--crescer">
-                <div className="labs-node__icon">$</div>
-              </article>
-
-              <div className="labs-callout callout--impactar">
-                <strong>Impactar</strong>
-                <span>Gere impacto real nas empresas do Grupo Coevo.</span>
-              </div>
-              <div className="labs-callout callout--criar">
-                <strong>Criar</strong>
-                <span>Desenvolva solucoes com IA e ferramentas de ponta.</span>
-              </div>
-              <div className="labs-callout callout--validar">
-                <strong>Validar</strong>
-                <span>Solucoes com tracao podem virar produtos para o mercado.</span>
-              </div>
-              <div className="labs-callout callout--compartilhar">
-                <strong>Compartilhar</strong>
-                <span>Torne sua solucao disponivel para todas as empresas do grupo.</span>
-              </div>
-              <div className="labs-callout callout--crescer">
-                <strong>Crescer</strong>
-                <span>Criador e Coevo juntos. Receita, reconhecimento e participacao.</span>
-              </div>
-            </div>
+            <img
+              className="labs-hero-image"
+              src="/brand/coevo-labs-hero-visual.png"
+              alt="Rede visual Coevo Labs com modulos conectados para criar, impactar, validar, compartilhar e crescer"
+            />
           </div>
         </div>
 
