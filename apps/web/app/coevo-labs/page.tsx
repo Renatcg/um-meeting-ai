@@ -675,9 +675,9 @@ export default function CoevoLabsLandingPage() {
           content: "";
           position: absolute;
           left: 50%;
-          top: 118px;
-          width: 118px;
-          height: 118px;
+          top: 112px;
+          width: 64px;
+          height: 64px;
           border-radius: 999px;
           transform: translateX(-50%);
           background:
@@ -710,11 +710,11 @@ export default function CoevoLabsLandingPage() {
         .icon-orbit {
           position: relative;
           z-index: 2;
-          width: 132px;
-          height: 132px;
+          width: 53px;
+          height: 53px;
           display: grid;
           place-items: center;
-          margin: 56px auto 38px;
+          margin: 88px auto 38px;
         }
 
         .orbit-ring {
@@ -733,24 +733,24 @@ export default function CoevoLabsLandingPage() {
         }
 
         .orbit-ring::before {
-          width: 5px;
-          height: 5px;
-          top: 12px;
+          width: 3px;
+          height: 3px;
+          top: 5px;
           left: 50%;
         }
 
         .orbit-ring::after {
-          width: 4px;
-          height: 4px;
-          right: 14px;
+          width: 3px;
+          height: 3px;
+          right: 6px;
           top: 50%;
         }
 
         .icon-orbit svg {
           position: relative;
           z-index: 2;
-          width: 46px;
-          height: 46px;
+          width: 18px;
+          height: 18px;
           stroke: #050505;
           stroke-width: 1.65;
           stroke-linecap: round;
@@ -760,7 +760,7 @@ export default function CoevoLabsLandingPage() {
         .flow-card h3 {
           position: relative;
           z-index: 2;
-          min-height: 58px;
+          min-height: 52px;
           margin: 0;
           font-family: "Inter", sans-serif;
           font-size: clamp(14px, 1vw, 18px);
@@ -769,6 +769,9 @@ export default function CoevoLabsLandingPage() {
           font-weight: 800;
           text-transform: uppercase;
           color: var(--how-text);
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
 
         .card-divider {
@@ -808,46 +811,6 @@ export default function CoevoLabsLandingPage() {
           line-height: 1;
           transform: translateY(-2px);
           box-shadow: 0 10px 28px rgba(0,0,0,.06);
-        }
-
-        .how-bg {
-          position: absolute;
-          z-index: 1;
-          width: 360px;
-          height: 360px;
-          opacity: .22;
-          background:
-            linear-gradient(30deg, transparent 48%, rgba(0,0,0,.12) 49%, rgba(0,0,0,.12) 51%, transparent 52%),
-            linear-gradient(150deg, transparent 48%, rgba(0,0,0,.1) 49%, rgba(0,0,0,.1) 51%, transparent 52%);
-          pointer-events: none;
-        }
-
-        .how-bg::before {
-          content: "";
-          position: absolute;
-          inset: 78px;
-          border: 1px solid rgba(0,0,0,.12);
-          transform: rotate(45deg);
-        }
-
-        .how-bg::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          background-image: radial-gradient(rgba(0,0,0,.16) 1px, transparent 1px);
-          background-size: 16px 16px;
-          mask-image: radial-gradient(circle, black 0%, transparent 70%);
-        }
-
-        .how-bg-left {
-          left: 2%;
-          top: 18%;
-        }
-
-        .how-bg-right {
-          right: 1%;
-          top: 18%;
-          transform: scaleX(-1);
         }
 
         @media (max-width: 1280px) {
@@ -892,9 +855,6 @@ export default function CoevoLabsLandingPage() {
             padding-bottom: 42px;
           }
 
-          .how-bg {
-            display: none;
-          }
         }
       `}</style>
 
@@ -1023,9 +983,6 @@ export default function CoevoLabsLandingPage() {
       </section>
 
       <section className="coevo-how-section" id="como-funciona">
-        <div className="how-bg how-bg-left" />
-        <div className="how-bg how-bg-right" />
-
         <div className="how-container">
           <div className="how-header">
             <span className="how-kicker">
@@ -1034,9 +991,9 @@ export default function CoevoLabsLandingPage() {
             </span>
 
             <h2 className={michroma.className}>
-              Da ideia à solução.
+              Da ideia à solução. Você cria.
               <br />
-              Você cria. A Coevo Labs impulsiona. O grupo cresce.
+              A Coevo Labs impulsiona. O grupo cresce.
             </h2>
 
             <p>
