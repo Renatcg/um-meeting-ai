@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Michroma } from "next/font/google";
+import { Fragment } from "react";
 
 const michroma = Michroma({
   subsets: ["latin"],
@@ -14,6 +15,115 @@ export const metadata: Metadata = {
 };
 
 const navItems = ["Sobre", "Como funciona", "Recursos", "Solucoes", "Criadores"];
+
+const howSteps = [
+  {
+    number: "01",
+    title: (
+      <>
+        Mapeie
+        <br />
+        dores e oportunidades
+      </>
+    ),
+    text: "Identifique problemas reais e oportunidades nas rotinas das empresas do grupo.",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none">
+        <circle cx="10.5" cy="10.5" r="5.5" />
+        <path d="M15 15L21 21" />
+      </svg>
+    ),
+  },
+  {
+    number: "02",
+    title: (
+      <>
+        Crie apps, agentes
+        <br />e automações
+      </>
+    ),
+    text: "Transforme sua ideia em soluções práticas que resolvem esses desafios.",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none">
+        <rect x="4" y="4" width="6" height="6" rx="1.5" />
+        <rect x="14" y="4" width="6" height="6" rx="1.5" />
+        <rect x="4" y="14" width="6" height="6" rx="1.5" />
+        <rect x="14" y="14" width="6" height="6" rx="1.5" />
+      </svg>
+    ),
+  },
+  {
+    number: "03",
+    title: (
+      <>
+        Teste
+        <br />
+        suas ideias
+      </>
+    ),
+    text: "Valide hipóteses, refine funcionalidades e evolua com base em dados e feedbacks.",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none">
+        <path d="M9 3h6" />
+        <path d="M10 3v5l-5 9.5A2.4 2.4 0 0 0 7.1 21h9.8a2.4 2.4 0 0 0 2.1-3.5L14 8V3" />
+        <path d="M8 15h8" />
+      </svg>
+    ),
+  },
+  {
+    number: "04",
+    title: (
+      <>
+        Disponibilize para
+        <br />
+        testes no grupo
+      </>
+    ),
+    text: "Leve sua solução para uso real nas empresas do grupo e acompanhe os resultados.",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none">
+        <circle cx="8" cy="9" r="3" />
+        <circle cx="16" cy="9" r="3" />
+        <path d="M4 20c.7-3.2 2.3-5 4-5s3.3 1.8 4 5" />
+        <path d="M12 20c.7-3.2 2.3-5 4-5s3.3 1.8 4 5" />
+      </svg>
+    ),
+  },
+  {
+    number: "05",
+    title: (
+      <>
+        Valide
+        <br />
+        impacto
+      </>
+    ),
+    text: "Comprove ganhos em produtividade, eficiência, receita ou experiência.",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="8" />
+        <path d="M8.5 12.2l2.2 2.2 4.8-5" />
+      </svg>
+    ),
+  },
+  {
+    number: "06",
+    title: (
+      <>
+        Escale
+        <br />
+        com a gente
+      </>
+    ),
+    text: "Soluções com aderência podem se tornar produtos de mercado em parceria com você.",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none">
+        <path d="M4 18L10 12L14 16L21 8" />
+        <path d="M15 8h6v6" />
+      </svg>
+    ),
+  },
+];
 
 export default function CoevoLabsLandingPage() {
   return (
@@ -440,6 +550,371 @@ export default function CoevoLabsLandingPage() {
           }
           .labs-metric:last-child { border-bottom: 0; }
         }
+
+        .coevo-how-section {
+          --how-bg: #f7f7f4;
+          --how-text: #080808;
+          --how-muted: #5f5f5f;
+          --how-card: rgba(255, 255, 255, 0.72);
+          --how-card-border: rgba(0, 0, 0, 0.1);
+          --how-shadow: 0 24px 70px rgba(0, 0, 0, 0.06);
+          position: relative;
+          width: 100%;
+          min-height: 100vh;
+          overflow: hidden;
+          background:
+            radial-gradient(circle at 50% 0%, rgba(255,255,255,1) 0%, rgba(247,247,244,0.95) 42%, rgba(242,242,239,1) 100%),
+            var(--how-bg);
+          color: var(--how-text);
+          padding: 96px 48px 72px;
+        }
+
+        .coevo-how-section::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background-image:
+            linear-gradient(rgba(0,0,0,0.025) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0,0,0,0.025) 1px, transparent 1px);
+          background-size: 42px 42px;
+          mask-image: radial-gradient(circle at 50% 32%, black 0%, transparent 64%);
+          pointer-events: none;
+        }
+
+        .coevo-how-section::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background:
+            radial-gradient(circle at 12% 26%, rgba(0,0,0,0.045), transparent 18%),
+            radial-gradient(circle at 88% 26%, rgba(0,0,0,0.04), transparent 18%);
+          pointer-events: none;
+        }
+
+        .how-container {
+          position: relative;
+          z-index: 2;
+          width: min(1720px, 100%);
+          margin: 0 auto;
+        }
+
+        .how-header {
+          max-width: 1040px;
+          margin: 0 auto 72px;
+          text-align: center;
+        }
+
+        .how-kicker {
+          display: inline-flex;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 34px;
+          font-family: "Michroma", sans-serif;
+          font-size: 13px;
+          line-height: 1;
+          letter-spacing: .18em;
+          color: var(--how-muted);
+          text-transform: uppercase;
+        }
+
+        .kicker-symbol {
+          font-size: 20px;
+          letter-spacing: 0;
+          transform: translateY(-1px);
+        }
+
+        .how-header h2 {
+          margin: 0;
+          font-family: "Michroma", sans-serif;
+          font-size: clamp(36px, 4vw, 68px);
+          line-height: 1.18;
+          letter-spacing: -.06em;
+          font-weight: 400;
+          color: var(--how-text);
+        }
+
+        .how-header p {
+          max-width: 790px;
+          margin: 34px auto 0;
+          font-family: "Inter", sans-serif;
+          font-size: clamp(17px, 1.25vw, 23px);
+          line-height: 1.65;
+          color: var(--how-muted);
+          letter-spacing: .01em;
+        }
+
+        .brand-mark {
+          margin-top: 28px;
+          font-family: "Michroma", sans-serif;
+          font-size: 22px;
+          color: rgba(0,0,0,.22);
+        }
+
+        .flow-cards {
+          position: relative;
+          display: grid;
+          grid-template-columns:
+            minmax(170px, 1fr) 28px
+            minmax(170px, 1fr) 28px
+            minmax(170px, 1fr) 28px
+            minmax(170px, 1fr) 28px
+            minmax(170px, 1fr) 28px
+            minmax(170px, 1fr);
+          align-items: center;
+          gap: 0;
+        }
+
+        .flow-card {
+          position: relative;
+          min-height: 420px;
+          padding: 28px 22px 34px;
+          border: 1px solid var(--how-card-border);
+          border-radius: 16px;
+          background:
+            linear-gradient(180deg, rgba(255,255,255,.86), rgba(255,255,255,.55)),
+            var(--how-card);
+          box-shadow: var(--how-shadow);
+          backdrop-filter: blur(18px);
+          overflow: hidden;
+          text-align: center;
+        }
+
+        .flow-card::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          background:
+            radial-gradient(circle at 50% 28%, rgba(0,0,0,.05), transparent 32%),
+            linear-gradient(180deg, rgba(255,255,255,.7), transparent 44%);
+          pointer-events: none;
+        }
+
+        .flow-card::after {
+          content: "";
+          position: absolute;
+          left: 50%;
+          top: 118px;
+          width: 118px;
+          height: 118px;
+          border-radius: 999px;
+          transform: translateX(-50%);
+          background:
+            radial-gradient(circle, rgba(255,255,255,.9) 0%, rgba(255,255,255,0) 62%);
+          border: 1px solid rgba(0,0,0,.045);
+          pointer-events: none;
+        }
+
+        .step-number {
+          position: absolute;
+          top: 22px;
+          left: 22px;
+          z-index: 2;
+          width: 38px;
+          height: 38px;
+          display: grid;
+          place-items: center;
+          border-radius: 9px;
+          background: #050505;
+          color: #fff;
+          font-family: "Inter", sans-serif;
+          font-weight: 700;
+          font-size: 13px;
+          letter-spacing: .06em;
+          box-shadow:
+            0 10px 24px rgba(0,0,0,.16),
+            inset 0 0 0 1px rgba(255,255,255,.16);
+        }
+
+        .icon-orbit {
+          position: relative;
+          z-index: 2;
+          width: 132px;
+          height: 132px;
+          display: grid;
+          place-items: center;
+          margin: 56px auto 38px;
+        }
+
+        .orbit-ring {
+          position: absolute;
+          inset: 0;
+          border-radius: 50%;
+          border: 1px solid rgba(0,0,0,.12);
+        }
+
+        .orbit-ring::before,
+        .orbit-ring::after {
+          content: "";
+          position: absolute;
+          border-radius: 50%;
+          background: rgba(0,0,0,.18);
+        }
+
+        .orbit-ring::before {
+          width: 5px;
+          height: 5px;
+          top: 12px;
+          left: 50%;
+        }
+
+        .orbit-ring::after {
+          width: 4px;
+          height: 4px;
+          right: 14px;
+          top: 50%;
+        }
+
+        .icon-orbit svg {
+          position: relative;
+          z-index: 2;
+          width: 46px;
+          height: 46px;
+          stroke: #050505;
+          stroke-width: 1.65;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+        }
+
+        .flow-card h3 {
+          position: relative;
+          z-index: 2;
+          min-height: 58px;
+          margin: 0;
+          font-family: "Inter", sans-serif;
+          font-size: clamp(14px, 1vw, 18px);
+          line-height: 1.45;
+          letter-spacing: .08em;
+          font-weight: 800;
+          text-transform: uppercase;
+          color: var(--how-text);
+        }
+
+        .card-divider {
+          position: relative;
+          z-index: 2;
+          display: block;
+          width: 16px;
+          height: 1px;
+          margin: 26px auto;
+          background: rgba(0,0,0,.48);
+        }
+
+        .flow-card p {
+          position: relative;
+          z-index: 2;
+          max-width: 210px;
+          margin: 0 auto;
+          font-family: "Inter", sans-serif;
+          font-size: clamp(14px, .9vw, 17px);
+          line-height: 1.65;
+          color: #454545;
+        }
+
+        .flow-arrow {
+          position: relative;
+          z-index: 4;
+          width: 40px;
+          height: 40px;
+          display: grid;
+          place-items: center;
+          margin: 0 -6px;
+          border-radius: 50%;
+          border: 1px solid rgba(0,0,0,.12);
+          background: rgba(255,255,255,.86);
+          color: #111;
+          font-size: 34px;
+          line-height: 1;
+          transform: translateY(-2px);
+          box-shadow: 0 10px 28px rgba(0,0,0,.06);
+        }
+
+        .how-bg {
+          position: absolute;
+          z-index: 1;
+          width: 360px;
+          height: 360px;
+          opacity: .22;
+          background:
+            linear-gradient(30deg, transparent 48%, rgba(0,0,0,.12) 49%, rgba(0,0,0,.12) 51%, transparent 52%),
+            linear-gradient(150deg, transparent 48%, rgba(0,0,0,.1) 49%, rgba(0,0,0,.1) 51%, transparent 52%);
+          pointer-events: none;
+        }
+
+        .how-bg::before {
+          content: "";
+          position: absolute;
+          inset: 78px;
+          border: 1px solid rgba(0,0,0,.12);
+          transform: rotate(45deg);
+        }
+
+        .how-bg::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background-image: radial-gradient(rgba(0,0,0,.16) 1px, transparent 1px);
+          background-size: 16px 16px;
+          mask-image: radial-gradient(circle, black 0%, transparent 70%);
+        }
+
+        .how-bg-left {
+          left: 2%;
+          top: 18%;
+        }
+
+        .how-bg-right {
+          right: 1%;
+          top: 18%;
+          transform: scaleX(-1);
+        }
+
+        @media (max-width: 1280px) {
+          .coevo-how-section {
+            padding-inline: 32px;
+          }
+
+          .flow-cards {
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+          }
+
+          .flow-arrow {
+            display: none;
+          }
+        }
+
+        @media (max-width: 820px) {
+          .coevo-how-section {
+            padding: 72px 20px 56px;
+          }
+
+          .how-header {
+            margin-bottom: 48px;
+          }
+
+          .how-header h2 {
+            font-size: 34px;
+            letter-spacing: -.04em;
+          }
+
+          .how-header p {
+            font-size: 16px;
+          }
+
+          .flow-cards {
+            grid-template-columns: 1fr;
+          }
+
+          .flow-card {
+            min-height: auto;
+            padding-bottom: 42px;
+          }
+
+          .how-bg {
+            display: none;
+          }
+        }
       `}</style>
 
       <section className="labs-hero" aria-label="Hero Coevo Labs">
@@ -564,6 +1039,61 @@ export default function CoevoLabsLandingPage() {
         <a className="scroll-hint" href="#sobre">
           ↓ Role para explorar
         </a>
+      </section>
+
+      <section className="coevo-how-section" id="como-funciona">
+        <div className="how-bg how-bg-left" />
+        <div className="how-bg how-bg-right" />
+
+        <div className="how-container">
+          <div className="how-header">
+            <span className="how-kicker">
+              <span className="kicker-symbol">≡</span>
+              COMO FUNCIONA
+            </span>
+
+            <h2 className={michroma.className}>
+              Da ideia à solução.
+              <br />
+              Você cria. A Coevo Labs impulsiona. O grupo cresce.
+            </h2>
+
+            <p>
+              Você passa por um processo claro e colaborativo para transformar
+              problemas reais do dia a dia em soluções testadas, validadas e com
+              potencial para o mercado.
+            </p>
+
+            <div className={`brand-mark ${michroma.className}`}>≡</div>
+          </div>
+
+          <div className="flow-cards">
+            {howSteps.map((step, index) => (
+              <Fragment key={step.number}>
+                <article className="flow-card">
+                  <span className="step-number">{step.number}</span>
+
+                  <div className="icon-orbit">
+                    <div className="orbit-ring" />
+                    {step.icon}
+                  </div>
+
+                  <h3>{step.title}</h3>
+
+                  <span className="card-divider" />
+
+                  <p>{step.text}</p>
+                </article>
+
+                {index < howSteps.length - 1 ? (
+                  <span className="flow-arrow" key={`${step.number}-arrow`}>
+                    ›
+                  </span>
+                ) : null}
+              </Fragment>
+            ))}
+          </div>
+        </div>
       </section>
     </main>
   );
