@@ -228,15 +228,17 @@ export default function CoevoLabsLandingPage() {
 
         .glyph-e {
           display: inline-block;
-          width: .72em;
-          height: .52em;
-          margin: 0 .03em;
-          vertical-align: -.02em;
+          position: relative;
+          width: .86em;
+          height: .58em;
+          margin: 0 .045em;
+          vertical-align: -.015em;
           background:
-            linear-gradient(currentColor, currentColor) left top / 100% .12em no-repeat,
-            linear-gradient(currentColor, currentColor) left center / 100% .12em no-repeat,
-            linear-gradient(currentColor, currentColor) left bottom / 100% .12em no-repeat;
-          text-shadow: 0 0 22px rgba(255,255,255,.22);
+            linear-gradient(currentColor, currentColor) left 0 / 100% .105em no-repeat,
+            linear-gradient(currentColor, currentColor) left 50% / 100% .105em no-repeat,
+            linear-gradient(currentColor, currentColor) left 100% / 100% .105em no-repeat;
+          border-radius: .04em;
+          filter: drop-shadow(0 0 16px rgba(255,255,255,.22));
         }
 
         .labs-description {
