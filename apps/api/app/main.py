@@ -19,6 +19,7 @@ from app.auth import (
 from app.config import get_settings
 from app.copilot import dispatch_copilot
 from app.database import (
+    delete_trial_request,
     ensure_meeting,
     get_agent_profile,
     has_host_or_commercial_joined,
@@ -32,8 +33,10 @@ from app.database import (
     list_transcript_segments,
     mark_meeting_ended,
     register_meeting_participant,
+    update_trial_request,
     upsert_agent_profile,
 )
+from app.email_service import send_trial_confirmation_email
 from app.models import (
     AgentProfile,
     CreateMeetingRequest,
@@ -48,6 +51,7 @@ from app.models import (
     TranscriptSegmentCreate,
     TrialRequest,
     TrialRequestCreate,
+    TrialRequestUpdate,
     VoiceDemoRequest,
 )
 from app.knowledge_service import (
@@ -96,12 +100,53 @@ async def create_trial_request(payload: TrialRequestCreate) -> TrialRequest:
             detail="LGPD acceptance is required.",
         )
 
-    return await insert_trial_request(settings=settings, payload=payload)
+    lead = await insert_trial_request(settings=settings, payload=payload)
+    try:
+        await send_trial_confirmation_email(settings=settings, lead=lead)
+    except Exception as exc:
+        logger.exception("trial request confirmation email failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Lead saved, but confirmation email could not be sent.",
+        ) from exc
+
+    return lead
 
 
 @app.get("/trial-requests", response_model=list[TrialRequest])
 async def read_trial_requests() -> list[TrialRequest]:
     return await list_trial_requests(settings=settings)
+
+
+@app.put("/trial-requests/{lead_id}", response_model=TrialRequest)
+async def edit_trial_request(
+    lead_id: int,
+    payload: TrialRequestUpdate,
+) -> TrialRequest:
+    try:
+        return await update_trial_request(
+            settings=settings,
+            lead_id=lead_id,
+            payload=payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Lead not found.",
+        ) from exc
+
+
+@app.delete("/trial-requests/{lead_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_trial_request(lead_id: int) -> Response:
+    try:
+        await delete_trial_request(settings=settings, lead_id=lead_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Lead not found.",
+        ) from exc
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @app.post("/knowledge/documents", response_model=KnowledgeUploadResponse, status_code=201)

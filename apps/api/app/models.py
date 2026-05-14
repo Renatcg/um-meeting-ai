@@ -8,6 +8,7 @@ ParticipantRole = Literal["host", "commercial", "client", "observer"]
 RecommendationKind = Literal["objection", "risk", "opportunity"]
 RecommendationSeverity = Literal["low", "medium", "high"]
 AgentGender = Literal["masculine", "feminine", "neutral"]
+WeeklyMeetingVolume = Literal["ate-5", "5-10", "10-20", "mais-20"]
 AgentVoice = Literal[
     "alloy",
     "ash",
@@ -165,8 +166,18 @@ class TrialRequestCreate(BaseModel):
     phone: str = Field(min_length=8, max_length=40)
     corporate_email: EmailStr
     company_name: str = Field(min_length=2, max_length=140)
+    weekly_meeting_volume: WeeklyMeetingVolume
     lgpd_accepted: bool
     source: str = Field(default="meeting-ended", max_length=80)
+    selected_plan: str | None = Field(default=None, max_length=80)
+
+
+class TrialRequestUpdate(BaseModel):
+    full_name: str = Field(min_length=3, max_length=120)
+    phone: str = Field(min_length=8, max_length=40)
+    corporate_email: EmailStr
+    company_name: str = Field(min_length=2, max_length=140)
+    weekly_meeting_volume: WeeklyMeetingVolume
     selected_plan: str | None = Field(default=None, max_length=80)
 
 
@@ -176,6 +187,7 @@ class TrialRequest(BaseModel):
     phone: str
     corporate_email: EmailStr
     company_name: str
+    weekly_meeting_volume: WeeklyMeetingVolume
     lgpd_accepted: bool
     source: str
     selected_plan: str | None = None

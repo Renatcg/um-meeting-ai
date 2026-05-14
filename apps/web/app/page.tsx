@@ -7,6 +7,7 @@ const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 type Section = "meetings" | "coevo" | "knowledge" | "leads";
 type AgentGender = "masculine" | "feminine" | "neutral";
+type WeeklyMeetingVolume = "ate-5" | "5-10" | "10-20" | "mais-20";
 type AgentVoice =
   | "alloy"
   | "ash"
@@ -52,9 +53,19 @@ type TrialRequest = {
   phone: string;
   corporate_email: string;
   company_name: string;
+  weekly_meeting_volume: WeeklyMeetingVolume;
   selected_plan?: string | null;
   source: string;
   created_at: string;
+};
+
+type LeadForm = {
+  fullName: string;
+  phone: string;
+  corporateEmail: string;
+  companyName: string;
+  weeklyMeetingVolume: WeeklyMeetingVolume;
+  selectedPlan: string;
 };
 
 const sessionUser = {
@@ -65,6 +76,15 @@ const sessionUser = {
 
 const invitedMeetings: MeetingListItem[] = [];
 const meetingHistory: MeetingListItem[] = [];
+
+const emptyLeadForm: LeadForm = {
+  fullName: "",
+  phone: "",
+  corporateEmail: "",
+  companyName: "",
+  weeklyMeetingVolume: "ate-5",
+  selectedPlan: "Teste Gratis",
+};
 
 const defaultProfile: AgentProfile = {
   name: "Coevo",
@@ -91,6 +111,16 @@ const languagePolicies = [
   "Priorizar portugues do Brasil, exceto quando o participante falar outro idioma.",
   "Manter respostas curtas e confirmar antes de traduzir.",
 ];
+const weeklyMeetingVolumeOptions: Array<{
+  value: WeeklyMeetingVolume;
+  label: string;
+}> = [
+  { value: "ate-5", label: "Ate 5" },
+  { value: "5-10", label: "5 a 10" },
+  { value: "10-20", label: "10 a 20" },
+  { value: "mais-20", label: "+20" },
+];
+const planOptions = ["Teste Gratis", "Essencial", "Business", "Enterprise"];
 const keywordOptions = [
   "clareza",
   "objetividade",
@@ -269,6 +299,11 @@ export default function HomePage() {
   const [trialRequests, setTrialRequests] = useState<TrialRequest[]>([]);
   const [trialRequestsStatus, setTrialRequestsStatus] = useState<string | null>(null);
   const [isLoadingTrialRequests, setIsLoadingTrialRequests] = useState(false);
+  const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
+  const [editingLeadId, setEditingLeadId] = useState<number | null>(null);
+  const [leadForm, setLeadForm] = useState<LeadForm>(emptyLeadForm);
+  const [leadFormStatus, setLeadFormStatus] = useState<string | null>(null);
+  const [isSavingLead, setIsSavingLead] = useState(false);
   const companyDocsRef = useRef<HTMLInputElement | null>(null);
   const companyMediaRef = useRef<HTMLInputElement | null>(null);
   const companyLinksRef = useRef<HTMLTextAreaElement | null>(null);
@@ -300,6 +335,119 @@ export default function HomePage() {
       setTrialRequestsStatus(err instanceof Error ? err.message : "Erro inesperado.");
     } finally {
       setIsLoadingTrialRequests(false);
+    }
+  }
+
+  function weeklyMeetingVolumeLabel(value: WeeklyMeetingVolume) {
+    return (
+      weeklyMeetingVolumeOptions.find((option) => option.value === value)?.label ??
+      value
+    );
+  }
+
+  function openNewLeadModal() {
+    setEditingLeadId(null);
+    setLeadForm(emptyLeadForm);
+    setLeadFormStatus(null);
+    setIsLeadModalOpen(true);
+  }
+
+  function openEditLeadModal(lead: TrialRequest) {
+    setEditingLeadId(lead.id);
+    setLeadForm({
+      fullName: lead.full_name,
+      phone: lead.phone,
+      corporateEmail: lead.corporate_email,
+      companyName: lead.company_name,
+      weeklyMeetingVolume: lead.weekly_meeting_volume,
+      selectedPlan: lead.selected_plan ?? "",
+    });
+    setLeadFormStatus(null);
+    setIsLeadModalOpen(true);
+  }
+
+  function updateLeadForm<K extends keyof LeadForm>(field: K, value: LeadForm[K]) {
+    setLeadForm((current) => ({ ...current, [field]: value }));
+    setLeadFormStatus(null);
+  }
+
+  async function saveLead(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsSavingLead(true);
+    setLeadFormStatus(null);
+
+    const body = {
+      full_name: leadForm.fullName,
+      phone: leadForm.phone,
+      corporate_email: leadForm.corporateEmail,
+      company_name: leadForm.companyName,
+      weekly_meeting_volume: leadForm.weeklyMeetingVolume,
+      selected_plan: leadForm.selectedPlan || null,
+    };
+
+    try {
+      const response = await fetch(
+        editingLeadId
+          ? `${apiUrl}/trial-requests/${editingLeadId}`
+          : `${apiUrl}/trial-requests`,
+        {
+          method: editingLeadId ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            editingLeadId
+              ? body
+              : {
+                  ...body,
+                  lgpd_accepted: true,
+                  source: "dashboard-manual",
+                },
+          ),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          editingLeadId
+            ? "Nao foi possivel atualizar o lead."
+            : "Nao foi possivel cadastrar o lead.",
+        );
+      }
+
+      await loadTrialRequests();
+      setIsLeadModalOpen(false);
+      setEditingLeadId(null);
+      setLeadForm(emptyLeadForm);
+    } catch (err) {
+      setLeadFormStatus(err instanceof Error ? err.message : "Erro inesperado.");
+    } finally {
+      setIsSavingLead(false);
+    }
+  }
+
+  async function deleteLead(lead: TrialRequest) {
+    const shouldDelete = window.confirm(
+      `Excluir o lead de ${lead.full_name}? Esta acao nao pode ser desfeita.`,
+    );
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    setTrialRequestsStatus(null);
+    try {
+      const response = await fetch(`${apiUrl}/trial-requests/${lead.id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error("Nao foi possivel excluir o lead.");
+      }
+
+      setTrialRequests((current) =>
+        current.filter((trialRequest) => trialRequest.id !== lead.id),
+      );
+    } catch (err) {
+      setTrialRequestsStatus(err instanceof Error ? err.message : "Erro inesperado.");
     }
   }
 
@@ -688,14 +836,23 @@ export default function HomePage() {
                     Lista de contatos capturados pela landing do Coevo Meet.
                   </p>
                 </div>
-                <button
-                  className="rounded-lg border border-[#E7E7E2] bg-white px-5 py-3 text-sm font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] transition hover:border-[#F97316] hover:bg-[#FFF3EA]"
-                  disabled={isLoadingTrialRequests}
-                  onClick={loadTrialRequests}
-                  type="button"
-                >
-                  {isLoadingTrialRequests ? "Atualizando..." : "Atualizar lista"}
-                </button>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <button
+                    className="rounded-lg bg-[#11110F] px-5 py-3 text-sm font-bold text-white shadow-[0_18px_70px_rgba(17,17,15,0.07)] transition hover:bg-[#F97316]"
+                    onClick={openNewLeadModal}
+                    type="button"
+                  >
+                    Cadastrar lead
+                  </button>
+                  <button
+                    className="rounded-lg border border-[#E7E7E2] bg-white px-5 py-3 text-sm font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] transition hover:border-[#F97316] hover:bg-[#FFF3EA]"
+                    disabled={isLoadingTrialRequests}
+                    onClick={loadTrialRequests}
+                    type="button"
+                  >
+                    {isLoadingTrialRequests ? "Atualizando..." : "Atualizar lista"}
+                  </button>
+                </div>
               </div>
 
               {trialRequestsStatus ? (
@@ -717,15 +874,17 @@ export default function HomePage() {
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[880px] text-left text-sm">
+                    <table className="w-full min-w-[1080px] text-left text-sm">
                       <thead className="border-b border-[#E7E7E2] bg-[#FCFCFB] text-xs uppercase text-[#73736B]">
                         <tr>
                           <th className="px-4 py-3 font-semibold">Nome</th>
                           <th className="px-4 py-3 font-semibold">Empresa</th>
                           <th className="px-4 py-3 font-semibold">Plano</th>
+                          <th className="px-4 py-3 font-semibold">Reunioes/semana</th>
                           <th className="px-4 py-3 font-semibold">Contato</th>
                           <th className="px-4 py-3 font-semibold">Origem</th>
                           <th className="px-4 py-3 font-semibold">Data</th>
+                          <th className="px-4 py-3 font-semibold">Acoes</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#E7E7E2]">
@@ -748,6 +907,9 @@ export default function HomePage() {
                               </span>
                             </td>
                             <td className="px-4 py-4 text-[#11110F]">
+                              {weeklyMeetingVolumeLabel(lead.weekly_meeting_volume)}
+                            </td>
+                            <td className="px-4 py-4 text-[#11110F]">
                               {lead.phone}
                             </td>
                             <td className="px-4 py-4 text-[#73736B]">
@@ -758,6 +920,24 @@ export default function HomePage() {
                                 dateStyle: "short",
                                 timeStyle: "short",
                               }).format(new Date(lead.created_at))}
+                            </td>
+                            <td className="px-4 py-4">
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  className="rounded-md border border-[#E7E7E2] bg-white px-3 py-2 text-xs font-bold text-[#11110F] transition hover:border-[#F97316] hover:bg-[#FFF3EA]"
+                                  onClick={() => openEditLeadModal(lead)}
+                                  type="button"
+                                >
+                                  Editar
+                                </button>
+                                <button
+                                  className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 transition hover:bg-red-100"
+                                  onClick={() => deleteLead(lead)}
+                                  type="button"
+                                >
+                                  Excluir
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -1068,6 +1248,155 @@ export default function HomePage() {
           ) : null}
         </div>
       </section>
+
+      {isLeadModalOpen ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-[#11110F]/45 px-4 py-8 backdrop-blur-sm">
+          <div className="w-full max-w-2xl overflow-hidden rounded-xl border border-[#E7E7E2] bg-white shadow-[0_30px_120px_rgba(17,17,15,0.22)]">
+            <div className="flex items-start justify-between gap-5 border-b border-[#E7E7E2] p-6">
+              <div>
+                <p className="font-mono text-xs uppercase text-[#F97316]">
+                  {editingLeadId ? "Editar lead" : "Novo lead"}
+                </p>
+                <h2 className="mt-2 font-display text-3xl font-semibold text-[#11110F]">
+                  {editingLeadId
+                    ? "Atualizar solicitacao"
+                    : "Cadastrar solicitacao de teste"}
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-[#73736B]">
+                  Registre ou ajuste os dados do contato para acompanhamento
+                  comercial.
+                </p>
+              </div>
+              <button
+                aria-label="Fechar"
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[#E7E7E2] bg-[#FCFCFB] text-lg font-bold text-[#11110F] transition hover:border-[#F97316] hover:bg-[#FFF3EA]"
+                onClick={() => setIsLeadModalOpen(false)}
+                type="button"
+              >
+                x
+              </button>
+            </div>
+
+            <form className="grid gap-4 p-6" onSubmit={saveLead}>
+              <label className="grid gap-2 text-sm font-semibold text-[#11110F]">
+                Nome Completo
+                <input
+                  className="rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm font-normal outline-none focus:border-[#F97316]"
+                  minLength={3}
+                  onChange={(event) => updateLeadForm("fullName", event.target.value)}
+                  required
+                  type="text"
+                  value={leadForm.fullName}
+                />
+              </label>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="grid gap-2 text-sm font-semibold text-[#11110F]">
+                  Telefone
+                  <input
+                    className="rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm font-normal outline-none focus:border-[#F97316]"
+                    minLength={8}
+                    onChange={(event) => updateLeadForm("phone", event.target.value)}
+                    required
+                    type="tel"
+                    value={leadForm.phone}
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-semibold text-[#11110F]">
+                  E-mail Corporativo
+                  <input
+                    className="rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm font-normal outline-none focus:border-[#F97316]"
+                    onChange={(event) =>
+                      updateLeadForm("corporateEmail", event.target.value)
+                    }
+                    required
+                    type="email"
+                    value={leadForm.corporateEmail}
+                  />
+                </label>
+              </div>
+
+              <label className="grid gap-2 text-sm font-semibold text-[#11110F]">
+                Nome da Empresa
+                <input
+                  className="rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm font-normal outline-none focus:border-[#F97316]"
+                  minLength={2}
+                  onChange={(event) =>
+                    updateLeadForm("companyName", event.target.value)
+                  }
+                  required
+                  type="text"
+                  value={leadForm.companyName}
+                />
+              </label>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="grid gap-2 text-sm font-semibold text-[#11110F]">
+                  Reunioes por semana
+                  <select
+                    className="rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm font-normal outline-none focus:border-[#F97316]"
+                    onChange={(event) =>
+                      updateLeadForm(
+                        "weeklyMeetingVolume",
+                        event.target.value as WeeklyMeetingVolume,
+                      )
+                    }
+                    value={leadForm.weeklyMeetingVolume}
+                  >
+                    {weeklyMeetingVolumeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="grid gap-2 text-sm font-semibold text-[#11110F]">
+                  Plano de interesse
+                  <select
+                    className="rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm font-normal outline-none focus:border-[#F97316]"
+                    onChange={(event) =>
+                      updateLeadForm("selectedPlan", event.target.value)
+                    }
+                    value={leadForm.selectedPlan}
+                  >
+                    <option value="">Sem plano definido</option>
+                    {planOptions.map((plan) => (
+                      <option key={plan} value={plan}>
+                        {plan}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              {leadFormStatus ? (
+                <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {leadFormStatus}
+                </p>
+              ) : null}
+
+              <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
+                <button
+                  className="rounded-lg border border-[#E7E7E2] bg-white px-5 py-3 text-sm font-semibold text-[#11110F] transition hover:border-[#F97316] hover:bg-[#FFF3EA]"
+                  onClick={() => setIsLeadModalOpen(false)}
+                  type="button"
+                >
+                  Cancelar
+                </button>
+                <button
+                  className="rounded-lg bg-[#11110F] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#F97316] disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={isSavingLead}
+                  type="submit"
+                >
+                  {isSavingLead ? "Salvando..." : "Salvar lead"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

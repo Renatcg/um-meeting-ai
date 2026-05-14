@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     jarvis_agent_name: str = "jarvis"
     copilot_auto_dispatch: bool = True
     copilot_dispatch_timeout_seconds: float = 5.0
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from_email: str = "contato@coevolabs.com"
+    smtp_from_name: str = "Coevo Labs"
 
     model_config = SettingsConfigDict(
         env_file=("../../.env", ".env"),

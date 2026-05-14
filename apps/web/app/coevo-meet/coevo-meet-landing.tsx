@@ -2,8 +2,21 @@
 
 import type { FormEvent } from "react";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+type WeeklyMeetingVolume = "ate-5" | "5-10" | "10-20" | "mais-20";
+
+const weeklyMeetingVolumeOptions: Array<{
+  value: WeeklyMeetingVolume;
+  label: string;
+}> = [
+  { value: "ate-5", label: "Ate 5" },
+  { value: "5-10", label: "5 a 10" },
+  { value: "10-20", label: "10 a 20" },
+  { value: "mais-20", label: "+20" },
+];
 
 const metrics = [
   "Menos follow-up perdido",
@@ -422,6 +435,7 @@ type CoevoMeetLandingProps = {
 export default function CoevoMeetLanding({
   isMeetingEnded,
 }: CoevoMeetLandingProps) {
+  const router = useRouter();
   const [activeSdrStep, setActiveSdrStep] = useState(0);
   const [isTrialModalOpen, setIsTrialModalOpen] = useState(false);
   const [selectedTrialPlan, setSelectedTrialPlan] = useState<string | null>(null);
@@ -430,6 +444,7 @@ export default function CoevoMeetLanding({
     phone: "",
     corporateEmail: "",
     companyName: "",
+    weeklyMeetingVolume: "ate-5" as WeeklyMeetingVolume,
     lgpdAccepted: false,
   });
   const [trialFormStatus, setTrialFormStatus] = useState<
@@ -471,6 +486,7 @@ export default function CoevoMeetLanding({
           phone: trialForm.phone,
           corporate_email: trialForm.corporateEmail,
           company_name: trialForm.companyName,
+          weekly_meeting_volume: trialForm.weeklyMeetingVolume,
           lgpd_accepted: trialForm.lgpdAccepted,
           source: isMeetingEnded ? "meeting-ended-landing" : "coevo-meet-landing",
           selected_plan: selectedTrialPlan,
@@ -487,9 +503,12 @@ export default function CoevoMeetLanding({
         phone: "",
         corporateEmail: "",
         companyName: "",
+        weeklyMeetingVolume: "ate-5",
         lgpdAccepted: false,
       });
       setSelectedTrialPlan(null);
+      setIsTrialModalOpen(false);
+      router.push("/coevo-meet/sucesso");
     } catch {
       setTrialFormStatus("error");
     }
@@ -1275,6 +1294,27 @@ export default function CoevoMeetLanding({
                 />
               </label>
 
+              <label className="grid gap-2 text-sm font-semibold text-[#FAF7EF]">
+                Quantidade media de reunioes por semana
+                <select
+                  className="rounded-xl border border-white/10 bg-[#0B0D12] px-4 py-3 text-sm font-normal text-[#FAF7EF] outline-none transition focus:border-[#C8A45D]"
+                  onChange={(event) =>
+                    updateTrialForm(
+                      "weeklyMeetingVolume",
+                      event.target.value as WeeklyMeetingVolume,
+                    )
+                  }
+                  required
+                  value={trialForm.weeklyMeetingVolume}
+                >
+                  {weeklyMeetingVolumeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               <label className="flex gap-3 rounded-xl border border-white/10 bg-white/[.04] p-4 text-sm leading-6 text-[#A8B0BF]">
                 <input
                   checked={trialForm.lgpdAccepted}
@@ -1291,16 +1331,11 @@ export default function CoevoMeetLanding({
                 </span>
               </label>
 
-              {trialFormStatus === "success" ? (
-                <p className="rounded-xl border border-[#10B981]/25 bg-[#10B981]/10 px-4 py-3 text-sm font-semibold text-[#10B981]">
-                  Solicitação enviada. Entraremos em contato em breve.
-                </p>
-              ) : null}
-
               {trialFormStatus === "error" ? (
                 <p className="rounded-xl border border-[#EF4444]/25 bg-[#EF4444]/10 px-4 py-3 text-sm font-semibold text-[#EF4444]">
-                  Não foi possível enviar agora. Verifique os dados e tente
-                  novamente.
+                  Nao foi possivel enviar agora. Verifique os dados e tente
+                  novamente. O e-mail de confirmacao precisa ser enviado para
+                  concluir o cadastro.
                 </p>
               ) : null}
 

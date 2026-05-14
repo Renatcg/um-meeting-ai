@@ -15,6 +15,7 @@ from app.models import (
     TranscriptSegmentCreate,
     TrialRequest,
     TrialRequestCreate,
+    TrialRequestUpdate,
 )
 from app.sales_coach_service import RecommendationDraft
 
@@ -142,6 +143,7 @@ CREATE TABLE IF NOT EXISTS trial_requests (
     phone TEXT NOT NULL,
     corporate_email TEXT NOT NULL,
     company_name TEXT NOT NULL,
+    weekly_meeting_volume TEXT NOT NULL DEFAULT 'ate-5',
     lgpd_accepted BOOLEAN NOT NULL,
     source TEXT NOT NULL DEFAULT 'meeting-ended',
     selected_plan TEXT,
@@ -152,6 +154,11 @@ CREATE TABLE IF NOT EXISTS trial_requests (
 ALTER_TRIAL_REQUESTS_SELECTED_PLAN_SQL = """
 ALTER TABLE trial_requests
 ADD COLUMN IF NOT EXISTS selected_plan TEXT;
+"""
+
+ALTER_TRIAL_REQUESTS_VOLUME_SQL = """
+ALTER TABLE trial_requests
+ADD COLUMN IF NOT EXISTS weekly_meeting_volume TEXT NOT NULL DEFAULT 'ate-5';
 """
 
 CREATE_TRIAL_REQUESTS_CREATED_INDEX_SQL = """
@@ -169,6 +176,7 @@ async def init_database(settings: Settings) -> None:
         await conn.execute(CREATE_AGENT_PROFILE_TABLE_SQL)
         await conn.execute(CREATE_TRIAL_REQUESTS_TABLE_SQL)
         await conn.execute(ALTER_TRIAL_REQUESTS_SELECTED_PLAN_SQL)
+        await conn.execute(ALTER_TRIAL_REQUESTS_VOLUME_SQL)
         await conn.execute(CREATE_TRIAL_REQUESTS_CREATED_INDEX_SQL)
         await conn.execute(CREATE_TRANSCRIPT_TABLE_SQL)
         await conn.execute(CREATE_TRANSCRIPT_INDEX_SQL)
@@ -197,17 +205,19 @@ async def insert_trial_request(
         phone,
         corporate_email,
         company_name,
+        weekly_meeting_volume,
         lgpd_accepted,
         source,
         selected_plan
     )
-    VALUES (%s, %s, %s, %s, %s, %s, %s)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
     RETURNING
         id,
         full_name,
         phone,
         corporate_email,
         company_name,
+        weekly_meeting_volume,
         lgpd_accepted,
         source,
         selected_plan,
@@ -226,6 +236,7 @@ async def insert_trial_request(
                     payload.phone,
                     str(payload.corporate_email),
                     payload.company_name,
+                    payload.weekly_meeting_volume,
                     payload.lgpd_accepted,
                     payload.source,
                     payload.selected_plan,
@@ -251,6 +262,7 @@ async def list_trial_requests(
         phone,
         corporate_email,
         company_name,
+        weekly_meeting_volume,
         lgpd_accepted,
         source,
         selected_plan,
@@ -269,6 +281,75 @@ async def list_trial_requests(
             rows = await cur.fetchall()
 
     return [TrialRequest.model_validate(row) for row in rows]
+
+
+async def update_trial_request(
+    *,
+    settings: Settings,
+    lead_id: int,
+    payload: TrialRequestUpdate,
+) -> TrialRequest:
+    query = """
+    UPDATE trial_requests
+    SET
+        full_name = %s,
+        phone = %s,
+        corporate_email = %s,
+        company_name = %s,
+        weekly_meeting_volume = %s,
+        selected_plan = %s
+    WHERE id = %s
+    RETURNING
+        id,
+        full_name,
+        phone,
+        corporate_email,
+        company_name,
+        weekly_meeting_volume,
+        lgpd_accepted,
+        source,
+        selected_plan,
+        created_at;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                query,
+                (
+                    payload.full_name,
+                    payload.phone,
+                    str(payload.corporate_email),
+                    payload.company_name,
+                    payload.weekly_meeting_volume,
+                    payload.selected_plan,
+                    lead_id,
+                ),
+            )
+            row = await cur.fetchone()
+
+    if row is None:
+        raise ValueError("Trial request not found.")
+
+    return TrialRequest.model_validate(row)
+
+
+async def delete_trial_request(*, settings: Settings, lead_id: int) -> None:
+    query = "DELETE FROM trial_requests WHERE id = %s RETURNING id;"
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (lead_id,))
+            row = await cur.fetchone()
+
+    if row is None:
+        raise ValueError("Trial request not found.")
 
 
 async def insert_meeting(*, settings: Settings, meeting: Meeting) -> Meeting:
