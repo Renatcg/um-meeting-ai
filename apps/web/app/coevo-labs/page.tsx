@@ -8,235 +8,540 @@ export const metadata: Metadata = {
 
 const navItems = ["Sobre", "Como funciona", "Recursos", "Solucoes", "Criadores"];
 
-const orbitNodes = [
-  {
-    title: "Impactar",
-    text: "Gere impacto real nas empresas do Grupo Coevo.",
-    icon: "rocket",
-    className: "left-[10%] top-[27%]",
-    labelClassName: "-left-36 top-2 text-right",
-  },
-  {
-    title: "Criar",
-    text: "Desenvolva solucoes com IA e ferramentas de ponta.",
-    icon: "build",
-    className: "right-[23%] top-[9%]",
-    labelClassName: "left-32 top-0",
-  },
-  {
-    title: "Validar",
-    text: "Solucoes com tracao podem virar produtos para o mercado.",
-    icon: "chart",
-    className: "right-[2%] top-[37%]",
-    labelClassName: "left-32 top-24",
-  },
-  {
-    title: "Crescer",
-    text: "Criador e Coevo juntos. Receita, reconhecimento e participacao.",
-    icon: "growth",
-    className: "right-[18%] bottom-[12%]",
-    labelClassName: "left-28 top-24",
-  },
-  {
-    title: "Compartilhar",
-    text: "Torne sua solucao disponivel para todas as empresas do grupo.",
-    icon: "people",
-    className: "left-[3%] bottom-[21%]",
-    labelClassName: "-left-10 top-28",
-  },
-];
-
-const proofItems = [
-  {
-    icon: "people",
-    title: "+ colaborativo",
-    text: "Inovacao construida em rede.",
-  },
-  {
-    icon: "grid",
-    title: "+ produtividade",
-    text: "Ferramentas que aceleram resultados.",
-  },
-  {
-    icon: "spark",
-    title: "+ oportunidades",
-    text: "Ideias que podem virar negocios reais.",
-  },
-  {
-    icon: "lines",
-    title: "100% Coevo",
-    text: "Feito para o grupo. Aberto para o mundo.",
-  },
-];
-
-function LabsLogo() {
-  return (
-    <div className="leading-none">
-      <div className="font-display text-[2rem] font-semibold uppercase tracking-[0.42em] text-white md:text-[2.45rem]">
-        Coevo
-      </div>
-      <div className="mt-1 pl-9 font-mono text-[0.86rem] uppercase tracking-[0.78em] text-white/80 md:text-[1rem]">
-        Labs
-      </div>
-    </div>
-  );
-}
-
-function MiniIcon({ type }: { type: string }) {
-  if (type === "rocket") {
-    return (
-      <span className="relative h-9 w-9 rotate-45 rounded-[40%_40%_50%_50%] border-2 border-white/80">
-        <span className="absolute left-2 top-2 h-2.5 w-2.5 rounded-full border border-white/80" />
-        <span className="absolute -bottom-2 left-1 h-3 w-2 border-l-2 border-white/70" />
-        <span className="absolute -right-2 bottom-1 h-2 w-3 border-t-2 border-white/70" />
-      </span>
-    );
-  }
-
-  if (type === "build") {
-    return (
-      <span className="relative h-9 w-9">
-        <span className="absolute left-1 top-3 h-4 w-7 rounded-full border-2 border-white/80" />
-        <span className="absolute left-4 top-1 h-7 w-2 rounded-full border-2 border-white/80" />
-        <span className="absolute bottom-1 left-2 h-2 w-2 rounded-full bg-white/80" />
-        <span className="absolute bottom-1 right-2 h-2 w-2 rounded-full bg-white/80" />
-      </span>
-    );
-  }
-
-  if (type === "chart") {
-    return (
-      <span className="relative h-9 w-9">
-        <span className="absolute bottom-1 left-1 h-7 w-1.5 rounded-full bg-white/75" />
-        <span className="absolute bottom-1 left-4 h-4 w-1.5 rounded-full bg-white/75" />
-        <span className="absolute bottom-1 right-1 h-8 w-1.5 rounded-full bg-white/75" />
-        <span className="absolute left-1 top-2 h-3 w-7 rounded-t-full border-t-2 border-white/80" />
-      </span>
-    );
-  }
-
-  if (type === "growth") {
-    return (
-      <span className="relative grid h-10 w-10 place-items-center rounded-full border-2 border-white/75">
-        <span className="font-mono text-2xl leading-none text-white/80">$</span>
-        <span className="absolute right-0 top-1 h-3 w-3 rounded-full border-2 border-white/80" />
-      </span>
-    );
-  }
-
-  if (type === "grid") {
-    return (
-      <span className="grid h-10 w-10 grid-cols-2 gap-1.5">
-        <span className="rounded border-2 border-white/70" />
-        <span className="rounded border-2 border-white/70" />
-        <span className="rounded border-2 border-white/70" />
-        <span className="rounded border-2 border-white/70" />
-      </span>
-    );
-  }
-
-  if (type === "spark") {
-    return (
-      <span className="relative h-11 w-11">
-        <span className="absolute left-1/2 top-0 h-11 w-px -translate-x-1/2 bg-white/70" />
-        <span className="absolute left-0 top-1/2 h-px w-11 -translate-y-1/2 bg-white/70" />
-        <span className="absolute left-2 top-2 h-7 w-7 rotate-45 border border-white/60" />
-      </span>
-    );
-  }
-
-  if (type === "lines") {
-    return (
-      <span className="grid h-10 w-10 content-center gap-2">
-        <span className="h-1 w-9 rounded-full bg-white/70" />
-        <span className="h-1 w-7 rounded-full bg-white/70" />
-        <span className="h-1 w-9 rounded-full bg-white/70" />
-      </span>
-    );
-  }
-
-  return (
-    <span className="relative h-10 w-10">
-      <span className="absolute left-0 top-2 h-5 w-5 rounded-full border-2 border-white/70" />
-      <span className="absolute right-0 top-2 h-5 w-5 rounded-full border-2 border-white/70" />
-      <span className="absolute bottom-1 left-2 h-4 w-6 rounded-t-full border-2 border-b-0 border-white/70" />
-    </span>
-  );
-}
-
-function OrbitCard({
-  node,
-}: {
-  node: (typeof orbitNodes)[number];
-}) {
-  return (
-    <div className={`absolute ${node.className}`}>
-      <div className="group relative grid h-28 w-28 place-items-center rounded-[1.75rem] border border-white/15 bg-[#15171D] shadow-[0_30px_90px_rgba(0,0,0,.72),0_0_30px_rgba(255,255,255,.14)] transition duration-500 hover:-translate-y-2 hover:shadow-[0_40px_100px_rgba(0,0,0,.8),0_0_42px_rgba(255,255,255,.26)]">
-        <span className="absolute inset-x-4 bottom-[-8px] h-3 rounded-full bg-white shadow-[0_0_22px_rgba(255,255,255,.95)]" />
-        <span className="absolute inset-x-2 bottom-2 h-px bg-white/65 shadow-[0_0_18px_rgba(255,255,255,.85)]" />
-        <MiniIcon type={node.icon} />
-      </div>
-      <div className={`absolute hidden w-40 md:block ${node.labelClassName}`}>
-        <p className="font-mono text-xs font-bold uppercase tracking-[0.18em] text-white">
-          {node.title}
-        </p>
-        <p className="mt-2 text-sm leading-5 text-white/58">{node.text}</p>
-      </div>
-    </div>
-  );
-}
-
-function LabsDiagram() {
-  return (
-    <div className="relative min-h-[560px] overflow-hidden rounded-[2rem] md:min-h-[680px]">
-      <div className="absolute inset-0 opacity-45 [background-image:linear-gradient(to_right,rgba(255,255,255,.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,.08)_1px,transparent_1px)] [background-size:42px_42px] [transform:perspective(900px)_rotateX(58deg)_rotateZ(-38deg)_scale(1.25)]" />
-      <div className="absolute left-[45%] top-[44%] h-[1px] w-[46%] origin-left -rotate-[21deg] bg-white/55 shadow-[0_0_18px_rgba(255,255,255,.9)]" />
-      <div className="absolute left-[39%] top-[45%] h-[1px] w-[41%] origin-left rotate-[31deg] bg-white/45 shadow-[0_0_18px_rgba(255,255,255,.8)]" />
-      <div className="absolute left-[26%] top-[45%] h-[1px] w-[33%] origin-right rotate-[24deg] bg-white/50 shadow-[0_0_18px_rgba(255,255,255,.85)]" />
-      <div className="absolute left-[24%] top-[57%] h-[1px] w-[34%] origin-right -rotate-[18deg] bg-white/45 shadow-[0_0_18px_rgba(255,255,255,.75)]" />
-      <div className="absolute left-[53%] top-[32%] h-[1px] w-[26%] origin-left -rotate-[48deg] bg-white/45 shadow-[0_0_18px_rgba(255,255,255,.75)]" />
-
-      <div className="absolute left-1/2 top-1/2 grid h-52 w-52 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-[2.25rem] border border-white/18 bg-[#17191F] shadow-[0_42px_110px_rgba(0,0,0,.9),0_0_40px_rgba(255,255,255,.16)] md:h-64 md:w-64">
-        <span className="absolute inset-x-7 bottom-[-10px] h-4 rounded-full bg-white shadow-[0_0_28px_rgba(255,255,255,.95)]" />
-        <span className="absolute inset-x-4 bottom-4 h-px bg-white/75 shadow-[0_0_28px_rgba(255,255,255,.9)]" />
-        <span className="absolute inset-10 rounded-[1.8rem] bg-white/[.03]" />
-        <span className="relative grid h-28 w-28 place-items-center rounded-[1.6rem] bg-white/[.04] shadow-[inset_0_0_36px_rgba(255,255,255,.08)]">
-          <span className="flex h-14 items-center gap-3">
-            <span className="h-12 w-3 rounded bg-white shadow-[0_0_18px_rgba(255,255,255,.9)]" />
-            <span className="h-12 w-3 rounded bg-white shadow-[0_0_18px_rgba(255,255,255,.9)]" />
-            <span className="h-12 w-3 rounded bg-white shadow-[0_0_18px_rgba(255,255,255,.9)]" />
-          </span>
-        </span>
-      </div>
-
-      {orbitNodes.map((node) => (
-        <OrbitCard key={node.title} node={node} />
-      ))}
-    </div>
-  );
-}
-
 export default function CoevoLabsLandingPage() {
   return (
-    <main className="min-h-screen overflow-hidden bg-[#03060D] text-white">
+    <main className="coevo-labs-page">
       <style>{`
-        @keyframes labsPulse {
-          0%, 100% { opacity: .38; transform: scale(.96); }
-          50% { opacity: .72; transform: scale(1.04); }
+        .coevo-labs-page {
+          --bg: #05070c;
+          --panel: #11141a;
+          --panel-2: #171a20;
+          --text: #f5f6f8;
+          --muted: rgba(245, 246, 248, 0.64);
+          --muted-2: rgba(245, 246, 248, 0.42);
+          --line: rgba(245, 246, 248, 0.14);
+          --line-strong: rgba(245, 246, 248, 0.44);
+          --font-main: "Rajdhani", "Orbitron", "Eurostile", "Michroma", "Inter", system-ui, sans-serif;
+          min-height: 100vh;
+          background:
+            radial-gradient(circle at 76% 28%, rgba(255,255,255,0.075), transparent 22%),
+            radial-gradient(circle at 18% 38%, rgba(255,255,255,0.035), transparent 24%),
+            linear-gradient(135deg, #05070c 0%, #070910 44%, #03050a 100%);
+          color: var(--text);
+          overflow: hidden;
+        }
+
+        .labs-hero {
+          position: relative;
+          isolation: isolate;
+          min-height: 100vh;
+          padding: clamp(22px, 2.8vw, 42px) clamp(22px, 3.2vw, 56px) 28px;
+          overflow: hidden;
+        }
+
+        .labs-hero::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          z-index: -1;
+          opacity: .23;
+          pointer-events: none;
+          background-image:
+            linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
+          background-size: 56px 56px;
+          mask-image: radial-gradient(circle at 74% 47%, #000 0%, transparent 62%);
+        }
+
+        .labs-hero::after {
+          content: "";
+          position: absolute;
+          inset: -18%;
+          z-index: -2;
+          background:
+            linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px),
+            linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px);
+          background-size: 120px 120px;
+          transform: perspective(900px) rotateX(62deg) rotateZ(-32deg) scale(1.35);
+          transform-origin: 72% 46%;
+          opacity: .28;
+        }
+
+        .labs-nav {
+          position: relative;
+          z-index: 5;
+          display: grid;
+          grid-template-columns: 240px 1fr auto;
+          align-items: start;
+          gap: 28px;
+        }
+
+        .labs-brand {
+          display: inline-flex;
+          width: 210px;
+          height: 72px;
+          align-items: flex-start;
+          overflow: hidden;
+        }
+
+        .labs-brand img {
+          width: 210px;
+          height: auto;
+          filter: invert(1) grayscale(1) contrast(1.22) brightness(1.04);
+          mix-blend-mode: screen;
+          transform: translateY(-24px);
+        }
+
+        .labs-links {
+          display: flex;
+          justify-content: center;
+          gap: clamp(26px, 4vw, 64px);
+          padding-top: 20px;
+          font-family: var(--font-main);
+          text-transform: uppercase;
+          letter-spacing: .08em;
+          font-size: 13px;
+          font-weight: 700;
+        }
+
+        .labs-links a {
+          color: rgba(255,255,255,.88);
+          text-decoration: none;
+          transition: color .22s ease, opacity .22s ease;
+        }
+
+        .labs-links a:hover {
+          color: #fff;
+          opacity: .72;
+        }
+
+        .labs-actions {
+          display: flex;
+          align-items: center;
+          gap: 30px;
+        }
+
+        .labs-btn {
+          display: inline-flex;
+          min-height: 54px;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          border-radius: 4px;
+          padding: 0 30px;
+          font-family: var(--font-main);
+          font-size: 13px;
+          font-weight: 800;
+          letter-spacing: .13em;
+          text-transform: uppercase;
+          text-decoration: none;
+          transition: transform .22s ease, background .22s ease, border-color .22s ease, box-shadow .22s ease;
+        }
+
+        .labs-btn:hover {
+          transform: translateY(-2px);
+        }
+
+        .labs-btn--ghost,
+        .labs-btn--secondary {
+          border: 1px solid rgba(255,255,255,.28);
+          background: rgba(255,255,255,.035);
+          color: #fff;
+        }
+
+        .labs-btn--primary {
+          border: 1px solid rgba(255,255,255,.82);
+          background: #f7f7f7;
+          color: #06080d;
+          box-shadow: 0 0 28px rgba(255,255,255,.12);
+        }
+
+        .labs-menu {
+          display: grid;
+          width: 36px;
+          height: 36px;
+          align-content: center;
+          gap: 5px;
+          border: 0;
+          background: transparent;
+          padding: 0;
+          cursor: pointer;
+        }
+
+        .labs-menu span {
+          display: block;
+          width: 28px;
+          height: 2px;
+          border-radius: 99px;
+          background: #fff;
+          box-shadow: 0 0 12px rgba(255,255,255,.34);
+        }
+
+        .labs-content {
+          position: relative;
+          z-index: 2;
+          display: grid;
+          grid-template-columns: minmax(430px, .82fr) minmax(520px, 1.18fr);
+          gap: clamp(20px, 4vw, 72px);
+          align-items: center;
+          min-height: calc(100vh - 260px);
+          padding-top: clamp(62px, 8vw, 128px);
+        }
+
+        .labs-copy {
+          max-width: 650px;
+        }
+
+        .labs-eyebrow {
+          margin: 0;
+          color: var(--muted-2);
+          font-family: var(--font-main);
+          font-size: 14px;
+          font-weight: 600;
+          letter-spacing: .24em;
+          text-transform: uppercase;
+        }
+
+        .labs-eyebrow-line {
+          width: 78px;
+          height: 1px;
+          margin: 26px 0 30px;
+          background: rgba(255,255,255,.56);
+        }
+
+        .labs-title {
+          margin: 0;
+          color: #f7f8fb;
+          font-family: var(--font-main);
+          font-size: clamp(52px, 5.1vw, 90px);
+          font-weight: 500;
+          line-height: 1.17;
+          letter-spacing: -.035em;
+          text-shadow: 0 0 28px rgba(255,255,255,.16);
+        }
+
+        .glyph-e-inline {
+          display: inline-block;
+          margin: 0 .02em;
+          color: rgba(255,255,255,.72);
+          transform: translateY(-.04em) scaleX(1.2);
+          text-shadow: 0 0 22px rgba(255,255,255,.22);
+        }
+
+        .labs-description {
+          max-width: 590px;
+          margin: 28px 0 0;
+          color: rgba(255,255,255,.82);
+          font-size: clamp(16px, 1.25vw, 20px);
+          line-height: 1.55;
+        }
+
+        .labs-ctas {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 22px;
+          margin-top: 58px;
+        }
+
+        .labs-visual {
+          position: relative;
+          min-height: 610px;
+        }
+
+        .labs-network {
+          position: absolute;
+          inset: 0;
+          transform: translateY(8px);
+        }
+
+        .network-line {
+          position: absolute;
+          height: 1px;
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,.62), transparent);
+          opacity: .86;
+          box-shadow: 0 0 12px rgba(255,255,255,.28);
+          transform-origin: left center;
+        }
+
+        .network-line--a { width: 270px; left: 35%; top: 34%; transform: rotate(-22deg); }
+        .network-line--b { width: 250px; left: 52%; top: 30%; transform: rotate(25deg); }
+        .network-line--c { width: 245px; left: 54%; top: 46%; transform: rotate(-8deg); }
+        .network-line--d { width: 260px; left: 28%; top: 55%; transform: rotate(-7deg); }
+        .network-line--e { width: 230px; left: 52%; top: 58%; transform: rotate(42deg); }
+
+        .core-card,
+        .labs-node {
+          position: absolute;
+          border: 1px solid rgba(255,255,255,.16);
+          background: linear-gradient(145deg, rgba(32,35,42,.98), rgba(10,12,17,.98));
+          box-shadow:
+            0 26px 50px rgba(0,0,0,.55),
+            inset 0 1px 0 rgba(255,255,255,.08);
+        }
+
+        .core-card {
+          left: 46%;
+          top: 39%;
+          width: 250px;
+          height: 180px;
+          border-radius: 30px;
+          transform: translate(-50%, -50%) rotateX(54deg) rotateZ(-45deg);
+        }
+
+        .core-card::after,
+        .labs-node::after {
+          content: "";
+          position: absolute;
+          left: 14px;
+          right: 14px;
+          bottom: -12px;
+          height: 11px;
+          border-radius: 0 0 18px 18px;
+          background: rgba(255,255,255,.88);
+          filter: blur(.2px) drop-shadow(0 0 16px rgba(255,255,255,.55));
+        }
+
+        .core-card__glow {
+          position: absolute;
+          inset: 22px;
+          border-radius: 24px;
+          background: radial-gradient(circle, rgba(255,255,255,.16), transparent 68%);
+        }
+
+        .core-card__icon {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 16px;
+          transform: rotateZ(45deg) rotateX(-54deg);
+        }
+
+        .core-card__icon span,
+        .metric-icon--lines span {
+          display: block;
+          width: 10px;
+          height: 70px;
+          border-radius: 999px;
+          background: #fff;
+          box-shadow: 0 0 22px rgba(255,255,255,.46);
+        }
+
+        .labs-node {
+          width: 118px;
+          height: 92px;
+          border-radius: 21px;
+          transform: rotateX(54deg) rotateZ(-45deg);
+        }
+
+        .labs-node__icon {
+          position: absolute;
+          inset: 0;
+          display: grid;
+          place-items: center;
+          color: rgba(255,255,255,.9);
+          font-family: var(--font-main);
+          font-size: 37px;
+          transform: rotateZ(45deg) rotateX(-54deg);
+        }
+
+        .node--impactar { left: 25%; top: 25%; }
+        .node--criar { left: 66%; top: 11%; }
+        .node--validar { left: 82%; top: 32%; }
+        .node--compartilhar { left: 17%; top: 57%; }
+        .node--crescer { left: 68%; top: 67%; }
+
+        .labs-callout {
+          position: absolute;
+          max-width: 190px;
+          color: var(--muted);
+          font-size: 15px;
+          line-height: 1.35;
+        }
+
+        .labs-callout strong {
+          display: block;
+          margin-bottom: 8px;
+          color: #fff;
+          font-family: var(--font-main);
+          font-size: 14px;
+          letter-spacing: .16em;
+          text-transform: uppercase;
+        }
+
+        .callout--impactar { left: 6%; top: 31%; text-align: right; }
+        .callout--criar { right: 9%; top: 10%; }
+        .callout--validar { right: 3%; top: 51%; }
+        .callout--compartilhar { left: 9%; top: 73%; }
+        .callout--crescer { right: 7%; top: 79%; }
+
+        .labs-metrics {
+          position: relative;
+          z-index: 3;
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          margin-top: 18px;
+          border-top: 1px solid rgba(255,255,255,.12);
+          border-bottom: 1px solid rgba(255,255,255,.10);
+        }
+
+        .labs-metric {
+          display: grid;
+          grid-template-columns: 64px 1fr;
+          gap: 22px;
+          align-items: center;
+          min-height: 118px;
+          padding: 24px 30px;
+          border-right: 1px solid rgba(255,255,255,.09);
+        }
+
+        .labs-metric:last-child {
+          border-right: 0;
+        }
+
+        .labs-metric strong {
+          display: block;
+          margin-bottom: 6px;
+          font-family: var(--font-main);
+          font-size: 16px;
+          font-weight: 800;
+          letter-spacing: .16em;
+          text-transform: uppercase;
+        }
+
+        .labs-metric p {
+          margin: 0;
+          color: var(--muted-2);
+          font-size: 17px;
+          line-height: 1.25;
+        }
+
+        .metric-icon {
+          width: 52px;
+          height: 52px;
+          color: rgba(255,255,255,.72);
+        }
+
+        .metric-icon--people {
+          position: relative;
+        }
+
+        .metric-icon--people span {
+          position: absolute;
+          bottom: 4px;
+          width: 24px;
+          height: 21px;
+          border: 2px solid rgba(255,255,255,.72);
+          border-radius: 999px 999px 0 0;
+        }
+
+        .metric-icon--people span:nth-child(1) { left: 0; }
+        .metric-icon--people span:nth-child(2) { left: 23px; }
+        .metric-icon--people span:nth-child(3) {
+          left: 12px;
+          top: 3px;
+          width: 16px;
+          height: 16px;
+          border-radius: 50%;
+        }
+
+        .metric-icon--grid {
+          display: grid;
+          grid-template-columns: repeat(2, 16px);
+          grid-auto-rows: 16px;
+          align-content: center;
+          justify-content: center;
+          gap: 10px;
+        }
+
+        .metric-icon--grid span {
+          border: 2px solid rgba(255,255,255,.72);
+          border-radius: 5px;
+        }
+
+        .metric-icon--spark {
+          display: grid;
+          place-items: center;
+          font-size: 50px;
+          line-height: 1;
+        }
+
+        .metric-icon--lines {
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          gap: 7px;
+        }
+
+        .metric-icon--lines span {
+          width: 38px;
+          height: 4px;
+        }
+
+        .scroll-hint {
+          position: relative;
+          z-index: 3;
+          display: inline-flex;
+          margin-top: 26px;
+          color: rgba(255,255,255,.44);
+          font-family: var(--font-main);
+          font-size: 12px;
+          letter-spacing: .18em;
+          text-transform: uppercase;
+          text-decoration: none;
+        }
+
+        @media (max-width: 1180px) {
+          .labs-nav { grid-template-columns: 190px 1fr auto; }
+          .labs-brand { width: 180px; height: 62px; }
+          .labs-brand img { width: 180px; transform: translateY(-20px); }
+          .labs-links { gap: 24px; }
+          .labs-content { grid-template-columns: 1fr; }
+          .labs-visual { min-height: 540px; }
+          .labs-metrics { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        @media (max-width: 760px) {
+          .labs-hero { padding: 22px 18px; }
+          .labs-nav { grid-template-columns: 1fr auto; }
+          .labs-links { display: none; }
+          .labs-btn--ghost { display: none; }
+          .labs-content {
+            min-height: auto;
+            padding-top: 62px;
+          }
+          .labs-title { font-size: clamp(44px, 13vw, 66px); }
+          .labs-description br { display: none; }
+          .labs-ctas { margin-top: 34px; }
+          .labs-btn { width: 100%; }
+          .labs-visual {
+            min-height: 520px;
+            margin-bottom: -80px;
+            transform: scale(.82);
+            transform-origin: top center;
+          }
+          .labs-metrics { grid-template-columns: 1fr; }
+          .labs-metric {
+            border-right: 0;
+            border-bottom: 1px solid rgba(255,255,255,.09);
+          }
+          .labs-metric:last-child { border-bottom: 0; }
         }
       `}</style>
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_22%_20%,rgba(255,255,255,.08),transparent_25%),radial-gradient(circle_at_78%_44%,rgba(255,255,255,.10),transparent_30%),linear-gradient(135deg,#040813_0%,#070910_42%,#02040A_100%)]" />
-      <div className="pointer-events-none fixed inset-0 opacity-[.045] [background-image:linear-gradient(to_right,white_1px,transparent_1px),linear-gradient(to_bottom,white_1px,transparent_1px)] [background-size:54px_54px]" />
-      <div className="pointer-events-none fixed -left-32 top-28 h-96 w-96 rounded-full border border-white/10 blur-sm [animation:labsPulse_7s_ease-in-out_infinite]" />
 
-      <section className="relative mx-auto flex min-h-screen max-w-[1720px] flex-col px-6 py-8 md:px-12 lg:px-14">
-        <header className="flex items-start justify-between gap-8">
-          <LabsLogo />
+      <section className="labs-hero" aria-label="Hero Coevo Labs">
+        <header className="labs-nav">
+          <a className="labs-brand" href="#" aria-label="Coevo Labs">
+            <img
+              src="/brand/coevo-labs-logo.png"
+              alt="Coevo Labs"
+            />
+          </a>
 
-          <nav className="hidden items-center gap-12 pt-5 lg:flex">
+          <nav className="labs-links" aria-label="Navegacao principal">
             {navItems.map((item) => (
               <a
-                className="font-mono text-xs font-semibold uppercase tracking-[0.18em] text-white/86 transition hover:text-white"
                 href={`#${item.toLowerCase().replaceAll(" ", "-")}`}
                 key={item}
               >
@@ -245,90 +550,158 @@ export default function CoevoLabsLandingPage() {
             ))}
           </nav>
 
-          <div className="flex items-center gap-10 pt-1">
-            <a
-              className="hidden rounded-sm border border-white/24 px-6 py-4 font-mono text-xs font-bold uppercase tracking-[0.18em] text-white transition hover:border-white hover:bg-white hover:text-[#03060D] md:inline-flex"
-              href="#criar"
-            >
-              Quero criar
-              <span className="ml-3 text-lg leading-none">↗</span>
+          <div className="labs-actions">
+            <a className="labs-btn labs-btn--ghost" href="#criar">
+              Quero criar <span>↗</span>
             </a>
-            <button
-              aria-label="Abrir menu"
-              className="grid h-12 w-12 place-items-center text-white"
-              type="button"
-            >
-              <span className="grid gap-2">
-                <span className="h-0.5 w-7 bg-white" />
-                <span className="h-0.5 w-7 bg-white" />
-                <span className="h-0.5 w-7 bg-white" />
-              </span>
+            <button className="labs-menu" aria-label="Abrir menu" type="button">
+              <span />
+              <span />
+              <span />
             </button>
           </div>
         </header>
 
-        <section className="grid flex-1 items-center gap-10 py-16 lg:grid-cols-[minmax(420px,.72fr)_minmax(600px,1fr)] lg:py-10">
-          <div className="relative z-10">
-            <p className="font-mono text-xs uppercase tracking-[0.34em] text-white/52">
-              Coevo Labs — Inovacao em rede
-            </p>
-            <div className="mt-4 h-px w-24 bg-white/70" />
+        <div className="labs-content">
+          <div className="labs-copy">
+            <p className="labs-eyebrow">Coevo Labs — Inovacao em rede</p>
+            <div className="labs-eyebrow-line" />
 
-            <h1 className="mt-10 max-w-3xl font-display text-[3.9rem] font-semibold leading-[1.04] tracking-[-0.04em] text-white md:text-[5.65rem] lg:text-[5.1rem] xl:text-[6rem]">
-              Ideias que transformam. Ferramentas que multiplicam.
+            <h1 className="labs-title">
+              Ideias que
+              <br />
+              t<span className="glyph-e-inline">≡</span>ansformam.
+              <br />
+              F<span className="glyph-e-inline">≡</span>rramentas que
+              <br />
+              multiplicam.
             </h1>
 
-            <p className="mt-8 max-w-2xl text-lg leading-8 text-white/78 md:text-xl">
-              Coevo Labs e o laboratorio de inovacao do Grupo Coevo. Aqui,
-              colaboradores criam solucoes que impulsionam nossas empresas e
-              que podem se tornar produtos para o mundo.
+            <p className="labs-description">
+              Coevo Labs e o laboratorio de inovacao do Grupo Coevo.
+              <br />
+              Aqui, colaboradores criam solucoes que impulsionam nossas
+              <br />
+              empresas — e que podem se tornar produtos para o mundo.
             </p>
 
-            <div className="mt-12 flex flex-col gap-4 sm:flex-row">
-              <a
-                className="inline-flex items-center justify-center rounded-sm bg-white px-8 py-5 font-mono text-xs font-bold uppercase tracking-[0.18em] text-[#03060D] shadow-[0_0_36px_rgba(255,255,255,.22)] transition hover:-translate-y-1 hover:shadow-[0_0_50px_rgba(255,255,255,.34)]"
-                href="#criar"
-              >
-                Comece a criar
-                <span className="ml-4 text-lg leading-none">↗</span>
+            <div className="labs-ctas">
+              <a className="labs-btn labs-btn--primary" href="#criar">
+                Comece a criar <span>↗</span>
               </a>
-              <a
-                className="inline-flex items-center justify-center rounded-sm border border-white/26 px-8 py-5 font-mono text-xs font-bold uppercase tracking-[0.18em] text-white transition hover:-translate-y-1 hover:border-white hover:bg-white/8"
-                href="#solucoes"
-              >
-                Conheca solucoes
-                <span className="ml-4 text-lg leading-none">↗</span>
+              <a className="labs-btn labs-btn--secondary" href="#solucoes">
+                Conheca solucoes <span>↗</span>
               </a>
             </div>
           </div>
 
-          <LabsDiagram />
-        </section>
+          <div className="labs-visual" aria-label="Rede de solucoes Coevo Labs">
+            <div className="labs-network">
+              <div className="network-line network-line--a" />
+              <div className="network-line network-line--b" />
+              <div className="network-line network-line--c" />
+              <div className="network-line network-line--d" />
+              <div className="network-line network-line--e" />
 
-        <section className="border-y border-white/10">
-          <div className="grid divide-y divide-white/10 md:grid-cols-2 md:divide-x md:divide-y-0 xl:grid-cols-4">
-            {proofItems.map((item) => (
-              <article
-                className="grid grid-cols-[4rem_1fr] items-center gap-5 px-6 py-7"
-                key={item.title}
-              >
-                <MiniIcon type={item.icon} />
-                <div>
-                  <p className="font-mono text-sm font-semibold uppercase tracking-[0.2em] text-white">
-                    {item.title}
-                  </p>
-                  <p className="mt-2 text-base leading-6 text-white/52">
-                    {item.text}
-                  </p>
+              <div className="core-card">
+                <div className="core-card__glow" />
+                <div className="core-card__icon">
+                  <span />
+                  <span />
+                  <span />
                 </div>
-              </article>
-            ))}
-          </div>
-        </section>
+              </div>
 
-        <p className="mt-10 font-mono text-[0.7rem] uppercase tracking-[0.22em] text-white/42">
+              <article className="labs-node node--impactar">
+                <div className="labs-node__icon">⌁</div>
+              </article>
+              <article className="labs-node node--criar">
+                <div className="labs-node__icon">✦</div>
+              </article>
+              <article className="labs-node node--validar">
+                <div className="labs-node__icon">⌁</div>
+              </article>
+              <article className="labs-node node--compartilhar">
+                <div className="labs-node__icon">⌘</div>
+              </article>
+              <article className="labs-node node--crescer">
+                <div className="labs-node__icon">$</div>
+              </article>
+
+              <div className="labs-callout callout--impactar">
+                <strong>Impactar</strong>
+                <span>Gere impacto real nas empresas do Grupo Coevo.</span>
+              </div>
+              <div className="labs-callout callout--criar">
+                <strong>Criar</strong>
+                <span>Desenvolva solucoes com IA e ferramentas de ponta.</span>
+              </div>
+              <div className="labs-callout callout--validar">
+                <strong>Validar</strong>
+                <span>Solucoes com tracao podem virar produtos para o mercado.</span>
+              </div>
+              <div className="labs-callout callout--compartilhar">
+                <strong>Compartilhar</strong>
+                <span>Torne sua solucao disponivel para todas as empresas do grupo.</span>
+              </div>
+              <div className="labs-callout callout--crescer">
+                <strong>Crescer</strong>
+                <span>Criador e Coevo juntos. Receita, reconhecimento e participacao.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <footer className="labs-metrics" aria-label="Destaques Coevo Labs">
+          <article className="labs-metric">
+            <div className="metric-icon metric-icon--people">
+              <span />
+              <span />
+              <span />
+            </div>
+            <div>
+              <strong>+ Colaborativo</strong>
+              <p>Inovacao construida em rede.</p>
+            </div>
+          </article>
+
+          <article className="labs-metric">
+            <div className="metric-icon metric-icon--grid">
+              <span />
+              <span />
+              <span />
+              <span />
+            </div>
+            <div>
+              <strong>+ Produtividade</strong>
+              <p>Ferramentas que aceleram resultados.</p>
+            </div>
+          </article>
+
+          <article className="labs-metric">
+            <div className="metric-icon metric-icon--spark">✧</div>
+            <div>
+              <strong>+ Oportunidades</strong>
+              <p>Ideias que podem virar negocios reais.</p>
+            </div>
+          </article>
+
+          <article className="labs-metric">
+            <div className="metric-icon metric-icon--lines">
+              <span />
+              <span />
+              <span />
+            </div>
+            <div>
+              <strong>100% Coevo</strong>
+              <p>Feito para o grupo. Aberto para o mundo.</p>
+            </div>
+          </article>
+        </footer>
+
+        <a className="scroll-hint" href="#sobre">
           ↓ Role para explorar
-        </p>
+        </a>
       </section>
     </main>
   );
