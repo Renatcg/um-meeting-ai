@@ -42,7 +42,7 @@ export default function CoevoLabsLandingPage() {
           position: relative;
           isolation: isolate;
           min-height: 100vh;
-          padding: clamp(22px, 2.8vw, 42px) clamp(22px, 3.2vw, 56px) 28px;
+          padding: clamp(2px, calc(2.8vw - 20px), 22px) clamp(22px, 3.2vw, 56px) 28px;
           overflow: hidden;
         }
 
@@ -410,7 +410,7 @@ export default function CoevoLabsLandingPage() {
         }
 
         @media (max-width: 760px) {
-          .labs-hero { padding: 22px 18px; }
+          .labs-hero { padding: 2px 18px 22px; }
           .labs-nav { grid-template-columns: 1fr auto; }
           .labs-links { display: none; }
           .labs-btn--ghost { display: none; }
