@@ -1,17 +1,20 @@
 import asyncio
-from email.message import EmailMessage
-import smtplib
+import json
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from app.config import Settings
 from app.models import TrialRequest
 
+RESEND_EMAILS_URL = "https://api.resend.com/emails"
+
 
 def _send_trial_confirmation_email(settings: Settings, lead: TrialRequest) -> None:
-    if not settings.smtp_host:
-        raise RuntimeError("SMTP_HOST is required to send confirmation emails.")
+    if not settings.resend_api_key:
+        raise RuntimeError("RESEND_API_KEY is required to send confirmation emails.")
 
     subject = "Recebemos sua solicitacao do Coevo Meet"
-    sender = f"{settings.smtp_from_name} <{settings.smtp_from_email}>"
+    sender = f"{settings.resend_from_name} <{settings.resend_from_email}>"
     body = f"""Ola, {lead.full_name}.
 
 Recebemos sua solicitacao de teste gratuito do Coevo Meet.
@@ -25,17 +28,35 @@ Obrigado pelo interesse,
 Equipe Coevo Labs
 """
 
-    message = EmailMessage()
-    message["Subject"] = subject
-    message["From"] = sender
-    message["To"] = str(lead.corporate_email)
-    message.set_content(body)
+    payload = {
+        "from": sender,
+        "to": [str(lead.corporate_email)],
+        "subject": subject,
+        "text": body,
+    }
 
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
-        smtp.starttls()
-        if settings.smtp_username and settings.smtp_password:
-            smtp.login(settings.smtp_username, settings.smtp_password)
-        smtp.send_message(message)
+    request = Request(
+        RESEND_EMAILS_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {settings.resend_api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urlopen(request, timeout=20) as response:
+            if response.status >= 300:
+                response_body = response.read().decode("utf-8", errors="replace")
+                raise RuntimeError(
+                    f"Resend returned HTTP {response.status}: {response_body}"
+                )
+    except HTTPError as exc:
+        response_body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Resend returned HTTP {exc.code}: {response_body}") from exc
+    except URLError as exc:
+        raise RuntimeError(f"Could not reach Resend: {exc.reason}") from exc
 
 
 async def send_trial_confirmation_email(

@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     smtp_password: str | None = None
     smtp_from_email: str = "contato@coevolabs.com"
     smtp_from_name: str = "Coevo Labs"
+    resend_api_key: str | None = None
+    resend_from_email: str = "contato@coevolabs.com"
+    resend_from_name: str = "Coevo Labs"
 
     model_config = SettingsConfigDict(
         env_file=("../../.env", ".env"),
