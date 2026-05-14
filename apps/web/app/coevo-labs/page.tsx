@@ -42,7 +42,7 @@ export default function CoevoLabsLandingPage() {
           position: relative;
           isolation: isolate;
           min-height: 100vh;
-          padding: clamp(2px, calc(2.8vw - 20px), 22px) clamp(22px, 3.2vw, 56px) 28px;
+          padding: clamp(0px, calc(2.8vw - 30px), 12px) clamp(22px, 3.2vw, 56px) 28px;
           overflow: hidden;
         }
 
@@ -192,7 +192,7 @@ export default function CoevoLabsLandingPage() {
           gap: clamp(20px, 4vw, 72px);
           align-items: center;
           min-height: calc(100vh - 210px);
-          padding-top: clamp(18px, 3.8vw, 58px);
+          padding-top: clamp(0px, calc(3.8vw - 20px), 38px);
         }
 
         .labs-copy {
@@ -278,7 +278,7 @@ export default function CoevoLabsLandingPage() {
           z-index: 3;
           display: grid;
           grid-template-columns: repeat(4, 1fr);
-          margin-top: 18px;
+          margin-top: 8px;
           border-top: 1px solid rgba(255,255,255,.12);
           border-bottom: 1px solid rgba(255,255,255,.10);
         }
@@ -410,13 +410,13 @@ export default function CoevoLabsLandingPage() {
         }
 
         @media (max-width: 760px) {
-          .labs-hero { padding: 2px 18px 22px; }
+          .labs-hero { padding: 0 18px 22px; }
           .labs-nav { grid-template-columns: 1fr auto; }
           .labs-links { display: none; }
           .labs-btn--ghost { display: none; }
           .labs-content {
             min-height: auto;
-            padding-top: 38px;
+            padding-top: 18px;
           }
           .labs-title { font-size: clamp(28px, 7.2vw, 40px); }
           .labs-description br { display: none; }
