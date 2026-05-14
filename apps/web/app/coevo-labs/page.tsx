@@ -482,9 +482,7 @@ export default function CoevoLabsLandingPage() {
               <br />
               transformam.
               <br />
-              F<span className="glyph-e" aria-hidden="true" />rramentas que
-              <br />
-              multiplicam.
+              F<span className="glyph-e" aria-hidden="true" />rramentas que multiplicam.
             </h1>
 
             <p className="labs-description">
