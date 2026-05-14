@@ -167,6 +167,7 @@ class TrialRequestCreate(BaseModel):
     company_name: str = Field(min_length=2, max_length=140)
     lgpd_accepted: bool
     source: str = Field(default="meeting-ended", max_length=80)
+    selected_plan: str | None = Field(default=None, max_length=80)
 
 
 class TrialRequest(BaseModel):
@@ -177,4 +178,5 @@ class TrialRequest(BaseModel):
     company_name: str
     lgpd_accepted: bool
     source: str
+    selected_plan: str | None = None
     created_at: datetime

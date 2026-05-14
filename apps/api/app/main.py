@@ -27,6 +27,7 @@ from app.database import (
     insert_transcript_segment,
     insert_meeting,
     insert_trial_request,
+    list_trial_requests,
     list_sales_recommendations,
     list_transcript_segments,
     mark_meeting_ended,
@@ -96,6 +97,11 @@ async def create_trial_request(payload: TrialRequestCreate) -> TrialRequest:
         )
 
     return await insert_trial_request(settings=settings, payload=payload)
+
+
+@app.get("/trial-requests", response_model=list[TrialRequest])
+async def read_trial_requests() -> list[TrialRequest]:
+    return await list_trial_requests(settings=settings)
 
 
 @app.post("/knowledge/documents", response_model=KnowledgeUploadResponse, status_code=201)

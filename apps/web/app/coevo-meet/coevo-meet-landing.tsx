@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import type { FormEvent } from "react";
 import { useState } from "react";
 
@@ -425,6 +424,7 @@ export default function CoevoMeetLanding({
 }: CoevoMeetLandingProps) {
   const [activeSdrStep, setActiveSdrStep] = useState(0);
   const [isTrialModalOpen, setIsTrialModalOpen] = useState(false);
+  const [selectedTrialPlan, setSelectedTrialPlan] = useState<string | null>(null);
   const [trialForm, setTrialForm] = useState({
     fullName: "",
     phone: "",
@@ -436,6 +436,12 @@ export default function CoevoMeetLanding({
     "idle" | "submitting" | "success" | "error"
   >("idle");
   const selectedSdrStep = sdrSteps[activeSdrStep];
+
+  function openTrialModal(planName?: string) {
+    setSelectedTrialPlan(planName ?? null);
+    setTrialFormStatus("idle");
+    setIsTrialModalOpen(true);
+  }
 
   function updateTrialForm(
     field: keyof typeof trialForm,
@@ -466,7 +472,8 @@ export default function CoevoMeetLanding({
           corporate_email: trialForm.corporateEmail,
           company_name: trialForm.companyName,
           lgpd_accepted: trialForm.lgpdAccepted,
-          source: "meeting-ended-landing",
+          source: isMeetingEnded ? "meeting-ended-landing" : "coevo-meet-landing",
+          selected_plan: selectedTrialPlan,
         }),
       });
 
@@ -482,6 +489,7 @@ export default function CoevoMeetLanding({
         companyName: "",
         lgpdAccepted: false,
       });
+      setSelectedTrialPlan(null);
     } catch {
       setTrialFormStatus("error");
     }
@@ -516,7 +524,7 @@ export default function CoevoMeetLanding({
       <section className="relative mx-auto max-w-[1440px] border-x border-white/10 bg-[#0B0D12]/80 shadow-[0_30px_120px_rgba(0,0,0,.45)]">
         <header className="sticky top-0 z-30 border-b border-white/10 bg-[#0B0D12]/72 backdrop-blur-xl">
           <div className="flex items-center justify-between px-6 py-4 md:px-8">
-            <Link className="flex items-center gap-3" href="/">
+            <div className="flex items-center gap-3">
               <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-[#C8A45D] to-[#F5C76B] font-display text-lg font-bold text-[#0B0D12] shadow-[0_0_60px_rgba(200,164,93,.20)]">
                 C
               </span>
@@ -528,14 +536,7 @@ export default function CoevoMeetLanding({
                   AI meeting system
                 </span>
               </span>
-            </Link>
-
-            <Link
-              className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-[#FAF7EF] transition hover:border-[#C8A45D] hover:bg-[#C8A45D] hover:text-[#0B0D12]"
-              href="/"
-            >
-              Criar nova reuniao
-            </Link>
+            </div>
           </div>
         </header>
 
@@ -556,22 +557,13 @@ export default function CoevoMeetLanding({
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              {isMeetingEnded ? (
-                <button
-                  className="rounded-xl bg-gradient-to-r from-[#C8A45D] to-[#F5C76B] px-6 py-4 text-center text-sm font-extrabold text-[#0B0D12] shadow-[0_0_60px_rgba(200,164,93,.20)] transition hover:translate-y-[-1px]"
-                  onClick={() => setIsTrialModalOpen(true)}
-                  type="button"
-                >
-                  Solicitar teste gratuito
-                </button>
-              ) : (
-                <Link
-                  className="rounded-xl bg-gradient-to-r from-[#C8A45D] to-[#F5C76B] px-6 py-4 text-center text-sm font-extrabold text-[#0B0D12] shadow-[0_0_60px_rgba(200,164,93,.20)] transition hover:translate-y-[-1px]"
-                  href="/"
-                >
-                  Testar Coevo Meet agora
-                </Link>
-              )}
+              <button
+                className="rounded-xl bg-gradient-to-r from-[#C8A45D] to-[#F5C76B] px-6 py-4 text-center text-sm font-extrabold text-[#0B0D12] shadow-[0_0_60px_rgba(200,164,93,.20)] transition hover:translate-y-[-1px]"
+                onClick={() => openTrialModal()}
+                type="button"
+              >
+                Solicitar teste gratuito
+              </button>
               <a
                 className="rounded-xl border border-white/15 bg-white/5 px-6 py-4 text-center text-sm font-bold text-[#FAF7EF] transition hover:border-[#60A5FA] hover:bg-white/10"
                 href="#planos"
@@ -1156,16 +1148,17 @@ export default function CoevoMeetLanding({
                     </p>
                   ) : null}
 
-                  <Link
+                  <button
                     className={`mt-auto inline-flex w-full justify-center rounded-xl px-4 py-3 text-center text-sm font-bold transition ${
                       plan.featured
                         ? "bg-[#0B0D12] text-[#FAF7EF] hover:bg-[#1F2937]"
                         : "border border-white/15 bg-white/5 text-[#FAF7EF] hover:border-[#C8A45D] hover:bg-[#C8A45D] hover:text-[#0B0D12]"
                     }`}
-                    href="/"
+                    onClick={() => openTrialModal(plan.name)}
+                    type="button"
                   >
                     {plan.cta}
-                  </Link>
+                  </button>
                 </article>
               ))}
             </div>
@@ -1179,16 +1172,17 @@ export default function CoevoMeetLanding({
           <h2 className="mx-auto mt-4 max-w-4xl font-display text-4xl font-semibold md:text-6xl">
             Pare de pagar por videochamada. Coloque IA na mesa.
           </h2>
-          <Link
+          <button
             className="mt-8 inline-flex rounded-xl bg-gradient-to-r from-[#C8A45D] to-[#F5C76B] px-7 py-4 text-sm font-extrabold text-[#0B0D12] shadow-[0_0_60px_rgba(200,164,93,.20)] transition hover:translate-y-[-1px]"
-            href="/"
+            onClick={() => openTrialModal()}
+            type="button"
           >
-            Criar uma reuniao assistida
-          </Link>
+            Solicitar teste gratuito
+          </button>
         </section>
       </section>
 
-      {isMeetingEnded && isTrialModalOpen ? (
+      {isTrialModalOpen ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-[#0B0D12]/80 px-4 py-8 backdrop-blur-xl">
           <div className="w-full max-w-2xl overflow-hidden rounded-[1.5rem] border border-white/15 bg-[#111827] shadow-[0_30px_120px_rgba(0,0,0,.55)]">
             <div className="flex items-start justify-between gap-5 border-b border-white/10 p-6">
@@ -1199,6 +1193,11 @@ export default function CoevoMeetLanding({
                 <h2 className="mt-2 font-display text-3xl font-semibold text-[#FAF7EF]">
                   Solicitar teste gratuito
                 </h2>
+                {selectedTrialPlan ? (
+                  <p className="mt-3 inline-flex rounded-full border border-[#C8A45D]/30 bg-[#C8A45D]/10 px-3 py-1 font-mono text-xs uppercase tracking-[0.14em] text-[#F5C76B]">
+                    Plano escolhido: {selectedTrialPlan}
+                  </p>
+                ) : null}
                 <p className="mt-3 text-sm leading-6 text-[#A8B0BF]">
                   Preencha os dados para entrarmos em contato e configurarmos
                   uma demonstração do Coevo Meet.

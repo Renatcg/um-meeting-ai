@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-type Section = "meetings" | "coevo" | "knowledge";
+type Section = "meetings" | "coevo" | "knowledge" | "leads";
 type AgentGender = "masculine" | "feminine" | "neutral";
 type AgentVoice =
   | "alloy"
@@ -44,6 +44,17 @@ type MeetingListItem = {
   owner: string;
   dateLabel: string;
   role: string;
+};
+
+type TrialRequest = {
+  id: number;
+  full_name: string;
+  phone: string;
+  corporate_email: string;
+  company_name: string;
+  selected_plan?: string | null;
+  source: string;
+  created_at: string;
 };
 
 const sessionUser = {
@@ -255,6 +266,9 @@ export default function HomePage() {
   const [isGeneratingVoice, setIsGeneratingVoice] = useState<AgentVoice | null>(null);
   const [knowledgeStatus, setKnowledgeStatus] = useState<string | null>(null);
   const [isUploadingKnowledge, setIsUploadingKnowledge] = useState(false);
+  const [trialRequests, setTrialRequests] = useState<TrialRequest[]>([]);
+  const [trialRequestsStatus, setTrialRequestsStatus] = useState<string | null>(null);
+  const [isLoadingTrialRequests, setIsLoadingTrialRequests] = useState(false);
   const companyDocsRef = useRef<HTMLInputElement | null>(null);
   const companyMediaRef = useRef<HTMLInputElement | null>(null);
   const companyLinksRef = useRef<HTMLTextAreaElement | null>(null);
@@ -270,6 +284,24 @@ export default function HomePage() {
     }).format(new Date());
     setCurrentDate(formattedDate);
   }, []);
+
+  async function loadTrialRequests() {
+    setIsLoadingTrialRequests(true);
+    setTrialRequestsStatus(null);
+
+    try {
+      const response = await fetch(`${apiUrl}/trial-requests`);
+      if (!response.ok) {
+        throw new Error("Nao foi possivel carregar os leads.");
+      }
+
+      setTrialRequests((await response.json()) as TrialRequest[]);
+    } catch (err) {
+      setTrialRequestsStatus(err instanceof Error ? err.message : "Erro inesperado.");
+    } finally {
+      setIsLoadingTrialRequests(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -528,6 +560,19 @@ export default function HomePage() {
             </span>
             Base institucional
           </button>
+          <button
+            className={navItemClass("leads")}
+            type="button"
+            onClick={() => {
+              setActiveSection("leads");
+              void loadTrialRequests();
+            }}
+          >
+            <span className="flex h-8 w-8 items-center justify-center rounded-md border border-[#E7E7E2] font-mono text-xs">
+              L
+            </span>
+            Leads de teste
+          </button>
         </nav>
 
         <div className="absolute bottom-5 left-5 right-5 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">
@@ -626,6 +671,101 @@ export default function HomePage() {
                   ) : null}
                 </div>
               </section>
+            </div>
+          ) : null}
+
+          {activeSection === "leads" ? (
+            <div className="space-y-6">
+              <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
+                <div>
+                  <p className="font-mono text-xs uppercase text-[#F97316]">
+                    Leads
+                  </p>
+                  <h1 className="mt-2 font-display text-4xl font-semibold text-[#11110F]">
+                    Solicitações de teste gratuito
+                  </h1>
+                  <p className="mt-3 max-w-3xl text-sm leading-6 text-[#73736B]">
+                    Lista de contatos capturados pela landing do Coevo Meet.
+                  </p>
+                </div>
+                <button
+                  className="rounded-lg border border-[#E7E7E2] bg-white px-5 py-3 text-sm font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] transition hover:border-[#F97316] hover:bg-[#FFF3EA]"
+                  disabled={isLoadingTrialRequests}
+                  onClick={loadTrialRequests}
+                  type="button"
+                >
+                  {isLoadingTrialRequests ? "Atualizando..." : "Atualizar lista"}
+                </button>
+              </div>
+
+              {trialRequestsStatus ? (
+                <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {trialRequestsStatus}
+                </p>
+              ) : null}
+
+              <div className="overflow-hidden rounded-xl border border-[#E7E7E2] bg-white shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                {trialRequests.length === 0 ? (
+                  <div className="px-5 py-10 text-center">
+                    <p className="text-sm font-semibold text-[#11110F]">
+                      Nenhum lead capturado ainda
+                    </p>
+                    <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#73736B]">
+                      Quando alguem solicitar um teste gratuito pela landing, o
+                      contato aparecera aqui.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[880px] text-left text-sm">
+                      <thead className="border-b border-[#E7E7E2] bg-[#FCFCFB] text-xs uppercase text-[#73736B]">
+                        <tr>
+                          <th className="px-4 py-3 font-semibold">Nome</th>
+                          <th className="px-4 py-3 font-semibold">Empresa</th>
+                          <th className="px-4 py-3 font-semibold">Plano</th>
+                          <th className="px-4 py-3 font-semibold">Contato</th>
+                          <th className="px-4 py-3 font-semibold">Origem</th>
+                          <th className="px-4 py-3 font-semibold">Data</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#E7E7E2]">
+                        {trialRequests.map((lead) => (
+                          <tr key={lead.id} className="align-top">
+                            <td className="px-4 py-4">
+                              <p className="font-semibold text-[#11110F]">
+                                {lead.full_name}
+                              </p>
+                              <p className="mt-1 text-xs text-[#73736B]">
+                                {lead.corporate_email}
+                              </p>
+                            </td>
+                            <td className="px-4 py-4 text-[#11110F]">
+                              {lead.company_name}
+                            </td>
+                            <td className="px-4 py-4">
+                              <span className="rounded-full border border-[#FDBA74] bg-[#FFF3EA] px-3 py-1 text-xs font-semibold text-[#F97316]">
+                                {lead.selected_plan ?? "Sem plano"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-4 text-[#11110F]">
+                              {lead.phone}
+                            </td>
+                            <td className="px-4 py-4 text-[#73736B]">
+                              {lead.source}
+                            </td>
+                            <td className="px-4 py-4 text-[#73736B]">
+                              {new Intl.DateTimeFormat("pt-BR", {
+                                dateStyle: "short",
+                                timeStyle: "short",
+                              }).format(new Date(lead.created_at))}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           ) : null}
 

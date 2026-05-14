@@ -144,8 +144,14 @@ CREATE TABLE IF NOT EXISTS trial_requests (
     company_name TEXT NOT NULL,
     lgpd_accepted BOOLEAN NOT NULL,
     source TEXT NOT NULL DEFAULT 'meeting-ended',
+    selected_plan TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+"""
+
+ALTER_TRIAL_REQUESTS_SELECTED_PLAN_SQL = """
+ALTER TABLE trial_requests
+ADD COLUMN IF NOT EXISTS selected_plan TEXT;
 """
 
 CREATE_TRIAL_REQUESTS_CREATED_INDEX_SQL = """
@@ -162,6 +168,7 @@ async def init_database(settings: Settings) -> None:
         await conn.execute(CREATE_MEETING_PARTICIPANTS_INDEX_SQL)
         await conn.execute(CREATE_AGENT_PROFILE_TABLE_SQL)
         await conn.execute(CREATE_TRIAL_REQUESTS_TABLE_SQL)
+        await conn.execute(ALTER_TRIAL_REQUESTS_SELECTED_PLAN_SQL)
         await conn.execute(CREATE_TRIAL_REQUESTS_CREATED_INDEX_SQL)
         await conn.execute(CREATE_TRANSCRIPT_TABLE_SQL)
         await conn.execute(CREATE_TRANSCRIPT_INDEX_SQL)
@@ -191,9 +198,10 @@ async def insert_trial_request(
         corporate_email,
         company_name,
         lgpd_accepted,
-        source
+        source,
+        selected_plan
     )
-    VALUES (%s, %s, %s, %s, %s, %s)
+    VALUES (%s, %s, %s, %s, %s, %s, %s)
     RETURNING
         id,
         full_name,
@@ -202,6 +210,7 @@ async def insert_trial_request(
         company_name,
         lgpd_accepted,
         source,
+        selected_plan,
         created_at;
     """
 
@@ -219,6 +228,7 @@ async def insert_trial_request(
                     payload.company_name,
                     payload.lgpd_accepted,
                     payload.source,
+                    payload.selected_plan,
                 ),
             )
             row = await cur.fetchone()
@@ -227,6 +237,38 @@ async def insert_trial_request(
         raise RuntimeError("Trial request insert did not return a row.")
 
     return TrialRequest.model_validate(row)
+
+
+async def list_trial_requests(
+    *,
+    settings: Settings,
+    limit: int = 100,
+) -> list[TrialRequest]:
+    query = """
+    SELECT
+        id,
+        full_name,
+        phone,
+        corporate_email,
+        company_name,
+        lgpd_accepted,
+        source,
+        selected_plan,
+        created_at
+    FROM trial_requests
+    ORDER BY created_at DESC, id DESC
+    LIMIT %s;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (limit,))
+            rows = await cur.fetchall()
+
+    return [TrialRequest.model_validate(row) for row in rows]
 
 
 async def insert_meeting(*, settings: Settings, meeting: Meeting) -> Meeting:
