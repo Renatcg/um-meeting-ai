@@ -41,6 +41,7 @@ Equipe Coevo Labs
         headers={
             "Authorization": f"Bearer {settings.resend_api_key}",
             "Content-Type": "application/json",
+            "User-Agent": "CoevoMeet/0.1",
         },
         method="POST",
     )
