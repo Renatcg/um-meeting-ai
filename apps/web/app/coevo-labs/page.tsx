@@ -222,7 +222,7 @@ export default function CoevoLabsLandingPage() {
           font-size: clamp(29px, 3.6vw, 55px);
           font-weight: 400;
           line-height: 1.18;
-          letter-spacing: -.055em;
+          letter-spacing: 0;
           text-shadow: 0 0 28px rgba(255,255,255,.16);
         }
 
