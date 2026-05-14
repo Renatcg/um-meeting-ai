@@ -28,7 +28,7 @@ export default function CoevoLabsLandingPage() {
           --muted-2: rgba(245, 246, 248, 0.42);
           --line: rgba(245, 246, 248, 0.14);
           --line-strong: rgba(245, 246, 248, 0.44);
-          --font-main: "Rajdhani", "Orbitron", "Eurostile", "Michroma", "Inter", system-ui, sans-serif;
+          --font-main: "Rajdhani", "Orbitron", "Eurostile", "Inter", system-ui, sans-serif;
           min-height: 100vh;
           background:
             radial-gradient(circle at 76% 28%, rgba(255,255,255,0.075), transparent 22%),
@@ -219,8 +219,7 @@ export default function CoevoLabsLandingPage() {
         .labs-title {
           margin: 0;
           color: #f7f8fb;
-          font-family: "Michroma", sans-serif;
-          font-size: clamp(48px, 6vw, 92px);
+          font-size: clamp(29px, 3.6vw, 55px);
           font-weight: 400;
           line-height: 1.18;
           letter-spacing: -.055em;
@@ -419,7 +418,7 @@ export default function CoevoLabsLandingPage() {
             min-height: auto;
             padding-top: 38px;
           }
-          .labs-title { font-size: clamp(40px, 11vw, 62px); }
+          .labs-title { font-size: clamp(28px, 7.2vw, 40px); }
           .labs-description br { display: none; }
           .labs-ctas { margin-top: 34px; }
           .labs-btn { width: 100%; }
