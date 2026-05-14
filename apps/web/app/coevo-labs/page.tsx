@@ -1,4 +1,11 @@
 import type { Metadata } from "next";
+import { Michroma } from "next/font/google";
+
+const michroma = Michroma({
+  subsets: ["latin"],
+  weight: "400",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Coevo Labs | Ideias que transformam",
@@ -471,7 +478,7 @@ export default function CoevoLabsLandingPage() {
             <p className="labs-eyebrow">Coevo Labs — Inovacao em rede</p>
             <div className="labs-eyebrow-line" />
 
-            <h1 className="labs-title">
+            <h1 className={`labs-title ${michroma.className}`}>
               Ideias que
               <br />
               transformam.
