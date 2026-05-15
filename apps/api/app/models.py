@@ -190,6 +190,7 @@ class MeetingEmailDeferResponse(BaseModel):
 class GoogleCalendarStatus(BaseModel):
     configured: bool
     connected: bool
+    can_create_events: bool = False
     calendar_email: EmailStr | None = None
     updated_at: datetime | None = None
     auth_url: str | None = None

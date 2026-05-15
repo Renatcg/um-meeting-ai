@@ -22,6 +22,7 @@ from app.calendar_service import (
     create_google_calendar_event,
     exchange_google_calendar_code,
     google_calendar_configured,
+    google_calendar_can_create_events,
 )
 from app.copilot import dispatch_copilot
 from app.database import (
@@ -234,6 +235,7 @@ async def get_google_calendar_status() -> GoogleCalendarStatus:
     return GoogleCalendarStatus(
         configured=configured,
         connected=bool(connection),
+        can_create_events=google_calendar_can_create_events(connection),
         calendar_email=connection.get("calendar_email") if connection else None,
         updated_at=connection.get("updated_at") if connection else None,
         auth_url=auth_url,
@@ -1076,6 +1078,13 @@ async def create_meeting_calendar_action(
             detail="Google Calendar integration is disabled in agent settings.",
         )
 
+    connection = await get_google_calendar_connection(settings=settings)
+    if not google_calendar_can_create_events(connection):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Google Calendar must be reconnected to authorize event creation.",
+        )
+
     participants = await list_meeting_participants(
         settings=settings,
         meeting_id=meeting_id,
@@ -1158,7 +1167,6 @@ async def create_meeting_calendar_action(
             detail="Calendar event could not be created.",
         ) from exc
 
-    connection = await get_google_calendar_connection(settings=settings)
     response = MeetingCalendarActionResponse(
         created=True,
         event_id=event.get("id", ""),

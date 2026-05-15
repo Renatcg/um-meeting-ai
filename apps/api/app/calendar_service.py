@@ -27,6 +27,13 @@ def google_calendar_configured(settings: Settings) -> bool:
     return bool(settings.google_client_id and settings.google_client_secret)
 
 
+def google_calendar_can_create_events(connection: dict | None) -> bool:
+    if not connection:
+        return False
+    scope = str(connection.get("scope") or "")
+    return "https://www.googleapis.com/auth/calendar.events" in scope.split()
+
+
 def build_google_calendar_auth_url(settings: Settings) -> str:
     if not settings.google_client_id:
         raise RuntimeError("GOOGLE_CLIENT_ID is required.")
