@@ -186,12 +186,30 @@ def voice_email_actions_enabled() -> tuple[bool, str]:
     return True, ""
 
 
+def get_pending_email_action(meeting_id: str, speaker_identity: str) -> tuple[tuple[str, str], dict] | tuple[None, None]:
+    action_key = (meeting_id, speaker_identity)
+    pending = pending_email_actions.get(action_key)
+    if pending:
+        return action_key, pending
+
+    meeting_pending = [
+        (key, value)
+        for key, value in pending_email_actions.items()
+        if key[0] == meeting_id
+    ]
+    if len(meeting_pending) == 1:
+        return meeting_pending[0]
+
+    return None, None
+
+
 @function_tool(
     description=(
         "Prepara um e-mail solicitado por voz durante a reuniao. Use apenas "
         "quando o Host pedir ao Coevo para enviar e-mail, resumo, follow-up ou "
         "proximos passos. Nao envia ainda: esta ferramenta apenas deixa a acao "
-        "pendente e exige confirmacao por voz."
+        "pendente. Depois de preparar, pergunte se o Host quer enviar agora ou "
+        "ao fim da reuniao. Se ele escolher agora, peca confirmacao por voz."
     )
 )
 async def prepare_meeting_email(
@@ -218,12 +236,16 @@ async def prepare_meeting_email(
         "recipients": recipients or [],
         "subject": subject,
         "body": body,
+        "delivery_timing": "ask",
     }
 
     return (
-        "PENDING_CONFIRMATION: E-mail preparado, mas ainda nao enviado. "
+        "PENDING_TIMING: E-mail preparado, mas ainda nao enviado. "
         "Resuma em uma frase o assunto e os destinatarios, e pergunte: "
-        "'Posso enviar?'. Envie somente se o Host confirmar por voz."
+        "'Voce quer que eu envie agora ou ao fim da reuniao?'. "
+        "Se o Host escolher envio imediato, peca confirmacao por voz antes de enviar. "
+        "Se ele escolher fim da reuniao, diga que deixara preparado e que ele pode "
+        "confirmar o envio ao encerrar."
     )
 
 
@@ -241,8 +263,7 @@ async def send_confirmed_meeting_email() -> str:
 
     meeting_id = current_meeting_id.get()
     speaker_identity = current_speaker_identity.get()
-    action_key = (meeting_id, speaker_identity)
-    pending = pending_email_actions.get(action_key)
+    action_key, pending = get_pending_email_action(meeting_id, speaker_identity)
     if not pending:
         return "NO_PENDING_EMAIL: Nao ha e-mail pendente para confirmar."
 
@@ -262,7 +283,8 @@ async def send_confirmed_meeting_email() -> str:
                 return f"SEND_FAILED: {body}"
             payload = await response.json()
 
-    pending_email_actions.pop(action_key, None)
+    if action_key:
+        pending_email_actions.pop(action_key, None)
     return (
         "SENT: E-mail enviado com sucesso para "
         f"{payload.get('recipient_count', 0)} destinatarios."
@@ -276,8 +298,11 @@ async def send_confirmed_meeting_email() -> str:
     )
 )
 async def cancel_pending_meeting_email() -> str:
-    action_key = (current_meeting_id.get(), current_speaker_identity.get())
-    if action_key in pending_email_actions:
+    action_key, _ = get_pending_email_action(
+        current_meeting_id.get(),
+        current_speaker_identity.get(),
+    )
+    if action_key:
         pending_email_actions.pop(action_key, None)
         return "CANCELLED: E-mail pendente cancelado."
 
@@ -513,11 +538,14 @@ async def jarvis(ctx: agents.JobContext):
                 "Se a ferramenta retornar NO_MATCH, diga que nao encontrou "
                 "informacao suficiente. "
                 "Para enviar e-mail, resumo, follow-up ou proximos passos, use "
-                "prepare_meeting_email primeiro e peca confirmacao por voz. "
-                "So use send_confirmed_meeting_email quando o Host confirmar "
-                "claramente por voz. Se o Host cancelar, use "
-                "cancel_pending_meeting_email. Nunca diga que enviou antes da "
-                "ferramenta confirmar SENT."
+                "prepare_meeting_email primeiro. Depois pergunte se o envio deve "
+                "ser imediato ou ao fim da reuniao. Se o Host escolher agora, "
+                "confirme por voz antes de enviar. So use "
+                "send_confirmed_meeting_email quando o Host confirmar claramente "
+                "por voz. Se o Host escolher fim da reuniao, diga que deixou o "
+                "e-mail preparado e que ele pode confirmar o envio ao encerrar. "
+                "Se o Host cancelar, use cancel_pending_meeting_email. Nunca diga "
+                "que enviou antes da ferramenta confirmar SENT."
             ),
         )
 

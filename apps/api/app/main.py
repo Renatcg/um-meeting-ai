@@ -401,6 +401,39 @@ def dedupe_emails(values: list[str]) -> list[str]:
     return deduped
 
 
+def resolve_voice_command_requester(
+    *,
+    participants,
+    requester_identity: str,
+    requester_name: str,
+):
+    for participant in participants:
+        if participant.identity == requester_identity:
+            return participant
+
+    normalized_name = requester_name.strip().lower()
+    if normalized_name:
+        named_matches = [
+            participant
+            for participant in participants
+            if participant.name.strip().lower() == normalized_name
+        ]
+        if len(named_matches) == 1:
+            return named_matches[0]
+
+    hosts = [participant for participant in participants if participant.role == "host"]
+    if len(hosts) == 1:
+        return hosts[0]
+
+    if hosts:
+        host_emails = {str(participant.email).lower() for participant in hosts}
+        participant_roles = {participant.role for participant in participants}
+        if len(host_emails) == 1 or participant_roles == {"host"}:
+            return hosts[-1]
+
+    return None
+
+
 @app.post(
     "/meetings/{meeting_id}/actions/email",
     response_model=MeetingEmailActionResponse,
@@ -424,11 +457,22 @@ async def send_meeting_email_action(
             detail="Resend email integration is disabled in agent settings.",
         )
 
+    participants = await list_meeting_participants(
+        settings=settings,
+        meeting_id=meeting_id,
+    )
     requester = await get_meeting_participant_by_identity(
         settings=settings,
         meeting_id=meeting_id,
         identity=payload.requester_identity,
     )
+    if requester is None:
+        requester = resolve_voice_command_requester(
+            participants=participants,
+            requester_identity=payload.requester_identity,
+            requester_name=payload.requester_name,
+        )
+
     if requester is None:
         await insert_meeting_agent_action(
             settings=settings,
@@ -467,10 +511,6 @@ async def send_meeting_email_action(
             detail="For now, only the Host can send emails by voice.",
         )
 
-    participants = await list_meeting_participants(
-        settings=settings,
-        meeting_id=meeting_id,
-    )
     if payload.recipient_scope == "custom":
         recipients = dedupe_emails([str(email) for email in payload.recipients])
     elif payload.recipient_scope == "clients":
