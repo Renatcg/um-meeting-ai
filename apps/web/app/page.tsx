@@ -6,11 +6,18 @@ import { useRouter } from "next/navigation";
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 type Section = "meetings" | "coevo" | "knowledge" | "leads";
+type CoevoConfigTab =
+  | "identity"
+  | "voice"
+  | "behavior"
+  | "actions"
+  | "integrations"
+  | "language";
 type AgentGender = "masculine" | "feminine" | "neutral";
 type WeeklyMeetingVolume = "ate-5" | "5-10" | "10-20" | "mais-20";
 type ParticipantRole = "host" | "commercial" | "client" | "observer";
-type AgentAction = "send_email";
-type AgentIntegration = "resend_email";
+type AgentAction = "send_email" | "schedule_meeting";
+type AgentIntegration = "resend_email" | "google_calendar";
 type AgentVoice =
   | "alloy"
   | "ash"
@@ -75,6 +82,14 @@ type LeadForm = {
   selectedPlan: string;
 };
 
+type GoogleCalendarStatus = {
+  configured: boolean;
+  connected: boolean;
+  calendar_email?: string | null;
+  updated_at?: string | null;
+  auth_url?: string | null;
+};
+
 const sessionUser = {
   name: "Acesso local",
   email: "Login pendente",
@@ -110,7 +125,7 @@ const defaultProfile: AgentProfile = {
   language_policy: "Responder sempre na mesma lingua usada pelo participante.",
   custom_instructions: "",
   voice_command_roles: ["host"],
-  enabled_actions: ["send_email"],
+  enabled_actions: ["send_email", "schedule_meeting"],
   enabled_integrations: ["resend_email"],
   require_voice_confirmation: true,
 };
@@ -144,6 +159,11 @@ const actionOptions: Array<{ value: AgentAction; label: string; description: str
     label: "Enviar e-mails",
     description: "Resumo, follow-up, proximos passos e mensagens aos participantes.",
   },
+  {
+    value: "schedule_meeting",
+    label: "Agendar reunioes",
+    description: "Cria eventos no Google Agenda depois da confirmacao por voz.",
+  },
 ];
 const integrationOptions: Array<{
   value: AgentIntegration;
@@ -155,6 +175,19 @@ const integrationOptions: Array<{
     label: "Resend",
     description: "Envio transacional usando o dominio verificado da Coevo.",
   },
+  {
+    value: "google_calendar",
+    label: "Google Agenda",
+    description: "Permite que o Coevo crie eventos e convites na agenda conectada.",
+  },
+];
+const coevoConfigTabs: Array<{ id: CoevoConfigTab; label: string; description: string }> = [
+  { id: "identity", label: "Identidade", description: "Nome, genero e metodo" },
+  { id: "voice", label: "Voz", description: "Voz e demos" },
+  { id: "behavior", label: "Comportamento", description: "Tom, sliders e palavras" },
+  { id: "actions", label: "Acoes", description: "Comandos por voz" },
+  { id: "integrations", label: "Integracoes", description: "Resend e Google Agenda" },
+  { id: "language", label: "Idioma", description: "Idioma e instrucoes livres" },
 ];
 const keywordOptions = [
   "clareza",
@@ -322,6 +355,7 @@ function Slider({
 export default function HomePage() {
   const router = useRouter();
   const [activeSection, setActiveSection] = useState<Section>("meetings");
+  const [activeCoevoTab, setActiveCoevoTab] = useState<CoevoConfigTab>("identity");
   const [isCreating, setIsCreating] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [currentDate, setCurrentDate] = useState("");
@@ -339,6 +373,7 @@ export default function HomePage() {
   const [leadForm, setLeadForm] = useState<LeadForm>(emptyLeadForm);
   const [leadFormStatus, setLeadFormStatus] = useState<string | null>(null);
   const [isSavingLead, setIsSavingLead] = useState(false);
+  const [googleCalendar, setGoogleCalendar] = useState<GoogleCalendarStatus | null>(null);
   const companyDocsRef = useRef<HTMLInputElement | null>(null);
   const companyMediaRef = useRef<HTMLInputElement | null>(null);
   const companyLinksRef = useRef<HTMLTextAreaElement | null>(null);
@@ -354,6 +389,18 @@ export default function HomePage() {
     }).format(new Date());
     setCurrentDate(formattedDate);
   }, []);
+
+  async function loadGoogleCalendarStatus() {
+    try {
+      const response = await fetch(`${apiUrl}/integrations/google-calendar`);
+      if (!response.ok) {
+        return;
+      }
+      setGoogleCalendar((await response.json()) as GoogleCalendarStatus);
+    } catch {
+      setGoogleCalendar(null);
+    }
+  }
 
   async function loadTrialRequests() {
     setIsLoadingTrialRequests(true);
@@ -505,6 +552,7 @@ export default function HomePage() {
     }
 
     loadProfile();
+    loadGoogleCalendarStatus();
 
     return () => {
       cancelled = true;
@@ -521,16 +569,32 @@ export default function HomePage() {
     });
   }
 
-  function toggleProfileArrayValue<
-    K extends "voice_command_roles" | "enabled_actions" | "enabled_integrations",
-  >(key: K, value: AgentProfile[K][number]) {
+  function toggleProfileArrayValue(
+    key: "voice_command_roles" | "enabled_actions" | "enabled_integrations",
+    value: ParticipantRole | AgentAction | AgentIntegration,
+  ) {
     setProfile((current) => {
-      const values = current[key] as string[];
-      const stringValue = String(value);
-      const nextValues = values.includes(stringValue)
-        ? values.filter((item) => item !== stringValue)
-        : [...values, stringValue];
-      return { ...current, [key]: nextValues };
+      if (key === "voice_command_roles") {
+        const typedValue = value as ParticipantRole;
+        const nextValues = current.voice_command_roles.includes(typedValue)
+          ? current.voice_command_roles.filter((item) => item !== typedValue)
+          : [...current.voice_command_roles, typedValue];
+        return { ...current, voice_command_roles: nextValues };
+      }
+
+      if (key === "enabled_actions") {
+        const typedValue = value as AgentAction;
+        const nextValues = current.enabled_actions.includes(typedValue)
+          ? current.enabled_actions.filter((item) => item !== typedValue)
+          : [...current.enabled_actions, typedValue];
+        return { ...current, enabled_actions: nextValues };
+      }
+
+      const typedValue = value as AgentIntegration;
+      const nextValues = current.enabled_integrations.includes(typedValue)
+        ? current.enabled_integrations.filter((item) => item !== typedValue)
+        : [...current.enabled_integrations, typedValue];
+      return { ...current, enabled_integrations: nextValues };
     });
   }
 
@@ -1000,19 +1064,61 @@ export default function HomePage() {
           {activeSection === "coevo" ? (
             <div className="space-y-6">
               <div>
-                <p className="font-mono text-xs uppercase text-[#F97316]">Personalidade</p>
+                <p className="font-mono text-xs uppercase text-[#F97316]">Configurar Coevo</p>
                 <h1 className="mt-2 font-display text-4xl font-semibold text-[#11110F]">
-                  Configure como o Coevo pensa, fala e se comporta.
+                  Um painel mais claro para personalidade, voz e acoes.
                 </h1>
                 <p className="mt-3 max-w-3xl text-sm leading-6 text-[#73736B]">
-                  Quase tudo aqui e feito por escolhas visuais. O campo livre serve
-                  apenas para uma orientacao fina.
+                  Use os submenus para configurar uma parte por vez. O Coevo usa
+                  essas definicoes nas proximas reunioes.
                 </p>
               </div>
 
-              <div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
+              <div className="grid gap-5 xl:grid-cols-[260px_minmax(0,1fr)]">
+                <aside className="rounded-xl border border-[#E7E7E2] bg-white p-3 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                  <div className="space-y-2">
+                    {coevoConfigTabs.map((tab) => (
+                      <button
+                        key={tab.id}
+                        className={`w-full rounded-lg border px-4 py-3 text-left transition ${
+                          activeCoevoTab === tab.id
+                            ? "border-[#F97316] bg-[#FFF3EA]"
+                            : "border-transparent bg-white hover:border-[#E7E7E2] hover:bg-[#FCFCFB]"
+                        }`}
+                        type="button"
+                        onClick={() => setActiveCoevoTab(tab.id)}
+                      >
+                        <span className="block text-sm font-bold text-[#11110F]">
+                          {tab.label}
+                        </span>
+                        <span className="mt-1 block text-xs leading-5 text-[#73736B]">
+                          {tab.description}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    className="mt-4 w-full rounded-lg bg-[#11110F] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#F97316]"
+                    type="button"
+                    onClick={saveProfile}
+                  >
+                    Salvar configuracoes
+                  </button>
+                  {profileStatus ? (
+                    <p className="mt-3 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-3 py-2 text-xs leading-5 text-[#73736B]">
+                      {profileStatus}
+                    </p>
+                  ) : null}
+                </aside>
+
                 <section className="space-y-5">
-                  <div className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                  {activeCoevoTab === "identity" ? (
+                    <div className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                      <p className="font-mono text-xs uppercase text-[#F97316]">Identidade</p>
+                      <h2 className="mt-2 font-display text-2xl font-semibold">
+                        Como o Coevo se apresenta
+                      </h2>
                     <div className="grid gap-4 md:grid-cols-3">
                       <label>
                         <span className="mb-2 block text-sm font-semibold">Nome publico</span>
@@ -1049,9 +1155,11 @@ export default function HomePage() {
                         </select>
                       </label>
                     </div>
-                  </div>
+                    </div>
+                  ) : null}
 
-                  <div className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                  {activeCoevoTab === "behavior" ? (
+                    <div className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
                     <h2 className="font-display text-xl font-semibold">Modo de fala</h2>
                     <div className="mt-4 flex flex-wrap gap-2">
                       {toneOptions.map((tone) => (
@@ -1071,9 +1179,11 @@ export default function HomePage() {
                       <Slider label="Assertividade" value={profile.assertiveness} left="exploratorio" right="direto" onChange={(value) => setProfile((current) => ({ ...current, assertiveness: value }))} />
                       <Slider label="Brevidade" value={profile.brevity} left="explicativo" right="curto" onChange={(value) => setProfile((current) => ({ ...current, brevity: value }))} />
                     </div>
-                  </div>
+                    </div>
+                  ) : null}
 
-                  <div className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                  {activeCoevoTab === "behavior" ? (
+                    <div className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
                     <h2 className="font-display text-xl font-semibold">Palavras e comportamento</h2>
                     <div className="mt-5 space-y-5">
                       <div>
@@ -1107,11 +1217,11 @@ export default function HomePage() {
                         </div>
                       </div>
                     </div>
-                  </div>
-                </section>
+                    </div>
+                  ) : null}
 
-                <aside className="space-y-5">
-                  <div className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                  {activeCoevoTab === "voice" ? (
+                    <div className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
                     <h2 className="font-display text-xl font-semibold">Voz</h2>
                     <p className="mt-2 text-sm leading-6 text-[#73736B]">
                       Escolha a voz que o Coevo usara nas proximas reunioes.
@@ -1155,9 +1265,11 @@ export default function HomePage() {
                         Demo de voz
                       </audio>
                     ) : null}
-                  </div>
+                    </div>
+                  ) : null}
 
-                  <div className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                  {activeCoevoTab === "actions" ? (
+                    <div className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
                     <p className="font-mono text-xs uppercase text-[#F97316]">
                       Comandos de voz
                     </p>
@@ -1272,9 +1384,75 @@ export default function HomePage() {
                         </span>
                       </label>
                     </div>
-                  </div>
+                    </div>
+                  ) : null}
 
-                  <div className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                  {activeCoevoTab === "integrations" ? (
+                    <div className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                      <p className="font-mono text-xs uppercase text-[#F97316]">
+                        Integracoes
+                      </p>
+                      <h2 className="mt-2 font-display text-xl font-semibold">
+                        Canais conectados ao Coevo
+                      </h2>
+                      <div className="mt-5 grid gap-3 md:grid-cols-2">
+                        {integrationOptions.map((integration) => (
+                          <button
+                            key={integration.value}
+                            className={`rounded-lg border p-4 text-left transition ${
+                              profile.enabled_integrations.includes(integration.value)
+                                ? "border-[#F97316] bg-[#FFF3EA]"
+                                : "border-[#E7E7E2] bg-[#FCFCFB] hover:border-[#FDBA74]"
+                            }`}
+                            type="button"
+                            onClick={() =>
+                              toggleProfileArrayValue(
+                                "enabled_integrations",
+                                integration.value,
+                              )
+                            }
+                          >
+                            <span className="block text-sm font-bold text-[#11110F]">
+                              {integration.label}
+                            </span>
+                            <span className="mt-1 block text-xs leading-5 text-[#73736B]">
+                              {integration.description}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="mt-5 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <p className="text-sm font-bold text-[#11110F]">
+                              Google Agenda
+                            </p>
+                            <p className="mt-1 text-xs leading-5 text-[#73736B]">
+                              {googleCalendar?.connected
+                                ? `Conectado em ${googleCalendar.calendar_email ?? "agenda Google"}`
+                                : googleCalendar?.configured
+                                  ? "Pronto para conectar via OAuth."
+                                  : "Configure GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET na API."}
+                            </p>
+                          </div>
+                          {googleCalendar?.auth_url ? (
+                            <a
+                              className="rounded-lg bg-[#11110F] px-4 py-3 text-center text-xs font-bold text-white transition hover:bg-[#F97316]"
+                              href={googleCalendar.auth_url}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {googleCalendar.connected ? "Reconectar" : "Conectar"}
+                            </a>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {activeCoevoTab === "language" ? (
+                    <div className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
                     <h2 className="font-display text-xl font-semibold">Idioma</h2>
                     <select
                       className="mt-4 w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm outline-none focus:border-[#F97316]"
@@ -1298,20 +1476,9 @@ export default function HomePage() {
                         placeholder="Ex.: nunca interrompa; sempre pergunte antes de aprofundar."
                       />
                     </label>
-                    <button
-                      className="mt-4 w-full rounded-lg bg-[#11110F] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#F97316]"
-                      type="button"
-                      onClick={saveProfile}
-                    >
-                      Salvar personalidade
-                    </button>
-                    {profileStatus ? (
-                      <p className="mt-3 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-3 py-2 text-xs leading-5 text-[#73736B]">
-                        {profileStatus}
-                      </p>
-                    ) : null}
-                  </div>
-                </aside>
+                    </div>
+                  ) : null}
+                </section>
               </div>
             </div>
           ) : null}

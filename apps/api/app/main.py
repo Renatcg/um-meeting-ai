@@ -17,11 +17,18 @@ from app.auth import (
     ParticipantClaims,
 )
 from app.config import get_settings
+from app.calendar_service import (
+    build_google_calendar_auth_url,
+    create_google_calendar_event,
+    exchange_google_calendar_code,
+    google_calendar_configured,
+)
 from app.copilot import dispatch_copilot
 from app.database import (
     delete_trial_request,
     ensure_meeting,
     get_agent_profile,
+    get_google_calendar_connection,
     get_meeting_participant_by_identity,
     has_host_or_commercial_joined,
     init_database,
@@ -49,6 +56,9 @@ from app.models import (
     KnowledgeUploadResponse,
     LiveKitTokenResponse,
     Meeting,
+    GoogleCalendarStatus,
+    MeetingCalendarActionRequest,
+    MeetingCalendarActionResponse,
     MeetingEmailActionRequest,
     MeetingEmailActionResponse,
     SalesRecommendation,
@@ -201,6 +211,50 @@ async def create_voice_demo(payload: VoiceDemoRequest) -> Response:
         ) from exc
 
     return Response(content=audio.content, media_type="audio/mpeg")
+
+
+@app.get("/integrations/google-calendar", response_model=GoogleCalendarStatus)
+async def get_google_calendar_status() -> GoogleCalendarStatus:
+    configured = google_calendar_configured(settings)
+    connection = await get_google_calendar_connection(settings=settings)
+    auth_url = build_google_calendar_auth_url(settings) if configured else None
+    return GoogleCalendarStatus(
+        configured=configured,
+        connected=bool(connection),
+        calendar_email=connection.get("calendar_email") if connection else None,
+        updated_at=connection.get("updated_at") if connection else None,
+        auth_url=auth_url,
+    )
+
+
+@app.get("/integrations/google-calendar/callback")
+async def google_calendar_callback(code: str | None = None) -> Response:
+    if not code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing Google OAuth code.",
+        )
+
+    try:
+        await exchange_google_calendar_code(settings=settings, code=code)
+    except Exception as exc:
+        logger.exception("google calendar oauth failed")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google Calendar could not be connected.",
+        ) from exc
+
+    html = """
+    <!doctype html>
+    <html lang="pt-BR">
+      <head><meta charset="utf-8"><title>Google Agenda conectado</title></head>
+      <body style="font-family: Arial, sans-serif; padding: 40px;">
+        <h1>Google Agenda conectado.</h1>
+        <p>Voce ja pode voltar para o Coevo Meet.</p>
+      </body>
+    </html>
+    """
+    return Response(content=html, media_type="text/html")
 
 
 @app.post(
@@ -579,6 +633,133 @@ async def send_meeting_email_action(
         requester_name=requester.name,
         action_type="send_email",
         status="sent",
+        payload=payload.model_dump(mode="json"),
+        result=response.model_dump(mode="json"),
+    )
+    return response
+
+
+@app.post(
+    "/meetings/{meeting_id}/actions/calendar-event",
+    response_model=MeetingCalendarActionResponse,
+    dependencies=[Depends(verify_agent_api_key)],
+)
+async def create_meeting_calendar_action(
+    meeting_id: str,
+    payload: MeetingCalendarActionRequest,
+) -> MeetingCalendarActionResponse:
+    await ensure_meeting(settings=settings, meeting_id=meeting_id)
+    profile = await get_agent_profile(settings=settings)
+    if "schedule_meeting" not in profile.enabled_actions:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Calendar action is disabled in agent settings.",
+        )
+
+    if "google_calendar" not in profile.enabled_integrations:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Google Calendar integration is disabled in agent settings.",
+        )
+
+    participants = await list_meeting_participants(
+        settings=settings,
+        meeting_id=meeting_id,
+    )
+    requester = await get_meeting_participant_by_identity(
+        settings=settings,
+        meeting_id=meeting_id,
+        identity=payload.requester_identity,
+    )
+    if requester is None:
+        requester = resolve_voice_command_requester(
+            participants=participants,
+            requester_identity=payload.requester_identity,
+            requester_name=payload.requester_name,
+        )
+
+    if requester is None or requester.role != "host":
+        await insert_meeting_agent_action(
+            settings=settings,
+            meeting_id=meeting_id,
+            requester_identity=payload.requester_identity,
+            requester_name=payload.requester_name,
+            action_type="schedule_meeting",
+            status="blocked",
+            payload=payload.model_dump(mode="json"),
+            result={"reason": "host_not_recognized"},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the Host can schedule meetings by voice.",
+        )
+
+    if payload.attendee_scope == "custom":
+        attendees = dedupe_emails([str(email) for email in payload.attendees])
+    elif payload.attendee_scope == "clients":
+        attendees = dedupe_emails(
+            [
+                str(participant.email)
+                for participant in participants
+                if participant.role in ("client", "observer")
+            ]
+        )
+    elif payload.attendee_scope == "host":
+        attendees = [str(requester.email)]
+    else:
+        attendees = dedupe_emails([str(participant.email) for participant in participants])
+
+    if not attendees:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No attendees were found for this calendar action.",
+        )
+
+    try:
+        event = await create_google_calendar_event(
+            settings=settings,
+            title=payload.title,
+            description=(
+                f"{payload.description.strip()}\n\n"
+                f"Criado pelo Coevo a pedido de {requester.name} durante a reuniao."
+            ),
+            start_time=payload.start_time,
+            duration_minutes=payload.duration_minutes,
+            attendees=attendees,
+        )
+    except Exception as exc:
+        await insert_meeting_agent_action(
+            settings=settings,
+            meeting_id=meeting_id,
+            requester_identity=payload.requester_identity,
+            requester_name=payload.requester_name,
+            action_type="schedule_meeting",
+            status="failed",
+            payload=payload.model_dump(mode="json"),
+            result={"reason": str(exc)},
+        )
+        logger.exception("meeting calendar action failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Calendar event could not be created.",
+        ) from exc
+
+    connection = await get_google_calendar_connection(settings=settings)
+    response = MeetingCalendarActionResponse(
+        created=True,
+        event_id=event.get("id", ""),
+        html_link=event.get("htmlLink"),
+        attendee_count=len(attendees),
+        attendees=attendees,
+        organizer_email=connection.get("calendar_email") if connection else None,
+    )
+    await insert_meeting_agent_action(
+        settings=settings,
+        meeting_id=meeting_id,
+        requester_identity=payload.requester_identity,
+        requester_name=requester.name,
+        action_type="schedule_meeting",
+        status="created",
         payload=payload.model_dump(mode="json"),
         result=response.model_dump(mode="json"),
     )

@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     resend_api_key: str | None = None
     resend_from_email: str = "contato@coevolabs.com"
     resend_from_name: str = "Coevo Labs"
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_calendar_redirect_uri: str | None = None
+    google_calendar_time_zone: str = "America/Sao_Paulo"
 
     model_config = SettingsConfigDict(
         env_file=("../../.env", ".env"),
@@ -46,6 +50,12 @@ class Settings(BaseSettings):
         if hosted_origin not in origins:
             origins.append(hosted_origin)
         return origins
+
+    @property
+    def google_redirect_uri(self) -> str:
+        if self.google_calendar_redirect_uri:
+            return self.google_calendar_redirect_uri
+        return "http://localhost:8000/integrations/google-calendar/callback"
 
 
 @lru_cache

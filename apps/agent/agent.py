@@ -77,6 +77,7 @@ current_agent_profile: contextvars.ContextVar[dict] = contextvars.ContextVar(
     default={},
 )
 pending_email_actions: dict[tuple[str, str], dict] = {}
+pending_calendar_actions: dict[tuple[str, str], dict] = {}
 
 
 def normalize_text(value: str) -> str:
@@ -186,6 +187,24 @@ def voice_email_actions_enabled() -> tuple[bool, str]:
     return True, ""
 
 
+def voice_calendar_actions_enabled() -> tuple[bool, str]:
+    profile = current_agent_profile.get() or {}
+    enabled_actions = profile.get("enabled_actions") or ["send_email"]
+    enabled_integrations = profile.get("enabled_integrations") or ["resend_email"]
+    allowed_roles = profile.get("voice_command_roles") or ["host"]
+
+    if "schedule_meeting" not in enabled_actions:
+        return False, "O agendamento por voz esta desativado nas configuracoes."
+
+    if "google_calendar" not in enabled_integrations:
+        return False, "A integracao com Google Agenda esta desativada."
+
+    if "host" not in allowed_roles:
+        return False, "O Host nao esta autorizado a executar comandos por voz."
+
+    return True, ""
+
+
 def get_pending_email_action(meeting_id: str, speaker_identity: str) -> tuple[tuple[str, str], dict] | tuple[None, None]:
     action_key = (meeting_id, speaker_identity)
     pending = pending_email_actions.get(action_key)
@@ -195,6 +214,23 @@ def get_pending_email_action(meeting_id: str, speaker_identity: str) -> tuple[tu
     meeting_pending = [
         (key, value)
         for key, value in pending_email_actions.items()
+        if key[0] == meeting_id
+    ]
+    if len(meeting_pending) == 1:
+        return meeting_pending[0]
+
+    return None, None
+
+
+def get_pending_calendar_action(meeting_id: str, speaker_identity: str) -> tuple[tuple[str, str], dict] | tuple[None, None]:
+    action_key = (meeting_id, speaker_identity)
+    pending = pending_calendar_actions.get(action_key)
+    if pending:
+        return action_key, pending
+
+    meeting_pending = [
+        (key, value)
+        for key, value in pending_calendar_actions.items()
         if key[0] == meeting_id
     ]
     if len(meeting_pending) == 1:
@@ -309,6 +345,104 @@ async def cancel_pending_meeting_email() -> str:
     return "NO_PENDING_EMAIL: Nao ha e-mail pendente para cancelar."
 
 
+@function_tool(
+    description=(
+        "Prepara um evento no Google Agenda solicitado pelo Host por voz. "
+        "Use quando o Host pedir para agendar, marcar ou criar uma reuniao futura. "
+        "start_time deve estar em ISO 8601 com timezone quando possivel. Nao cria "
+        "o evento ainda: exige confirmacao por voz."
+    )
+)
+async def prepare_calendar_event(
+    title: str,
+    start_time: str,
+    duration_minutes: int = 30,
+    description: str = "",
+    attendee_scope: str = "all_participants",
+    attendees: list[str] | None = None,
+) -> str:
+    enabled, reason = voice_calendar_actions_enabled()
+    if not enabled:
+        return f"BLOCKED: {reason}"
+
+    normalized_scope = attendee_scope
+    if normalized_scope not in {"all_participants", "clients", "host", "custom"}:
+        normalized_scope = "all_participants"
+
+    meeting_id = current_meeting_id.get()
+    speaker_identity = current_speaker_identity.get()
+    pending_calendar_actions[(meeting_id, speaker_identity)] = {
+        "requester_identity": speaker_identity,
+        "requester_name": current_speaker_name.get(),
+        "title": title,
+        "description": description,
+        "start_time": start_time,
+        "duration_minutes": duration_minutes,
+        "attendee_scope": normalized_scope,
+        "attendees": attendees or [],
+    }
+    return (
+        "PENDING_CONFIRMATION: Evento de agenda preparado, mas ainda nao criado. "
+        "Confirme em voz alta o titulo, data, horario, duracao e convidados. "
+        "Pergunte: 'Posso agendar?'. So crie depois do Host confirmar por voz."
+    )
+
+
+@function_tool(
+    description=(
+        "Cria no Google Agenda o evento pendente depois que o Host confirmar por voz."
+    )
+)
+async def send_confirmed_calendar_event() -> str:
+    enabled, reason = voice_calendar_actions_enabled()
+    if not enabled:
+        return f"BLOCKED: {reason}"
+
+    meeting_id = current_meeting_id.get()
+    speaker_identity = current_speaker_identity.get()
+    action_key, pending = get_pending_calendar_action(meeting_id, speaker_identity)
+    if not pending:
+        return "NO_PENDING_CALENDAR_EVENT: Nao ha evento pendente para confirmar."
+
+    headers = {"Content-Type": "application/json"}
+    if AGENT_API_KEY:
+        headers["X-Agent-API-Key"] = AGENT_API_KEY
+
+    async with aiohttp.ClientSession() as http:
+        async with http.post(
+            f"{API_URL}/meetings/{meeting_id}/actions/calendar-event",
+            headers=headers,
+            json=pending,
+            timeout=aiohttp.ClientTimeout(total=20),
+        ) as response:
+            body = await response.text()
+            if response.status >= 400:
+                return f"SCHEDULE_FAILED: {body}"
+            payload = await response.json()
+
+    if action_key:
+        pending_calendar_actions.pop(action_key, None)
+    return (
+        "SCHEDULED: Reuniao criada no Google Agenda com sucesso para "
+        f"{payload.get('attendee_count', 0)} convidados."
+    )
+
+
+@function_tool(
+    description="Cancela o evento de agenda pendente quando o Host pedir para cancelar."
+)
+async def cancel_pending_calendar_event() -> str:
+    action_key, _ = get_pending_calendar_action(
+        current_meeting_id.get(),
+        current_speaker_identity.get(),
+    )
+    if action_key:
+        pending_calendar_actions.pop(action_key, None)
+        return "CANCELLED: Evento de agenda pendente cancelado."
+
+    return "NO_PENDING_CALENDAR_EVENT: Nao ha evento pendente para cancelar."
+
+
 async def fetch_agent_profile() -> dict:
     headers = {"Content-Type": "application/json"}
     if AGENT_API_KEY:
@@ -374,6 +508,9 @@ class JarvisAgent(Agent):
                 prepare_meeting_email,
                 send_confirmed_meeting_email,
                 cancel_pending_meeting_email,
+                prepare_calendar_event,
+                send_confirmed_calendar_event,
+                cancel_pending_calendar_event,
             ],
         )
 
@@ -545,7 +682,12 @@ async def jarvis(ctx: agents.JobContext):
                 "por voz. Se o Host escolher fim da reuniao, diga que deixou o "
                 "e-mail preparado e que ele pode confirmar o envio ao encerrar. "
                 "Se o Host cancelar, use cancel_pending_meeting_email. Nunca diga "
-                "que enviou antes da ferramenta confirmar SENT."
+                "que enviou antes da ferramenta confirmar SENT. "
+                "Para agendar reunioes no Google Agenda, use prepare_calendar_event "
+                "primeiro e confirme por voz antes de usar "
+                "send_confirmed_calendar_event. Se o Host cancelar, use "
+                "cancel_pending_calendar_event. Nunca diga que agendou antes da "
+                "ferramenta confirmar SCHEDULED."
             ),
         )
 

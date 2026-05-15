@@ -9,9 +9,10 @@ RecommendationKind = Literal["objection", "risk", "opportunity"]
 RecommendationSeverity = Literal["low", "medium", "high"]
 AgentGender = Literal["masculine", "feminine", "neutral"]
 WeeklyMeetingVolume = Literal["ate-5", "5-10", "10-20", "mais-20"]
-AgentAction = Literal["send_email"]
-AgentIntegration = Literal["resend_email"]
+AgentAction = Literal["send_email", "schedule_meeting"]
+AgentIntegration = Literal["resend_email", "google_calendar"]
 EmailRecipientScope = Literal["all_participants", "clients", "host", "custom"]
+CalendarAttendeeScope = Literal["all_participants", "clients", "host", "custom"]
 AgentVoice = Literal[
     "alloy",
     "ash",
@@ -177,6 +178,34 @@ class MeetingEmailActionResponse(BaseModel):
     recipients: list[EmailStr]
     sender_name: str
     sender_email: EmailStr
+
+
+class GoogleCalendarStatus(BaseModel):
+    configured: bool
+    connected: bool
+    calendar_email: EmailStr | None = None
+    updated_at: datetime | None = None
+    auth_url: str | None = None
+
+
+class MeetingCalendarActionRequest(BaseModel):
+    requester_identity: str = Field(min_length=3, max_length=180)
+    requester_name: str = Field(min_length=1, max_length=120)
+    title: str = Field(min_length=3, max_length=180)
+    description: str = Field(default="", max_length=5000)
+    start_time: datetime
+    duration_minutes: int = Field(default=30, ge=15, le=480)
+    attendee_scope: CalendarAttendeeScope = "all_participants"
+    attendees: list[EmailStr] = Field(default_factory=list, max_length=30)
+
+
+class MeetingCalendarActionResponse(BaseModel):
+    created: bool
+    event_id: str
+    html_link: str | None = None
+    attendee_count: int
+    attendees: list[EmailStr]
+    organizer_email: EmailStr | None = None
 
 
 class VoiceDemoRequest(BaseModel):

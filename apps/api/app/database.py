@@ -197,6 +197,18 @@ CREATE INDEX IF NOT EXISTS idx_meeting_agent_actions_meeting_created
 ON meeting_agent_actions (meeting_id, created_at DESC, id DESC);
 """
 
+CREATE_GOOGLE_CALENDAR_CONNECTION_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS google_calendar_connection (
+    id TEXT PRIMARY KEY,
+    access_token TEXT NOT NULL,
+    refresh_token TEXT,
+    expires_at TIMESTAMPTZ,
+    calendar_email TEXT,
+    scope TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
+
 
 async def init_database(settings: Settings) -> None:
     async with await psycopg.AsyncConnection.connect(settings.database_url) as conn:
@@ -209,6 +221,7 @@ async def init_database(settings: Settings) -> None:
         await conn.execute(CREATE_AGENT_PROFILE_TABLE_SQL)
         await conn.execute(CREATE_MEETING_AGENT_ACTIONS_TABLE_SQL)
         await conn.execute(CREATE_MEETING_AGENT_ACTIONS_INDEX_SQL)
+        await conn.execute(CREATE_GOOGLE_CALENDAR_CONNECTION_TABLE_SQL)
         await conn.execute(CREATE_TRIAL_REQUESTS_TABLE_SQL)
         await conn.execute(ALTER_TRIAL_REQUESTS_SELECTED_PLAN_SQL)
         await conn.execute(ALTER_TRIAL_REQUESTS_VOLUME_SQL)
@@ -639,6 +652,71 @@ async def insert_meeting_agent_action(
                 json.dumps(result) if result is not None else None,
             ),
         )
+
+
+async def get_google_calendar_connection(*, settings: Settings) -> dict | None:
+    query = """
+    SELECT access_token, refresh_token, expires_at, calendar_email, scope, updated_at
+    FROM google_calendar_connection
+    WHERE id = 'default';
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query)
+            row = await cur.fetchone()
+
+    return dict(row) if row else None
+
+
+async def upsert_google_calendar_connection(
+    *,
+    settings: Settings,
+    access_token: str,
+    refresh_token: str | None,
+    expires_at,
+    calendar_email: str | None,
+    scope: str | None,
+) -> dict:
+    query = """
+    INSERT INTO google_calendar_connection (
+        id,
+        access_token,
+        refresh_token,
+        expires_at,
+        calendar_email,
+        scope,
+        updated_at
+    )
+    VALUES ('default', %s, %s, %s, %s, %s, now())
+    ON CONFLICT (id) DO UPDATE
+    SET access_token = EXCLUDED.access_token,
+        refresh_token = COALESCE(EXCLUDED.refresh_token, google_calendar_connection.refresh_token),
+        expires_at = EXCLUDED.expires_at,
+        calendar_email = COALESCE(EXCLUDED.calendar_email, google_calendar_connection.calendar_email),
+        scope = COALESCE(EXCLUDED.scope, google_calendar_connection.scope),
+        updated_at = now()
+    RETURNING access_token, refresh_token, expires_at, calendar_email, scope, updated_at;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                query,
+                (access_token, refresh_token, expires_at, calendar_email, scope),
+            )
+            row = await cur.fetchone()
+
+    if row is None:
+        raise RuntimeError("Google Calendar connection upsert did not return a row.")
+
+    return dict(row)
 
 
 async def insert_transcript_segment(
