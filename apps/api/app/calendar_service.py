@@ -69,6 +69,21 @@ def google_calendar_can_create_events(connection: dict | None) -> bool:
     return "https://www.googleapis.com/auth/calendar.events" in scope.split()
 
 
+def normalize_expires_at(value) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    elif isinstance(value, datetime):
+        parsed = value
+    else:
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 def build_google_calendar_auth_url(settings: Settings) -> str:
     if not settings.google_client_id:
         raise RuntimeError("GOOGLE_CLIENT_ID is required.")
@@ -169,7 +184,7 @@ async def get_valid_google_calendar_token(*, settings: Settings) -> dict:
     if not connection:
         raise RuntimeError("Google Calendar is not connected.")
 
-    expires_at = connection.get("expires_at")
+    expires_at = normalize_expires_at(connection.get("expires_at"))
     if (
         expires_at
         and expires_at > datetime.now(timezone.utc) + timedelta(minutes=3)
