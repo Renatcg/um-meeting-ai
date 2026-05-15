@@ -61,6 +61,7 @@ type MeetingSummary = {
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const CHAT_TOPIC = "um-meeting-chat";
 const AGENT_INTERVENTION_TOPIC = "coevo-agent-intervention";
+const HAND_RAISE_TOPIC = "coevo-hand-raise";
 const COEVO_BACKGROUND_URL = "/backgrounds/coevo-meeting.svg";
 const agentNameMatchers = ["coevo", "jarvis", "um copilot", "copilot"];
 const commercialUserEmails = new Set(["renato@coevo.ai", "marina@coevo.ai"]);
@@ -79,6 +80,10 @@ type MeetingParticipantTileProps = ComponentProps<typeof ParticipantTile> & {
       name?: string;
     };
     source?: Track.Source;
+  };
+  handRaised?: {
+    raised: boolean;
+    subject?: string;
   };
 };
 
@@ -124,6 +129,30 @@ type TrackProcessorsModule = {
   supportsBackgroundProcessors?: () => boolean | Promise<boolean>;
 };
 
+type HandRaisePayload = {
+  type: "hand_raise";
+  identity: string;
+  name: string;
+  raised: boolean;
+  subject?: string;
+  createdAt: string;
+};
+
+type AgentInterventionPayload = {
+  type: "agent_intervention";
+  id: string;
+  subject: string;
+  rationale?: string;
+  isRaised?: boolean;
+  createdAt: string;
+};
+
+type RaisedHandState = {
+  name: string;
+  raised: boolean;
+  subject?: string;
+};
+
 function inferParticipantRole(email: string, isHostCreator: boolean): ParticipantRole {
   if (isHostCreator) {
     return "host";
@@ -146,6 +175,43 @@ function roleLabel(role: ParticipantRole) {
   }
 
   return "Participante";
+}
+
+function HandRaisedIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-4 w-4"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M7.2 11.5V5.9a1.35 1.35 0 0 1 2.7 0v5.2"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.9"
+      />
+      <path
+        d="M9.9 11V4.7a1.35 1.35 0 0 1 2.7 0V11"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.9"
+      />
+      <path
+        d="M12.6 11.2V6.1a1.35 1.35 0 0 1 2.7 0v6.2"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.9"
+      />
+      <path
+        d="M15.3 12.5V8.4a1.35 1.35 0 0 1 2.7 0v6.1c0 3.6-2.25 5.9-5.7 5.9h-.9c-2.3 0-3.95-1.05-5.15-3.05l-1.8-3.05a1.38 1.38 0 0 1 2.3-1.5l1.55 2.05"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.9"
+      />
+    </svg>
+  );
 }
 
 function formatElapsedTime(totalSeconds: number) {
@@ -329,6 +395,9 @@ function MeetingParticipantTile(props: MeetingParticipantTileProps) {
   const participant = props.agentParticipant ?? props.trackRef?.participant;
   const isAgent = isAgentParticipant(participant?.name, participant?.identity);
   const tileRef = useRef<HTMLDivElement | null>(null);
+  const handRaised = Boolean(props.handRaised?.raised);
+  const { agentParticipant: _agentParticipant, handRaised: _handRaised, ...tileProps } =
+    props;
 
   async function openFullscreen() {
     await tileRef.current?.requestFullscreen?.();
@@ -336,12 +405,25 @@ function MeetingParticipantTile(props: MeetingParticipantTileProps) {
 
   if (!isAgent) {
     if (props.trackRef?.source !== Track.Source.ScreenShare) {
-      return <ParticipantTile {...props} />;
+      return (
+        <div className="um-participant-tile-wrap">
+          <ParticipantTile {...tileProps} />
+          {handRaised ? (
+            <span
+              className="um-hand-raise-badge"
+              aria-label="Mao levantada"
+              title="Mao levantada"
+            >
+              <HandRaisedIcon />
+            </span>
+          ) : null}
+        </div>
+      );
     }
 
     return (
       <div className="um-screen-share-tile" ref={tileRef}>
-        <ParticipantTile {...props} />
+        <ParticipantTile {...tileProps} />
         <button
           className="um-fullscreen-button"
           type="button"
@@ -356,7 +438,20 @@ function MeetingParticipantTile(props: MeetingParticipantTileProps) {
   }
 
   return (
-    <div className="um-agent-video-tile">
+    <div className={`um-agent-video-tile ${handRaised ? "has-raised-hand" : ""}`}>
+      {handRaised ? (
+        <span
+          className="um-hand-raise-badge is-agent"
+          aria-label="Coevo levantou a mao"
+          title={
+            props.handRaised?.subject
+              ? `Coevo quer contribuir sobre: ${props.handRaised.subject}`
+              : "Coevo quer contribuir"
+          }
+        >
+          <HandRaisedIcon />
+        </span>
+      ) : null}
       <div className="um-agent-video-orb-wrap">
         <AgentOrb isSpeaking={Boolean(participant?.isSpeaking)} />
       </div>
@@ -420,14 +515,29 @@ function TilePagination({
   );
 }
 
-function renderMeetingTile(tile: MeetingTileItem) {
+function renderMeetingTile(
+  tile: MeetingTileItem,
+  raisedHands: Record<string, RaisedHandState>,
+) {
   if (tile.trackRef) {
-    return <MeetingParticipantTile key={tile.key} trackRef={tile.trackRef} />;
+    const identity = tile.trackRef.participant?.identity;
+    return (
+      <MeetingParticipantTile
+        handRaised={identity ? raisedHands[identity] : undefined}
+        key={tile.key}
+        trackRef={tile.trackRef}
+      />
+    );
   }
 
   return (
     <MeetingParticipantTile
       agentParticipant={tile.agentParticipant}
+      handRaised={
+        tile.agentParticipant.identity
+          ? raisedHands[tile.agentParticipant.identity]
+          : undefined
+      }
       key={tile.key}
     />
   );
@@ -497,10 +607,12 @@ function MeetingGrid({
   setVideoEffect: (effect: VideoEffectMode) => void;
   videoEffect: VideoEffectMode;
 }) {
+  const room = useRoomContext();
   const [clock, setClock] = useState("");
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [desktopPage, setDesktopPage] = useState(0);
   const [mobilePage, setMobilePage] = useState(0);
+  const [raisedHands, setRaisedHands] = useState<Record<string, RaisedHandState>>({});
   const participants = useParticipants();
   const tracks = useTracks(
     [
@@ -592,6 +704,97 @@ function MeetingGrid({
     setMobilePage((page) => Math.min(page, mobileTotalPages - 1));
   }, [mobileTotalPages]);
 
+  useEffect(() => {
+    const decoder = new TextDecoder();
+
+    function handleDataReceived(...args: unknown[]) {
+      const payload = args[0] as Uint8Array;
+      const participant = args[1] as
+        | { identity?: string; name?: string }
+        | undefined;
+      const topic = typeof args[3] === "string" ? args[3] : undefined;
+
+      if (topic !== HAND_RAISE_TOPIC && topic !== AGENT_INTERVENTION_TOPIC) {
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(decoder.decode(payload)) as
+          | HandRaisePayload
+          | AgentInterventionPayload;
+
+        if (parsed.type === "hand_raise") {
+          setRaisedHands((current) => ({
+            ...current,
+            [parsed.identity]: {
+              name: parsed.name,
+              raised: parsed.raised,
+              subject: parsed.subject,
+            },
+          }));
+          return;
+        }
+
+        if (parsed.type === "agent_intervention") {
+          const agentIdentity = participant?.identity ?? agentParticipant?.identity;
+          if (!agentIdentity) {
+            return;
+          }
+
+          setRaisedHands((current) => ({
+            ...current,
+            [agentIdentity]: {
+              name: participant?.name ?? agentParticipant?.name ?? "Coevo",
+              raised: parsed.isRaised !== false,
+              subject: parsed.subject,
+            },
+          }));
+        }
+      } catch {
+        // Ignore unrelated or malformed meeting data messages.
+      }
+    }
+
+    room.on(RoomEvent.DataReceived, handleDataReceived);
+
+    return () => {
+      room.off(RoomEvent.DataReceived, handleDataReceived);
+    };
+  }, [agentParticipant?.identity, agentParticipant?.name, room]);
+
+  async function toggleLocalHand() {
+    const identity = room.localParticipant.identity;
+    const name = room.localParticipant.name || "Participante";
+    const raised = !raisedHands[identity]?.raised;
+    const message: HandRaisePayload = {
+      type: "hand_raise",
+      identity,
+      name,
+      raised,
+      createdAt: new Date().toISOString(),
+    };
+
+    setRaisedHands((current) => ({
+      ...current,
+      [identity]: { name, raised },
+    }));
+
+    const publisher = room.localParticipant as unknown as {
+      publishData: (
+        data: Uint8Array,
+        options?: { reliable?: boolean; topic?: string },
+      ) => Promise<void> | void;
+    };
+
+    await publisher.publishData(
+      new TextEncoder().encode(JSON.stringify(message)),
+      {
+        reliable: true,
+        topic: HAND_RAISE_TOPIC,
+      },
+    );
+  }
+
   const elapsedTime = formatElapsedTime(elapsedSeconds);
   const desktopGridDensity =
     visibleDesktopTiles.length === 1
@@ -610,7 +813,7 @@ function MeetingGrid({
         <div
           className={`um-meeting-grid um-desktop-grid h-full min-h-0 ${desktopGridDensity}`}
         >
-          {visibleDesktopTiles.map(renderMeetingTile)}
+          {visibleDesktopTiles.map((tile) => renderMeetingTile(tile, raisedHands))}
         </div>
         <TilePagination
           currentPage={desktopPage}
@@ -623,7 +826,7 @@ function MeetingGrid({
         <div className="um-mobile-video-stage">
           {mobileTiles.length > 0 ? (
             <div className="um-meeting-grid um-mobile-grid h-full min-h-0">
-              {visibleMobileTiles.map(renderMeetingTile)}
+              {visibleMobileTiles.map((tile) => renderMeetingTile(tile, raisedHands))}
             </div>
           ) : (
             <div className="um-mobile-empty-state">
@@ -640,7 +843,10 @@ function MeetingGrid({
 
           {localCameraTrack ? (
             <div className="um-local-pip">
-              <ParticipantTile trackRef={localCameraTrack} />
+              <MeetingParticipantTile
+                handRaised={raisedHands[localCameraTrack.participant.identity]}
+                trackRef={localCameraTrack}
+              />
             </div>
           ) : null}
         </div>
@@ -658,6 +864,8 @@ function MeetingGrid({
           customBackgroundUrl={customBackgroundUrl}
           onCustomBackgroundChange={onCustomBackgroundChange}
           setVideoEffect={setVideoEffect}
+          isHandRaised={Boolean(raisedHands[room.localParticipant.identity]?.raised)}
+          onToggleHand={toggleLocalHand}
           videoEffect={videoEffect}
         />
 
@@ -676,13 +884,17 @@ function MeetingGrid({
 function MeetingControls({
   customBackgroundName,
   customBackgroundUrl,
+  isHandRaised,
   onCustomBackgroundChange,
+  onToggleHand,
   setVideoEffect,
   videoEffect,
 }: {
   customBackgroundName: string | null;
   customBackgroundUrl: string | null;
+  isHandRaised: boolean;
   onCustomBackgroundChange: (file: File | null) => void;
+  onToggleHand: () => Promise<void> | void;
   setVideoEffect: (effect: VideoEffectMode) => void;
   videoEffect: VideoEffectMode;
 }) {
@@ -803,6 +1015,15 @@ function MeetingControls({
           <span aria-hidden="true">Fx</span>
         </button>
         <button
+          className={`um-control-button ${isHandRaised ? "is-on" : ""}`}
+          type="button"
+          aria-label={isHandRaised ? "Baixar mao" : "Levantar mao"}
+          title={isHandRaised ? "Baixar mao" : "Levantar mao"}
+          onClick={onToggleHand}
+        >
+          <span aria-hidden="true">Mao</span>
+        </button>
+        <button
           className="um-control-button is-leave"
           type="button"
           aria-label="Sair da reuniao"
@@ -831,80 +1052,6 @@ type ChatPayload = {
   content: string;
   createdAt: string;
 };
-
-type AgentInterventionPayload = {
-  type: "agent_intervention";
-  id: string;
-  subject: string;
-  rationale?: string;
-  createdAt: string;
-};
-
-function AgentInterventionBanner() {
-  const room = useRoomContext();
-  const [intervention, setIntervention] =
-    useState<AgentInterventionPayload | null>(null);
-
-  useEffect(() => {
-    const decoder = new TextDecoder();
-
-    function handleDataReceived(...args: unknown[]) {
-      const payload = args[0] as Uint8Array;
-      const topic = typeof args[3] === "string" ? args[3] : undefined;
-
-      if (topic !== AGENT_INTERVENTION_TOPIC) {
-        return;
-      }
-
-      try {
-        const parsed = JSON.parse(decoder.decode(payload)) as AgentInterventionPayload;
-        if (parsed.type === "agent_intervention") {
-          setIntervention(parsed);
-        }
-      } catch {
-        // Ignore malformed intervention messages.
-      }
-    }
-
-    room.on(RoomEvent.DataReceived, handleDataReceived);
-
-    return () => {
-      room.off(RoomEvent.DataReceived, handleDataReceived);
-    };
-  }, [room]);
-
-  if (!intervention) {
-    return null;
-  }
-
-  return (
-    <div className="absolute left-1/2 top-4 z-30 w-[min(92vw,520px)] -translate-x-1/2 rounded-xl border border-[#FDBA74] bg-white/95 px-4 py-3 text-[#11110F] shadow-[0_24px_90px_rgba(17,17,15,0.16)] backdrop-blur">
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#FFF3EA] text-xs font-black text-[#F97316]">
-          IA
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-bold uppercase tracking-wide text-[#F97316]">
-            Coevo levantou a mao
-          </p>
-          <p className="mt-1 text-sm font-semibold">
-            Gostaria de contribuir sobre: {intervention.subject}
-          </p>
-          <p className="mt-1 text-xs leading-5 text-[#73736B]">
-            Diga "Coevo, pode falar" para autorizar a intervencao.
-          </p>
-        </div>
-        <button
-          className="rounded-lg border border-[#E7E7E2] px-2 py-1 text-xs font-bold transition hover:border-[#F97316] hover:bg-[#FFF3EA]"
-          type="button"
-          onClick={() => setIntervention(null)}
-        >
-          Ocultar
-        </button>
-      </div>
-    </div>
-  );
-}
 
 function MeetingChatPanel({ participantName }: { participantName: string }) {
   const room = useRoomContext();
@@ -1574,7 +1721,6 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
           }`}
           onDisconnected={leaveMeeting}
         >
-          <AgentInterventionBanner />
           <section className="relative h-full min-h-0 overflow-hidden">
             <button
               className="absolute left-4 top-4 z-20 rounded-lg border border-[#E7E7E2] bg-white/90 px-4 py-2 text-sm font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-[#F97316] hover:bg-[#FFF3EA]"

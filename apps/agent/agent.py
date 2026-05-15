@@ -117,12 +117,10 @@ def contains_intervention_authorization(value: str) -> bool:
     authorization_terms = (
         "pode falar",
         "pode contribuir",
-        "fale",
-        "contribua",
         "autorizo",
-        "manda",
         "pode intervir",
-        "qual ponto",
+        "autorizo a intervencao",
+        "pode fazer a intervencao",
     )
     return any(term in normalized for term in authorization_terms)
 
@@ -725,6 +723,7 @@ async def publish_agent_intervention(
         "id": f"intervention-{int(time.time() * 1000)}",
         "subject": subject,
         "rationale": rationale,
+        "isRaised": True,
         "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
     pending_interventions[meeting_id] = payload
@@ -741,6 +740,34 @@ async def publish_agent_intervention(
                 await result
     except Exception:
         logger.warning("failed to publish agent intervention", exc_info=True)
+
+
+async def clear_agent_intervention_hand(
+    *,
+    ctx: agents.JobContext,
+    meeting_id: str,
+    subject: str = "",
+) -> None:
+    payload = {
+        "type": "agent_intervention",
+        "id": f"intervention-clear-{int(time.time() * 1000)}",
+        "subject": subject,
+        "isRaised": False,
+        "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    encoded_payload = json.dumps(payload).encode("utf-8")
+    try:
+        publisher = getattr(ctx.room, "local_participant", None)
+        if publisher is not None:
+            result = publisher.publish_data(
+                encoded_payload,
+                reliable=True,
+                topic=AGENT_INTERVENTION_TOPIC,
+            )
+            if asyncio.iscoroutine(result):
+                await result
+    except Exception:
+        logger.warning("failed to clear agent intervention hand", exc_info=True)
 
 
 async def maybe_raise_agent_hand(
@@ -864,10 +891,18 @@ async def jarvis(ctx: agents.JobContext):
 
         is_active_follow_up = now <= active_until
 
+        pending_intervention_context = ""
         if contains_intervention_authorization(transcript):
             pending = pending_interventions.pop(meeting_id, None)
             if pending:
                 active_until = now + FOLLOW_UP_SILENCE_SECONDS
+                asyncio.create_task(
+                    clear_agent_intervention_hand(
+                        ctx=ctx,
+                        meeting_id=meeting_id,
+                        subject=pending.get("subject", ""),
+                    )
+                )
                 session.generate_reply(
                     user_input=transcript,
                     instructions=(
@@ -879,6 +914,23 @@ async def jarvis(ctx: agents.JobContext):
                     ),
                 )
                 return
+        elif was_called and meeting_id in pending_interventions:
+            pending = pending_interventions.pop(meeting_id, None)
+            if pending:
+                asyncio.create_task(
+                    clear_agent_intervention_hand(
+                        ctx=ctx,
+                        meeting_id=meeting_id,
+                        subject=pending.get("subject", ""),
+                    )
+                )
+                pending_intervention_context = (
+                    "Voce tinha levantado a mao para contribuir sobre "
+                    f"{pending.get('subject', 'um ponto da reuniao')}. "
+                    "Como foi chamado pelo wake word, responda livremente ao "
+                    "pedido atual. Se o pedido for generico, desenvolva esse "
+                    "ponto pendente com objetividade. "
+                )
 
         if not was_called and not is_active_follow_up:
             asyncio.create_task(
@@ -902,6 +954,7 @@ async def jarvis(ctx: agents.JobContext):
                 "tom alinhado a personalidade configurada. Responda na mesma "
                 "lingua usada pelo participante que acabou de falar. Nao traduza "
                 "nem mude de lingua a menos que o participante peca explicitamente. "
+                f"{pending_intervention_context}"
                 "Depois de ser chamado por Coevo, trate falas subsequentes como "
                 "continuidade da conversa por ate 10 segundos apos a sua resposta "
                 "e enquanto a janela ativa estiver aberta. "
