@@ -10,6 +10,8 @@ from app.models import (
     KnowledgeDocument,
     KnowledgeSearchResult,
     Meeting,
+    MeetingMemoryItem,
+    MeetingMemorySearchResult,
     MeetingParticipant,
     SalesRecommendation,
     TranscriptSegment,
@@ -99,6 +101,54 @@ ON knowledge_chunks (document_id, chunk_index);
 CREATE_KNOWLEDGE_CHUNKS_VECTOR_INDEX_SQL = """
 CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_embedding
 ON knowledge_chunks USING hnsw (embedding vector_cosine_ops);
+"""
+
+CREATE_MEETING_MEMORY_ITEMS_TABLE_SQL_TEMPLATE = """
+CREATE TABLE IF NOT EXISTS meeting_memory_items (
+    id BIGSERIAL PRIMARY KEY,
+    organization_id TEXT NOT NULL DEFAULT 'default',
+    agent_id TEXT NOT NULL DEFAULT 'coevo',
+    meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+    memory_type TEXT NOT NULL CHECK (
+        memory_type IN (
+            'transcript_chunk',
+            'executive_summary',
+            'decision',
+            'next_step',
+            'commercial_objection',
+            'risk',
+            'promise',
+            'entity'
+        )
+    ),
+    content TEXT NOT NULL,
+    metadata JSONB NOT NULL DEFAULT '{{}}'::jsonb,
+    visibility TEXT NOT NULL DEFAULT 'participants' CHECK (
+        visibility IN ('participants', 'host_commercial', 'organization')
+    ),
+    allowed_user_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+    allowed_role_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+    sensitivity_level TEXT NOT NULL DEFAULT 'medium' CHECK (
+        sensitivity_level IN ('low', 'medium', 'high')
+    ),
+    embedding vector({dimensions}) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
+
+CREATE_MEETING_MEMORY_ITEMS_MEETING_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_meeting_memory_items_meeting
+ON meeting_memory_items (meeting_id, memory_type, id);
+"""
+
+CREATE_MEETING_MEMORY_ITEMS_ACL_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_meeting_memory_items_acl
+ON meeting_memory_items (organization_id, visibility, sensitivity_level);
+"""
+
+CREATE_MEETING_MEMORY_ITEMS_VECTOR_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_meeting_memory_items_embedding
+ON meeting_memory_items USING hnsw (embedding vector_cosine_ops);
 """
 
 CREATE_MEETINGS_TABLE_SQL = """
@@ -261,6 +311,14 @@ async def init_database(settings: Settings) -> None:
         )
         await conn.execute(CREATE_KNOWLEDGE_CHUNKS_DOCUMENT_INDEX_SQL)
         await conn.execute(CREATE_KNOWLEDGE_CHUNKS_VECTOR_INDEX_SQL)
+        await conn.execute(
+            CREATE_MEETING_MEMORY_ITEMS_TABLE_SQL_TEMPLATE.format(
+                dimensions=settings.openai_embedding_dimensions,
+            )
+        )
+        await conn.execute(CREATE_MEETING_MEMORY_ITEMS_MEETING_INDEX_SQL)
+        await conn.execute(CREATE_MEETING_MEMORY_ITEMS_ACL_INDEX_SQL)
+        await conn.execute(CREATE_MEETING_MEMORY_ITEMS_VECTOR_INDEX_SQL)
 
 
 async def insert_trial_request(
@@ -1144,6 +1202,191 @@ async def search_knowledge_chunks(
             rows = await cur.fetchall()
 
     return [KnowledgeSearchResult.model_validate(row) for row in rows]
+
+
+async def delete_meeting_memory_items(
+    *,
+    settings: Settings,
+    meeting_id: str,
+) -> None:
+    query = "DELETE FROM meeting_memory_items WHERE meeting_id = %s;"
+
+    async with await psycopg.AsyncConnection.connect(settings.database_url) as conn:
+        await conn.execute(query, (meeting_id,))
+
+
+async def insert_meeting_memory_items(
+    *,
+    settings: Settings,
+    items: Sequence[dict],
+    embeddings: Sequence[Sequence[float]],
+) -> Sequence[MeetingMemoryItem]:
+    if not items:
+        return []
+
+    query = """
+    INSERT INTO meeting_memory_items (
+        organization_id,
+        agent_id,
+        meeting_id,
+        memory_type,
+        content,
+        metadata,
+        visibility,
+        allowed_user_ids,
+        allowed_role_ids,
+        sensitivity_level,
+        embedding
+    )
+    VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s::jsonb, %s::jsonb, %s, %s::vector)
+    RETURNING
+        id,
+        organization_id,
+        agent_id,
+        meeting_id,
+        memory_type,
+        content,
+        metadata,
+        visibility,
+        allowed_user_ids,
+        allowed_role_ids,
+        sensitivity_level,
+        created_at;
+    """
+    inserted: list[MeetingMemoryItem] = []
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            for item, embedding in zip(items, embeddings):
+                await cur.execute(
+                    query,
+                    (
+                        item.get("organization_id", "default"),
+                        item.get("agent_id", "coevo"),
+                        item["meeting_id"],
+                        item["memory_type"],
+                        item["content"],
+                        json.dumps(item.get("metadata", {})),
+                        item.get("visibility", "participants"),
+                        json.dumps(item.get("allowed_user_ids", [])),
+                        json.dumps(item.get("allowed_role_ids", [])),
+                        item.get("sensitivity_level", "medium"),
+                        vector_literal(embedding),
+                    ),
+                )
+                row = await cur.fetchone()
+                if row is not None:
+                    inserted.append(MeetingMemoryItem.model_validate(row))
+
+    return inserted
+
+
+async def list_meeting_memory_items(
+    *,
+    settings: Settings,
+    meeting_id: str,
+) -> Sequence[MeetingMemoryItem]:
+    query = """
+    SELECT
+        id,
+        organization_id,
+        agent_id,
+        meeting_id,
+        memory_type,
+        content,
+        metadata,
+        visibility,
+        allowed_user_ids,
+        allowed_role_ids,
+        sensitivity_level,
+        created_at
+    FROM meeting_memory_items
+    WHERE meeting_id = %s
+    ORDER BY id ASC;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (meeting_id,))
+            rows = await cur.fetchall()
+
+    return [MeetingMemoryItem.model_validate(row) for row in rows]
+
+
+async def search_meeting_memory_items(
+    *,
+    settings: Settings,
+    query_embedding: Sequence[float],
+    top_k: int,
+    organization_id: str,
+    requester_email: str | None,
+    requester_role: str | None,
+    meeting_id: str | None = None,
+    customer: str | None = None,
+) -> Sequence[MeetingMemorySearchResult]:
+    filters = ["mmi.organization_id = %s"]
+    params: list[object] = [organization_id]
+
+    if meeting_id:
+        filters.append("mmi.meeting_id = %s")
+        params.append(meeting_id)
+
+    if customer:
+        filters.append(
+            "(mmi.metadata->>'customer' ILIKE %s OR mmi.content ILIKE %s)"
+        )
+        params.extend((f"%{customer}%", f"%{customer}%"))
+
+    acl_filter = """
+    (
+        mmi.visibility = 'organization'
+        OR %s = ANY (
+            SELECT jsonb_array_elements_text(mmi.allowed_role_ids)
+        )
+        OR %s = ANY (
+            SELECT jsonb_array_elements_text(mmi.allowed_user_ids)
+        )
+    )
+    """
+    filters.append(acl_filter)
+    params.extend((requester_role or "", requester_email or ""))
+
+    embedding = vector_literal(query_embedding)
+    where_clause = " AND ".join(filters)
+    query = f"""
+    SELECT
+        mmi.id,
+        mmi.meeting_id,
+        m.title AS meeting_title,
+        mmi.memory_type,
+        mmi.content,
+        mmi.metadata,
+        mmi.sensitivity_level,
+        1 - (mmi.embedding <=> %s::vector) AS score,
+        mmi.created_at
+    FROM meeting_memory_items mmi
+    JOIN meetings m ON m.id = mmi.meeting_id
+    WHERE {where_clause}
+    ORDER BY mmi.embedding <=> %s::vector
+    LIMIT %s;
+    """
+    query_params = [embedding, *params, embedding, top_k]
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, query_params)
+            rows = await cur.fetchall()
+
+    return [MeetingMemorySearchResult.model_validate(row) for row in rows]
 
 
 async def get_agent_profile(*, settings: Settings) -> AgentProfile:

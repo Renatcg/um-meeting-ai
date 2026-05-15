@@ -9,6 +9,18 @@ RecommendationKind = Literal["objection", "risk", "opportunity"]
 RecommendationSeverity = Literal["low", "medium", "high"]
 AgentGender = Literal["masculine", "feminine", "neutral"]
 WeeklyMeetingVolume = Literal["ate-5", "5-10", "10-20", "mais-20"]
+MemoryItemType = Literal[
+    "transcript_chunk",
+    "executive_summary",
+    "decision",
+    "next_step",
+    "commercial_objection",
+    "risk",
+    "promise",
+    "entity",
+]
+MemoryVisibility = Literal["participants", "host_commercial", "organization"]
+SensitivityLevel = Literal["low", "medium", "high"]
 AgentAction = Literal["send_email", "schedule_meeting", "web_search"]
 AgentIntegration = Literal["resend_email", "google_calendar", "web_search"]
 EmailRecipientScope = Literal["all_participants", "clients", "host", "custom"]
@@ -135,7 +147,56 @@ class KnowledgeSearchResponse(BaseModel):
     results: list[KnowledgeSearchResult]
 
 
+class MeetingMemoryItem(BaseModel):
+    id: int
+    organization_id: str
+    agent_id: str
+    meeting_id: str
+    memory_type: MemoryItemType
+    content: str
+    metadata: dict = Field(default_factory=dict)
+    visibility: MemoryVisibility
+    allowed_user_ids: list[str] = Field(default_factory=list)
+    allowed_role_ids: list[str] = Field(default_factory=list)
+    sensitivity_level: SensitivityLevel
+    created_at: datetime
+
+
+class MeetingMemoryProcessResponse(BaseModel):
+    meeting_id: str
+    created_count: int
+    skipped: bool = False
+    reason: str | None = None
+
+
+class MeetingMemorySearchRequest(BaseModel):
+    query: str = Field(min_length=3, max_length=1000)
+    top_k: int = Field(default=8, ge=1, le=20)
+    meeting_id: str | None = Field(default=None, max_length=120)
+    customer: str | None = Field(default=None, max_length=160)
+    date_range: str | None = Field(default=None, max_length=80)
+
+
+class MeetingMemorySearchResult(BaseModel):
+    id: int
+    meeting_id: str
+    meeting_title: str | None = None
+    memory_type: MemoryItemType
+    content: str
+    metadata: dict = Field(default_factory=dict)
+    sensitivity_level: SensitivityLevel
+    score: float
+    created_at: datetime
+
+
+class MeetingMemorySearchResponse(BaseModel):
+    query: str
+    results: list[MeetingMemorySearchResult]
+
+
 class AgentProfile(BaseModel):
+    id: str = Field(default="coevo", min_length=2, max_length=80)
+    organization_id: str = Field(default="default", min_length=2, max_length=120)
     name: str = Field(default="Coevo", min_length=2, max_length=40)
     gender: AgentGender = "masculine"
     voice: AgentVoice = "marin"
@@ -161,6 +222,10 @@ class AgentProfile(BaseModel):
     enabled_integrations: list[AgentIntegration] = Field(
         default_factory=lambda: ["resend_email", "google_calendar", "web_search"]
     )
+    permissions: dict = Field(default_factory=dict)
+    knowledge_base_ids: list[str] = Field(default_factory=list, max_length=50)
+    connected_channels: list[str] = Field(default_factory=lambda: ["meeting"], max_length=20)
+    tool_access: dict = Field(default_factory=dict)
     require_voice_confirmation: bool = True
     updated_at: datetime | None = None
 

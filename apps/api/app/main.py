@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import asyncio
 import logging
 from uuid import uuid4
 
@@ -71,6 +72,10 @@ from app.models import (
     MeetingEmailActionResponse,
     MeetingInterventionCheckRequest,
     MeetingInterventionCheckResponse,
+    MeetingMemoryItem,
+    MeetingMemoryProcessResponse,
+    MeetingMemorySearchRequest,
+    MeetingMemorySearchResponse,
     MeetingWebSearchRequest,
     MeetingWebSearchResponse,
     SalesRecommendation,
@@ -86,6 +91,11 @@ from app.knowledge_service import (
     ingest_knowledge_media,
     search_knowledge,
 )
+from app.memory_service import (
+    process_meeting_memory,
+    require_memory_or_404,
+    search_meeting_memory,
+)
 from app.sales_coach_service import analyze_segment
 from app.store import meeting_store
 from app.web_search_service import search_web
@@ -96,6 +106,13 @@ logger = logging.getLogger(__name__)
 
 
 LIVEKIT_WEBHOOK_ROOM_FINISHED = "room_finished"
+
+
+def log_background_task_failure(task: asyncio.Task) -> None:
+    try:
+        task.result()
+    except Exception:
+        logger.exception("background task failed")
 
 
 @asynccontextmanager
@@ -350,6 +367,10 @@ async def get_meeting(meeting_id: str) -> Meeting:
 async def finalize_meeting(meeting_id: str) -> Meeting:
     meeting = await mark_meeting_ended(settings=settings, meeting_id=meeting_id)
     await send_deferred_meeting_emails(meeting_id)
+    task = asyncio.create_task(
+        process_meeting_memory(settings=settings, meeting_id=meeting_id)
+    )
+    task.add_done_callback(log_background_task_failure)
     return meeting
 
 
@@ -1242,6 +1263,77 @@ async def create_transcript_segment(
         drafts=recommendations,
     )
     return segment
+
+
+def can_read_memory_item(item: MeetingMemoryItem, claims: ParticipantClaims) -> bool:
+    if item.visibility == "organization":
+        return True
+    if claims.role in item.allowed_role_ids:
+        return True
+    return claims.email.lower() in [value.lower() for value in item.allowed_user_ids]
+
+
+@app.post(
+    "/meetings/{meeting_id}/memory/process",
+    response_model=MeetingMemoryProcessResponse,
+    dependencies=[Depends(verify_agent_api_key)],
+)
+async def process_meeting_memory_endpoint(
+    meeting_id: str,
+    force: bool = False,
+) -> MeetingMemoryProcessResponse:
+    await ensure_meeting(settings=settings, meeting_id=meeting_id)
+    return await process_meeting_memory(
+        settings=settings,
+        meeting_id=meeting_id,
+        force=force,
+    )
+
+
+@app.get(
+    "/meetings/{meeting_id}/memory",
+    response_model=list[MeetingMemoryItem],
+)
+async def get_meeting_memory(
+    meeting_id: str,
+    claims: ParticipantClaims = Depends(get_participant_claims),
+) -> list[MeetingMemoryItem]:
+    if claims.meeting_id != meeting_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Participant token does not belong to this meeting.",
+        )
+
+    await ensure_meeting(settings=settings, meeting_id=meeting_id)
+    items = await require_memory_or_404(settings=settings, meeting_id=meeting_id)
+    return [item for item in items if can_read_memory_item(item, claims)]
+
+
+@app.post(
+    "/meetings/{meeting_id}/memory/search",
+    response_model=MeetingMemorySearchResponse,
+)
+async def search_meeting_memory_endpoint(
+    meeting_id: str,
+    payload: MeetingMemorySearchRequest,
+    claims: ParticipantClaims = Depends(get_participant_claims),
+) -> MeetingMemorySearchResponse:
+    if claims.meeting_id != meeting_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Participant token does not belong to this meeting.",
+        )
+
+    await ensure_meeting(settings=settings, meeting_id=meeting_id)
+    scoped_payload = payload.model_copy(
+        update={"meeting_id": payload.meeting_id or None}
+    )
+    return await search_meeting_memory(
+        settings=settings,
+        payload=scoped_payload,
+        requester_email=claims.email,
+        requester_role=claims.role,
+    )
 
 
 @app.get("/meetings/{meeting_id}/transcript", response_model=list[TranscriptSegment])

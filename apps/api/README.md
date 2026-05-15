@@ -29,6 +29,9 @@ Endpoints implementados:
 - `POST /meetings/{meeting_id}/transcript`
 - `GET /meetings/{meeting_id}/transcript`
 - `GET /meetings/{meeting_id}/sales-recommendations`
+- `POST /meetings/{meeting_id}/memory/process`
+- `GET /meetings/{meeting_id}/memory`
+- `POST /meetings/{meeting_id}/memory/search`
 - `POST /knowledge/documents`
 - `POST /knowledge/search`
 
@@ -51,8 +54,46 @@ Para RAG, cria:
 
 - `knowledge_documents`
 - `knowledge_chunks`
+- `meeting_memory_items`
 
 `knowledge_chunks.embedding` usa pgvector.
+`meeting_memory_items.embedding` tambem usa pgvector e guarda memoria pos-reuniao
+com ACL basica por usuario/papel.
+
+## Memoria pos-reuniao
+
+Quando a reuniao termina, a API dispara em segundo plano um processamento de
+memoria. Tambem e possivel reprocessar manualmente:
+
+```bash
+POST /meetings/{meeting_id}/memory/process?force=true
+X-Agent-API-Key: <AGENT_API_KEY>
+```
+
+A memoria guarda varios niveis:
+
+- transcricao em chunks
+- resumo executivo
+- decisoes
+- proximos passos
+- objecoes comerciais
+- riscos
+- promessas feitas
+- entidades citadas
+
+Busca semantica:
+
+```json
+{
+  "query": "O que o cliente falou sobre prazo?",
+  "top_k": 8,
+  "customer": "ACME"
+}
+```
+
+Use `POST /meetings/{meeting_id}/memory/search` com
+`Authorization: Bearer <participant_access_token>`. O retorno respeita a
+permissao basica gravada na memoria.
 
 ## Painel comercial
 
