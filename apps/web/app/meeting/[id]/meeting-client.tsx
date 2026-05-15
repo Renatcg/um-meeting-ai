@@ -345,6 +345,73 @@ function LeaveIcon() {
   );
 }
 
+function ChatIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-5 w-5"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M5.5 6.2A2.2 2.2 0 0 1 7.7 4h8.6a2.2 2.2 0 0 1 2.2 2.2v6.5a2.2 2.2 0 0 1-2.2 2.2h-4.7L7.2 19v-4.1A2.2 2.2 0 0 1 5.5 12.7V6.2Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.9"
+      />
+      <path
+        d="M8.7 8.1h6.6M8.7 11.1h4.4"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.9"
+      />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-5 w-5"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M7 7l10 10M17 7 7 17"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
+}
+
+function FullscreenIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-5 w-5"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M8.5 4.5h-4v4M15.5 4.5h4v4M19.5 15.5v4h-4M4.5 15.5v4h4"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.9"
+      />
+      <path
+        d="M4.8 4.8 9 9M19.2 4.8 15 9M19.2 19.2 15 15M4.8 19.2 9 15"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.9"
+      />
+    </svg>
+  );
+}
+
 function formatElapsedTime(totalSeconds: number) {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -562,7 +629,7 @@ function MeetingParticipantTile(props: MeetingParticipantTileProps) {
           title="Tela cheia"
           onClick={openFullscreen}
         >
-          <span aria-hidden="true">Tela cheia</span>
+          <FullscreenIcon />
         </button>
       </div>
     );
@@ -1387,11 +1454,13 @@ function MeetingSidePanel({
             <h2 className="mt-1 text-lg font-semibold">Chat da reuniao</h2>
           </div>
           <button
-            className="rounded-lg border border-[#E7E7E2] bg-white px-3 py-2 text-sm font-semibold text-[#11110F] transition hover:border-[#F97316] hover:bg-[#FFF3EA] lg:hidden"
+            className="grid h-10 w-10 place-items-center rounded-lg border border-[#E7E7E2] bg-white text-[#11110F] transition hover:border-[#F97316] hover:bg-[#FFF3EA] lg:hidden"
             type="button"
+            aria-label="Fechar painel"
+            title="Fechar painel"
             onClick={onClose}
           >
-            Fechar
+            <CloseIcon />
           </button>
         </div>
       </div>
@@ -1854,18 +1923,22 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
         >
           <section className="relative h-full min-h-0 overflow-hidden">
             <button
-              className="absolute left-4 top-4 z-20 rounded-lg border border-[#E7E7E2] bg-white/90 px-4 py-2 text-sm font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-[#F97316] hover:bg-[#FFF3EA]"
+              className="absolute left-4 top-4 z-20 grid h-11 w-11 place-items-center rounded-lg border border-[#E7E7E2] bg-white/90 text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-[#F97316] hover:bg-[#FFF3EA]"
               type="button"
+              aria-label="Sair da reuniao"
+              title="Sair da reuniao"
               onClick={leaveMeeting}
             >
-              Sair
+              <LeaveIcon />
             </button>
             <button
-              className="absolute right-4 top-4 z-20 rounded-lg border border-[#E7E7E2] bg-white/90 px-4 py-2 text-sm font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-[#F97316] hover:bg-[#FFF3EA] lg:hidden"
+              className="absolute right-4 top-4 z-20 grid h-11 w-11 place-items-center rounded-lg border border-[#E7E7E2] bg-white/90 text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-[#F97316] hover:bg-[#FFF3EA] lg:hidden"
               type="button"
+              aria-label="Abrir chat"
+              title="Abrir chat"
               onClick={() => setIsMobileSidePanelOpen(true)}
             >
-              Chat
+              <ChatIcon />
             </button>
             <button
               className="absolute right-4 top-4 z-20 hidden h-11 w-11 items-center justify-center rounded-lg border border-[#E7E7E2] bg-white/90 text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-[#F97316] hover:bg-[#FFF3EA] lg:flex"
