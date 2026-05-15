@@ -214,6 +214,137 @@ function HandRaisedIcon() {
   );
 }
 
+function MicIcon({ muted = false }: { muted?: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-5 w-5"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M12 14.5a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5.5a3 3 0 0 0 3 3Z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.9"
+      />
+      <path
+        d="M5.8 10.5a6.2 6.2 0 0 0 12.4 0M12 16.8V20M9 20h6"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.9"
+      />
+      {muted ? (
+        <path
+          d="M4 4l16 16"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeWidth="2.2"
+        />
+      ) : null}
+    </svg>
+  );
+}
+
+function CameraIcon({ off = false }: { off?: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-5 w-5"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M4.8 8.3A2.3 2.3 0 0 1 7.1 6h6.2a2.3 2.3 0 0 1 2.3 2.3v7.4a2.3 2.3 0 0 1-2.3 2.3H7.1a2.3 2.3 0 0 1-2.3-2.3V8.3Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.9"
+      />
+      <path
+        d="m15.6 10 3.6-2.1v8.2L15.6 14"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.9"
+      />
+      {off ? (
+        <path
+          d="M4 4l16 16"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeWidth="2.2"
+        />
+      ) : null}
+    </svg>
+  );
+}
+
+function ScreenShareIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-5 w-5"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <rect
+        height="12"
+        rx="2.2"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        width="16"
+        x="4"
+        y="5"
+      />
+      <path
+        d="M12 14V9.5M9.8 11.7 12 9.5l2.2 2.2M9 20h6"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.9"
+      />
+    </svg>
+  );
+}
+
+function EffectsIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-5 w-5"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M6.2 17.8 17.8 6.2M8.2 5.2l.55 1.4 1.4.55-1.4.55-.55 1.4-.55-1.4-1.4-.55 1.4-.55.55-1.4ZM16.5 14.5l.75 1.9 1.9.75-1.9.75-.75 1.9-.75-1.9-1.9-.75 1.9-.75.75-1.9Z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.75"
+      />
+    </svg>
+  );
+}
+
+function LeaveIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-5 w-5"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M7.5 14.5c3 2.6 6 2.6 9 0l1.4-1.2a1.7 1.7 0 0 0 .1-2.4l-1-1a1.7 1.7 0 0 0-2.2-.2l-1.2.8a1.7 1.7 0 0 1-1.9 0l-1.2-.8a1.7 1.7 0 0 0-2.2.2l-1 1a1.7 1.7 0 0 0 .1 2.4l1.1 1.2Z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.9"
+      />
+    </svg>
+  );
+}
+
 function formatElapsedTime(totalSeconds: number) {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -983,7 +1114,7 @@ function MeetingControls({
           title={isMicrophoneEnabled ? "Desligar microfone" : "Ligar microfone"}
           onClick={() => localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}
         >
-          <span aria-hidden="true">Mic</span>
+          <MicIcon muted={!isMicrophoneEnabled} />
         </button>
         <button
           className={`um-control-button ${isCameraEnabled ? "" : "is-off"}`}
@@ -992,7 +1123,7 @@ function MeetingControls({
           title={isCameraEnabled ? "Desligar camera" : "Ligar camera"}
           onClick={() => localParticipant.setCameraEnabled(!isCameraEnabled)}
         >
-          <span aria-hidden="true">Cam</span>
+          <CameraIcon off={!isCameraEnabled} />
         </button>
         <button
           className={`um-control-button ${isScreenShareEnabled ? "is-on" : ""}`}
@@ -1003,7 +1134,7 @@ function MeetingControls({
           title={isScreenShareEnabled ? "Parar compartilhamento" : "Compartilhar tela"}
           onClick={() => localParticipant.setScreenShareEnabled(!isScreenShareEnabled)}
         >
-          <span aria-hidden="true">Tela</span>
+          <ScreenShareIcon />
         </button>
         <button
           className={`um-control-button ${videoEffect !== "none" ? "is-on" : ""}`}
@@ -1012,7 +1143,7 @@ function MeetingControls({
           title="Efeitos de video"
           onClick={() => setIsEffectsOpen((isOpen) => !isOpen)}
         >
-          <span aria-hidden="true">Fx</span>
+          <EffectsIcon />
         </button>
         <button
           className={`um-control-button ${isHandRaised ? "is-on" : ""}`}
@@ -1021,7 +1152,7 @@ function MeetingControls({
           title={isHandRaised ? "Baixar mao" : "Levantar mao"}
           onClick={onToggleHand}
         >
-          <span aria-hidden="true">Mao</span>
+          <HandRaisedIcon />
         </button>
         <button
           className="um-control-button is-leave"
@@ -1030,7 +1161,7 @@ function MeetingControls({
           title="Sair da reuniao"
           onClick={() => room.disconnect()}
         >
-          Sair
+          <LeaveIcon />
         </button>
       </div>
     </div>
