@@ -590,7 +590,7 @@ export default function CoevoLabsLandingPage() {
           position: relative;
           z-index: 0;
           max-width: 1180px;
-          margin: 0 auto 72px;
+          margin: 0 auto 36px;
           text-align: center;
         }
 
@@ -872,7 +872,7 @@ export default function CoevoLabsLandingPage() {
           }
 
           .how-header {
-            margin-bottom: 48px;
+            margin-bottom: 24px;
           }
 
           .how-deco {
