@@ -16,8 +16,8 @@ type CoevoConfigTab =
 type AgentGender = "masculine" | "feminine" | "neutral";
 type WeeklyMeetingVolume = "ate-5" | "5-10" | "10-20" | "mais-20";
 type ParticipantRole = "host" | "commercial" | "client" | "observer";
-type AgentAction = "send_email" | "schedule_meeting";
-type AgentIntegration = "resend_email" | "google_calendar";
+type AgentAction = "send_email" | "schedule_meeting" | "web_search";
+type AgentIntegration = "resend_email" | "google_calendar" | "web_search";
 type AgentVoice =
   | "alloy"
   | "ash"
@@ -125,8 +125,8 @@ const defaultProfile: AgentProfile = {
   language_policy: "Responder sempre na mesma lingua usada pelo participante.",
   custom_instructions: "",
   voice_command_roles: ["host"],
-  enabled_actions: ["send_email", "schedule_meeting"],
-  enabled_integrations: ["resend_email"],
+  enabled_actions: ["send_email", "schedule_meeting", "web_search"],
+  enabled_integrations: ["resend_email", "web_search"],
   require_voice_confirmation: true,
 };
 
@@ -164,6 +164,11 @@ const actionOptions: Array<{ value: AgentAction; label: string; description: str
     label: "Agendar reunioes",
     description: "Cria eventos no Google Agenda depois da confirmacao por voz.",
   },
+  {
+    value: "web_search",
+    label: "Consultar internet",
+    description: "Pesquisa informacoes atuais na web apenas quando o Host pedir.",
+  },
 ];
 const integrationOptions: Array<{
   value: AgentIntegration;
@@ -179,6 +184,11 @@ const integrationOptions: Array<{
     value: "google_calendar",
     label: "Google Agenda",
     description: "Permite que o Coevo crie eventos e convites na agenda conectada.",
+  },
+  {
+    value: "web_search",
+    label: "Busca na internet",
+    description: "Autoriza consultas externas sob comando do Host.",
   },
 ];
 const coevoConfigTabs: Array<{ id: CoevoConfigTab; label: string; description: string }> = [

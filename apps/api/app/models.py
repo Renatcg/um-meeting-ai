@@ -9,8 +9,8 @@ RecommendationKind = Literal["objection", "risk", "opportunity"]
 RecommendationSeverity = Literal["low", "medium", "high"]
 AgentGender = Literal["masculine", "feminine", "neutral"]
 WeeklyMeetingVolume = Literal["ate-5", "5-10", "10-20", "mais-20"]
-AgentAction = Literal["send_email", "schedule_meeting"]
-AgentIntegration = Literal["resend_email", "google_calendar"]
+AgentAction = Literal["send_email", "schedule_meeting", "web_search"]
+AgentIntegration = Literal["resend_email", "google_calendar", "web_search"]
 EmailRecipientScope = Literal["all_participants", "clients", "host", "custom"]
 CalendarAttendeeScope = Literal["all_participants", "clients", "host", "custom"]
 AgentVoice = Literal[
@@ -167,7 +167,7 @@ class MeetingEmailActionRequest(BaseModel):
     requester_identity: str = Field(min_length=3, max_length=180)
     requester_name: str = Field(min_length=1, max_length=120)
     recipient_scope: EmailRecipientScope = "all_participants"
-    recipients: list[EmailStr] = Field(default_factory=list, max_length=30)
+    recipients: list[str] = Field(default_factory=list, max_length=30)
     subject: str = Field(min_length=3, max_length=180)
     body: str = Field(min_length=3, max_length=5000)
 
@@ -206,6 +206,34 @@ class MeetingCalendarActionResponse(BaseModel):
     attendee_count: int
     attendees: list[EmailStr]
     organizer_email: EmailStr | None = None
+
+
+class WebSearchResult(BaseModel):
+    title: str
+    url: str
+    snippet: str
+
+
+class MeetingWebSearchRequest(BaseModel):
+    requester_identity: str = Field(min_length=3, max_length=180)
+    requester_name: str = Field(min_length=1, max_length=120)
+    query: str = Field(min_length=3, max_length=500)
+
+
+class MeetingWebSearchResponse(BaseModel):
+    query: str
+    results: list[WebSearchResult]
+
+
+class MeetingInterventionCheckRequest(BaseModel):
+    speaker_name: str = Field(min_length=1, max_length=120)
+    transcript: str = Field(min_length=8, max_length=4000)
+
+
+class MeetingInterventionCheckResponse(BaseModel):
+    should_raise_hand: bool
+    subject: str | None = None
+    rationale: str | None = None
 
 
 class VoiceDemoRequest(BaseModel):

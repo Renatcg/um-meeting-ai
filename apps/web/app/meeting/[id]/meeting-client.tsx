@@ -60,6 +60,7 @@ type MeetingSummary = {
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const CHAT_TOPIC = "um-meeting-chat";
+const AGENT_INTERVENTION_TOPIC = "coevo-agent-intervention";
 const COEVO_BACKGROUND_URL = "/backgrounds/coevo-meeting.svg";
 const agentNameMatchers = ["coevo", "jarvis", "um copilot", "copilot"];
 const commercialUserEmails = new Set(["renato@coevo.ai", "marina@coevo.ai"]);
@@ -831,6 +832,80 @@ type ChatPayload = {
   createdAt: string;
 };
 
+type AgentInterventionPayload = {
+  type: "agent_intervention";
+  id: string;
+  subject: string;
+  rationale?: string;
+  createdAt: string;
+};
+
+function AgentInterventionBanner() {
+  const room = useRoomContext();
+  const [intervention, setIntervention] =
+    useState<AgentInterventionPayload | null>(null);
+
+  useEffect(() => {
+    const decoder = new TextDecoder();
+
+    function handleDataReceived(...args: unknown[]) {
+      const payload = args[0] as Uint8Array;
+      const topic = typeof args[3] === "string" ? args[3] : undefined;
+
+      if (topic !== AGENT_INTERVENTION_TOPIC) {
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(decoder.decode(payload)) as AgentInterventionPayload;
+        if (parsed.type === "agent_intervention") {
+          setIntervention(parsed);
+        }
+      } catch {
+        // Ignore malformed intervention messages.
+      }
+    }
+
+    room.on(RoomEvent.DataReceived, handleDataReceived);
+
+    return () => {
+      room.off(RoomEvent.DataReceived, handleDataReceived);
+    };
+  }, [room]);
+
+  if (!intervention) {
+    return null;
+  }
+
+  return (
+    <div className="absolute left-1/2 top-4 z-30 w-[min(92vw,520px)] -translate-x-1/2 rounded-xl border border-[#FDBA74] bg-white/95 px-4 py-3 text-[#11110F] shadow-[0_24px_90px_rgba(17,17,15,0.16)] backdrop-blur">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#FFF3EA] text-xs font-black text-[#F97316]">
+          IA
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-bold uppercase tracking-wide text-[#F97316]">
+            Coevo levantou a mao
+          </p>
+          <p className="mt-1 text-sm font-semibold">
+            Gostaria de contribuir sobre: {intervention.subject}
+          </p>
+          <p className="mt-1 text-xs leading-5 text-[#73736B]">
+            Diga "Coevo, pode falar" para autorizar a intervencao.
+          </p>
+        </div>
+        <button
+          className="rounded-lg border border-[#E7E7E2] px-2 py-1 text-xs font-bold transition hover:border-[#F97316] hover:bg-[#FFF3EA]"
+          type="button"
+          onClick={() => setIntervention(null)}
+        >
+          Ocultar
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function MeetingChatPanel({ participantName }: { participantName: string }) {
   const room = useRoomContext();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -1499,6 +1574,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
           }`}
           onDisconnected={leaveMeeting}
         >
+          <AgentInterventionBanner />
           <section className="relative h-full min-h-0 overflow-hidden">
             <button
               className="absolute left-4 top-4 z-20 rounded-lg border border-[#E7E7E2] bg-white/90 px-4 py-2 text-sm font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-[#F97316] hover:bg-[#FFF3EA]"

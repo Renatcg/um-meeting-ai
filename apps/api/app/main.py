@@ -47,6 +47,7 @@ from app.database import (
     upsert_agent_profile,
 )
 from app.email_service import send_meeting_action_email, send_trial_confirmation_email
+from app.intervention_service import evaluate_intervention
 from app.models import (
     AgentProfile,
     CreateMeetingRequest,
@@ -61,6 +62,10 @@ from app.models import (
     MeetingCalendarActionResponse,
     MeetingEmailActionRequest,
     MeetingEmailActionResponse,
+    MeetingInterventionCheckRequest,
+    MeetingInterventionCheckResponse,
+    MeetingWebSearchRequest,
+    MeetingWebSearchResponse,
     SalesRecommendation,
     TranscriptSegment,
     TranscriptSegmentCreate,
@@ -76,6 +81,7 @@ from app.knowledge_service import (
 )
 from app.sales_coach_service import analyze_segment
 from app.store import meeting_store
+from app.web_search_service import search_web
 
 settings = get_settings()
 MEETING_JOIN_GRACE_PERIOD = timedelta(minutes=15)
@@ -455,6 +461,51 @@ def dedupe_emails(values: list[str]) -> list[str]:
     return deduped
 
 
+def normalize_lookup_value(value: str) -> str:
+    return " ".join(value.strip().lower().split())
+
+
+def resolve_participant_emails_by_names_or_emails(
+    *,
+    participants,
+    values: list[str],
+) -> tuple[list[str], list[str]]:
+    by_email = {
+        normalize_lookup_value(str(participant.email)): str(participant.email)
+        for participant in participants
+    }
+    by_name: dict[str, list[str]] = {}
+    for participant in participants:
+        by_name.setdefault(normalize_lookup_value(participant.name), []).append(
+            str(participant.email)
+        )
+
+    resolved: list[str] = []
+    unknown: list[str] = []
+    for value in values:
+        normalized = normalize_lookup_value(value)
+        if not normalized:
+            continue
+        if normalized in by_email:
+            resolved.append(by_email[normalized])
+            continue
+        if normalized in by_name:
+            resolved.extend(by_name[normalized])
+            continue
+        partial_name_matches = [
+            email
+            for name, emails in by_name.items()
+            for email in emails
+            if normalized in name or name in normalized
+        ]
+        if len(partial_name_matches) == 1:
+            resolved.extend(partial_name_matches)
+            continue
+        unknown.append(value)
+
+    return dedupe_emails(resolved), unknown
+
+
 def resolve_voice_command_requester(
     *,
     participants,
@@ -486,6 +537,29 @@ def resolve_voice_command_requester(
             return hosts[-1]
 
     return None
+
+
+def ensure_host_requester(*, participants, requester_identity: str, requester_name: str):
+    requester = None
+    for participant in participants:
+        if participant.identity == requester_identity:
+            requester = participant
+            break
+
+    if requester is None:
+        requester = resolve_voice_command_requester(
+            participants=participants,
+            requester_identity=requester_identity,
+            requester_name=requester_name,
+        )
+
+    if requester is None or requester.role != "host":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the Host can execute this voice command.",
+        )
+
+    return requester
 
 
 @app.post(
@@ -566,7 +640,31 @@ async def send_meeting_email_action(
         )
 
     if payload.recipient_scope == "custom":
-        recipients = dedupe_emails([str(email) for email in payload.recipients])
+        recipients, unknown_recipients = resolve_participant_emails_by_names_or_emails(
+            participants=participants,
+            values=payload.recipients,
+        )
+        if unknown_recipients:
+            await insert_meeting_agent_action(
+                settings=settings,
+                meeting_id=meeting_id,
+                requester_identity=payload.requester_identity,
+                requester_name=payload.requester_name,
+                action_type="send_email",
+                status="blocked",
+                payload=payload.model_dump(mode="json"),
+                result={
+                    "reason": "recipients_not_in_meeting",
+                    "recipients": unknown_recipients,
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Emails can only be sent to people who joined this meeting. "
+                    "Use participant names or emails from this meeting."
+                ),
+            )
     elif payload.recipient_scope == "clients":
         recipients = dedupe_emails(
             [
@@ -637,6 +735,123 @@ async def send_meeting_email_action(
         result=response.model_dump(mode="json"),
     )
     return response
+
+
+@app.post(
+    "/meetings/{meeting_id}/actions/web-search",
+    response_model=MeetingWebSearchResponse,
+    dependencies=[Depends(verify_agent_api_key)],
+)
+async def run_meeting_web_search(
+    meeting_id: str,
+    payload: MeetingWebSearchRequest,
+) -> MeetingWebSearchResponse:
+    await ensure_meeting(settings=settings, meeting_id=meeting_id)
+    profile = await get_agent_profile(settings=settings)
+    if "web_search" not in profile.enabled_actions:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Web search is disabled in agent settings.",
+        )
+
+    if "web_search" not in profile.enabled_integrations:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Web search integration is disabled in agent settings.",
+        )
+
+    participants = await list_meeting_participants(
+        settings=settings,
+        meeting_id=meeting_id,
+    )
+    requester = ensure_host_requester(
+        participants=participants,
+        requester_identity=payload.requester_identity,
+        requester_name=payload.requester_name,
+    )
+
+    try:
+        results = await search_web(payload.query)
+    except Exception as exc:
+        await insert_meeting_agent_action(
+            settings=settings,
+            meeting_id=meeting_id,
+            requester_identity=payload.requester_identity,
+            requester_name=payload.requester_name,
+            action_type="web_search",
+            status="failed",
+            payload=payload.model_dump(mode="json"),
+            result={"reason": str(exc)},
+        )
+        logger.exception("meeting web search failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Web search could not be completed.",
+        ) from exc
+
+    response = MeetingWebSearchResponse(query=payload.query, results=results)
+    await insert_meeting_agent_action(
+        settings=settings,
+        meeting_id=meeting_id,
+        requester_identity=payload.requester_identity,
+        requester_name=requester.name,
+        action_type="web_search",
+        status="completed",
+        payload=payload.model_dump(mode="json"),
+        result=response.model_dump(mode="json"),
+    )
+    return response
+
+
+@app.post(
+    "/meetings/{meeting_id}/agent/intervention-check",
+    response_model=MeetingInterventionCheckResponse,
+    dependencies=[Depends(verify_agent_api_key)],
+)
+async def check_agent_intervention(
+    meeting_id: str,
+    payload: MeetingInterventionCheckRequest,
+) -> MeetingInterventionCheckResponse:
+    await ensure_meeting(settings=settings, meeting_id=meeting_id)
+    knowledge_context = ""
+    try:
+        knowledge_response = await search_knowledge(
+            settings=settings,
+            query=payload.transcript,
+            top_k=3,
+            meeting_id=meeting_id,
+        )
+        knowledge_context = "\n\n".join(
+            f"Fonte: {result.filename}\nTrecho: {result.content}"
+            for result in knowledge_response.results[:3]
+        )
+    except Exception:
+        logger.info("intervention knowledge context unavailable", exc_info=True)
+
+    try:
+        recent_segments = await list_transcript_segments(
+            settings=settings,
+            meeting_id=meeting_id,
+        )
+        recent_context = "\n".join(
+            f"{segment.speaker_name}: {segment.content}"
+            for segment in recent_segments[-10:]
+        )
+        if recent_context:
+            knowledge_context = (
+                f"{knowledge_context}\n\nTranscricao recente:\n{recent_context}"
+                if knowledge_context
+                else f"Transcricao recente:\n{recent_context}"
+            )
+    except Exception:
+        logger.info("intervention transcript context unavailable", exc_info=True)
+
+    return await evaluate_intervention(
+        settings=settings,
+        speaker_name=payload.speaker_name,
+        transcript=payload.transcript,
+        knowledge_context=knowledge_context,
+    )
 
 
 @app.post(

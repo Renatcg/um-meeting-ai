@@ -1,5 +1,6 @@
 import asyncio
 import contextvars
+import json
 import logging
 import os
 import re
@@ -78,6 +79,10 @@ current_agent_profile: contextvars.ContextVar[dict] = contextvars.ContextVar(
 )
 pending_email_actions: dict[tuple[str, str], dict] = {}
 pending_calendar_actions: dict[tuple[str, str], dict] = {}
+pending_interventions: dict[str, dict] = {}
+last_intervention_check_by_meeting: dict[str, float] = {}
+AGENT_INTERVENTION_TOPIC = "coevo-agent-intervention"
+INTERVENTION_CHECK_INTERVAL_SECONDS = 45.0
 
 
 def normalize_text(value: str) -> str:
@@ -102,6 +107,24 @@ def contains_silence_command(value: str) -> bool:
     return contains_wake_word(value) and any(
         silence_word in normalized for silence_word in SILENCE_WORDS
     )
+
+
+def contains_intervention_authorization(value: str) -> bool:
+    normalized = normalize_text(value)
+    if not contains_wake_word(value):
+        return False
+
+    authorization_terms = (
+        "pode falar",
+        "pode contribuir",
+        "fale",
+        "contribua",
+        "autorizo",
+        "manda",
+        "pode intervir",
+        "qual ponto",
+    )
+    return any(term in normalized for term in authorization_terms)
 
 
 def is_meaningful_transcript(value: str) -> bool:
@@ -205,6 +228,24 @@ def voice_calendar_actions_enabled() -> tuple[bool, str]:
     return True, ""
 
 
+def voice_web_search_enabled() -> tuple[bool, str]:
+    profile = current_agent_profile.get() or {}
+    enabled_actions = profile.get("enabled_actions") or []
+    enabled_integrations = profile.get("enabled_integrations") or []
+    allowed_roles = profile.get("voice_command_roles") or ["host"]
+
+    if "web_search" not in enabled_actions:
+        return False, "A consulta na internet esta desativada nas configuracoes."
+
+    if "web_search" not in enabled_integrations:
+        return False, "A integracao de busca na internet esta desativada."
+
+    if "host" not in allowed_roles:
+        return False, "O Host nao esta autorizado a executar comandos por voz."
+
+    return True, ""
+
+
 def get_pending_email_action(meeting_id: str, speaker_identity: str) -> tuple[tuple[str, str], dict] | tuple[None, None]:
     action_key = (meeting_id, speaker_identity)
     pending = pending_email_actions.get(action_key)
@@ -245,7 +286,9 @@ def get_pending_calendar_action(meeting_id: str, speaker_identity: str) -> tuple
         "quando o Host pedir ao Coevo para enviar e-mail, resumo, follow-up ou "
         "proximos passos. Nao envia ainda: esta ferramenta apenas deixa a acao "
         "pendente. Depois de preparar, pergunte se o Host quer enviar agora ou "
-        "ao fim da reuniao. Se ele escolher agora, peca confirmacao por voz."
+        "ao fim da reuniao. Se ele escolher agora, peca confirmacao por voz. "
+        "Quando recipient_scope for custom, recipients deve conter apenas nomes "
+        "ou e-mails de pessoas que entraram nesta sala."
     )
 )
 async def prepare_meeting_email(
@@ -443,6 +486,57 @@ async def cancel_pending_calendar_event() -> str:
     return "NO_PENDING_CALENDAR_EVENT: Nao ha evento pendente para cancelar."
 
 
+@function_tool(
+    description=(
+        "Consulta a internet quando o Host pedir explicitamente para pesquisar, "
+        "verificar algo na web, buscar noticias ou confirmar informacoes atuais. "
+        "Nao use para participantes que nao sejam Host e nao use sem pedido claro."
+    )
+)
+async def search_web_for_host(query: str) -> str:
+    enabled, reason = voice_web_search_enabled()
+    if not enabled:
+        return f"BLOCKED: {reason}"
+
+    headers = {"Content-Type": "application/json"}
+    if AGENT_API_KEY:
+        headers["X-Agent-API-Key"] = AGENT_API_KEY
+
+    async with aiohttp.ClientSession() as http:
+        async with http.post(
+            f"{API_URL}/meetings/{current_meeting_id.get()}/actions/web-search",
+            headers=headers,
+            json={
+                "requester_identity": current_speaker_identity.get(),
+                "requester_name": current_speaker_name.get(),
+                "query": query,
+            },
+            timeout=aiohttp.ClientTimeout(total=20),
+        ) as response:
+            body = await response.text()
+            if response.status >= 400:
+                return f"WEB_SEARCH_FAILED: {body}"
+            payload = await response.json()
+
+    results = payload.get("results", [])
+    if not results:
+        return "NO_WEB_RESULTS: Nao encontrei resultados relevantes na internet."
+
+    formatted_results = []
+    for result in results[:5]:
+        formatted_results.append(
+            "\n".join(
+                [
+                    f"Titulo: {result.get('title', '')}",
+                    f"URL: {result.get('url', '')}",
+                    f"Resumo: {result.get('snippet', '')}",
+                ]
+            )
+        )
+
+    return "\n\n---\n\n".join(formatted_results)
+
+
 async def fetch_agent_profile() -> dict:
     headers = {"Content-Type": "application/json"}
     if AGENT_API_KEY:
@@ -511,6 +605,7 @@ class JarvisAgent(Agent):
                 prepare_calendar_event,
                 send_confirmed_calendar_event,
                 cancel_pending_calendar_event,
+                search_web_for_host,
             ],
         )
 
@@ -572,6 +667,80 @@ def log_task_failure(task: asyncio.Task[None]) -> None:
         task.result()
     except Exception:
         logger.warning("failed to save transcript segment", exc_info=True)
+
+
+async def publish_agent_intervention(
+    *,
+    ctx: agents.JobContext,
+    meeting_id: str,
+    subject: str,
+    rationale: str,
+) -> None:
+    payload = {
+        "type": "agent_intervention",
+        "id": f"intervention-{int(time.time() * 1000)}",
+        "subject": subject,
+        "rationale": rationale,
+        "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    pending_interventions[meeting_id] = payload
+    encoded_payload = json.dumps(payload).encode("utf-8")
+    try:
+        publisher = getattr(ctx.room, "local_participant", None)
+        if publisher is not None:
+            result = publisher.publish_data(
+                encoded_payload,
+                reliable=True,
+                topic=AGENT_INTERVENTION_TOPIC,
+            )
+            if asyncio.iscoroutine(result):
+                await result
+    except Exception:
+        logger.warning("failed to publish agent intervention", exc_info=True)
+
+
+async def maybe_raise_agent_hand(
+    *,
+    ctx: agents.JobContext,
+    meeting_id: str,
+    speaker_name: str,
+    transcript: str,
+) -> None:
+    now = time.monotonic()
+    if now - last_intervention_check_by_meeting.get(meeting_id, 0.0) < INTERVENTION_CHECK_INTERVAL_SECONDS:
+        return
+    if meeting_id in pending_interventions:
+        return
+
+    last_intervention_check_by_meeting[meeting_id] = now
+    headers = {"Content-Type": "application/json"}
+    if AGENT_API_KEY:
+        headers["X-Agent-API-Key"] = AGENT_API_KEY
+
+    try:
+        async with aiohttp.ClientSession() as http:
+            async with http.post(
+                f"{API_URL}/meetings/{meeting_id}/agent/intervention-check",
+                headers=headers,
+                json={"speaker_name": speaker_name, "transcript": transcript},
+                timeout=aiohttp.ClientTimeout(total=18),
+            ) as response:
+                if response.status >= 400:
+                    return
+                payload = await response.json()
+    except Exception:
+        logger.info("agent intervention check failed", exc_info=True)
+        return
+
+    if not payload.get("should_raise_hand"):
+        return
+
+    await publish_agent_intervention(
+        ctx=ctx,
+        meeting_id=meeting_id,
+        subject=payload.get("subject") or "um ponto da reuniao",
+        rationale=payload.get("rationale") or "",
+    )
 
 
 @server.rtc_session(agent_name=AGENT_NAME)
@@ -651,7 +820,31 @@ async def jarvis(ctx: agents.JobContext):
 
         is_active_follow_up = now <= active_until
 
+        if contains_intervention_authorization(transcript):
+            pending = pending_interventions.pop(meeting_id, None)
+            if pending:
+                active_until = now + FOLLOW_UP_SILENCE_SECONDS
+                session.generate_reply(
+                    user_input=transcript,
+                    instructions=(
+                        "O Host autorizou sua intervencao. Desenvolva somente "
+                        "o ponto pendente, com objetividade e sem abrir novos "
+                        "assuntos. Comece dizendo: "
+                        f"'Eu gostaria de contribuir sobre {pending.get('subject', 'este assunto')}'. "
+                        f"Motivo: {pending.get('rationale', '')}"
+                    ),
+                )
+                return
+
         if not was_called and not is_active_follow_up:
+            asyncio.create_task(
+                maybe_raise_agent_hand(
+                    ctx=ctx,
+                    meeting_id=meeting_id,
+                    speaker_name=speaker_name,
+                    transcript=transcript,
+                )
+            )
             return
 
         active_until = now + (
@@ -674,6 +867,10 @@ async def jarvis(ctx: agents.JobContext):
                 "consulte a ferramenta search_knowledge_base antes de responder. "
                 "Se a ferramenta retornar NO_MATCH, diga que nao encontrou "
                 "informacao suficiente. "
+                "Se o Host pedir para consultar a internet, pesquisar na web, "
+                "buscar noticias ou verificar informacao atual, use "
+                "search_web_for_host antes de responder. Cite fontes de forma "
+                "curta usando os titulos ou URLs retornados. "
                 "Para enviar e-mail, resumo, follow-up ou proximos passos, use "
                 "prepare_meeting_email primeiro. Depois pergunte se o envio deve "
                 "ser imediato ou ao fim da reuniao. Se o Host escolher agora, "
@@ -681,6 +878,9 @@ async def jarvis(ctx: agents.JobContext):
                 "send_confirmed_meeting_email quando o Host confirmar claramente "
                 "por voz. Se o Host escolher fim da reuniao, diga que deixou o "
                 "e-mail preparado e que ele pode confirmar o envio ao encerrar. "
+                "E-mails so podem ser enviados para pessoas que entraram nesta "
+                "reuniao. Se o Host selecionar destinatarios, use os nomes ou "
+                "e-mails informados no lobby e nunca invente destinatarios externos. "
                 "Se o Host cancelar, use cancel_pending_meeting_email. Nunca diga "
                 "que enviou antes da ferramenta confirmar SENT. "
                 "Para agendar reunioes no Google Agenda, use prepare_calendar_event "
