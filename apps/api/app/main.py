@@ -787,6 +787,67 @@ async def send_meeting_email_payload(
     return response
 
 
+async def build_meeting_summary_email_body(
+    *,
+    meeting_id: str,
+    fallback_body: str,
+) -> str:
+    segments = await list_transcript_segments(settings=settings, meeting_id=meeting_id)
+    transcript_lines = [
+        f"{segment.speaker_name}: {segment.content}"
+        for segment in segments[-120:]
+    ]
+    transcript = "\n".join(transcript_lines).strip()
+
+    if not transcript:
+        return (
+            f"{fallback_body.strip()}\n\n"
+            "Observacao: nao encontrei transcricao suficiente para gerar um resumo "
+            "automatico desta reuniao."
+        )
+
+    if not settings.openai_api_key:
+        return (
+            "Resumo da reuniao\n\n"
+            "A transcricao foi registrada, mas a chave da OpenAI nao esta configurada "
+            "para gerar o resumo automatico.\n\n"
+            f"Transcricao recente:\n{transcript[:6000]}"
+        )
+
+    client = AsyncOpenAI(api_key=settings.openai_api_key)
+    prompt = f"""
+Voce e o Coevo. Gere um e-mail profissional em portugues do Brasil com o resumo
+da reuniao abaixo.
+
+Inclua obrigatoriamente estas secoes:
+1. Resumo executivo
+2. Principais pontos discutidos
+3. Decisoes tomadas
+4. Proximos passos
+5. Pendencias e responsaveis, quando existirem
+
+Se algum item nao aparecer na transcricao, escreva "Nao identificado na reuniao".
+Seja claro, objetivo e util para todos os participantes.
+
+Transcricao:
+{transcript[:18000]}
+"""
+    try:
+        response = await client.responses.create(
+            model=settings.openai_summary_model,
+            input=prompt,
+        )
+        summary = response.output_text.strip()
+    except OpenAIError:
+        logger.exception("meeting summary generation failed")
+        return (
+            f"{fallback_body.strip()}\n\n"
+            "Observacao: nao foi possivel gerar o resumo automatico no encerramento."
+        )
+
+    return summary or fallback_body
+
+
 async def send_deferred_meeting_emails(meeting_id: str) -> None:
     pending_emails = await list_pending_meeting_emails(
         settings=settings,
@@ -796,6 +857,18 @@ async def send_deferred_meeting_emails(meeting_id: str) -> None:
         pending_email_id = int(pending_email["id"])
         try:
             payload = MeetingEmailActionRequest.model_validate(pending_email["payload"])
+            summary_body = await build_meeting_summary_email_body(
+                meeting_id=meeting_id,
+                fallback_body=payload.body,
+            )
+            payload = payload.model_copy(
+                update={
+                    "subject": payload.subject
+                    if "resumo" in payload.subject.lower()
+                    else f"Resumo da reuniao - {payload.subject}",
+                    "body": summary_body,
+                }
+            )
             response = await send_meeting_email_payload(
                 meeting_id=meeting_id,
                 payload=payload,
