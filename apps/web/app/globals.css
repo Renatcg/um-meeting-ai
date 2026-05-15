@@ -171,26 +171,51 @@ select {
 
 .um-hand-raise-badge {
   position: absolute;
-  top: 0.75rem;
   right: 0.75rem;
+  bottom: 0.875rem;
   z-index: 6;
   display: grid;
   width: 2.1rem;
   height: 2.1rem;
   place-items: center;
-  border: 1px solid rgba(253, 186, 116, 0.72);
+  border: 1px solid rgba(249, 115, 22, 0.78);
   border-radius: 999px;
-  background: rgba(17, 17, 15, 0.66);
-  color: #ffedd5;
+  background: rgba(249, 115, 22, 0.92);
+  color: #ffffff;
   font-size: 1rem;
-  box-shadow: 0 10px 34px rgba(17, 17, 15, 0.22);
+  box-shadow:
+    0 0 0 0 rgba(249, 115, 22, 0.44),
+    0 10px 34px rgba(17, 17, 15, 0.22);
+  animation: um-hand-raise-pulse 1.65s ease-in-out infinite;
   backdrop-filter: blur(14px);
 }
 
 .um-hand-raise-badge.is-agent {
   border-color: rgba(249, 115, 22, 0.72);
-  background: rgba(255, 243, 234, 0.92);
-  color: #f97316;
+  background: rgba(249, 115, 22, 0.94);
+  color: #ffffff;
+}
+
+.um-hand-raise-badge .um-icon-hand {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+@keyframes um-hand-raise-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(249, 115, 22, 0.42),
+      0 10px 34px rgba(17, 17, 15, 0.22);
+    transform: translateY(0);
+  }
+
+  50% {
+    box-shadow:
+      0 0 0 0.42rem rgba(249, 115, 22, 0),
+      0 14px 40px rgba(17, 17, 15, 0.28);
+    transform: translateY(-1px);
+  }
 }
 
 .um-screen-share-tile {
@@ -356,6 +381,11 @@ select {
   left: 0.5rem;
   max-width: calc(100% - 1rem);
   font-size: 0.68rem;
+}
+
+.um-local-pip .um-hand-raise-badge {
+  right: 0.5rem;
+  bottom: 0.5rem;
 }
 
 .um-agent-video-tile {
@@ -758,6 +788,16 @@ select {
     color 180ms ease;
 }
 
+.um-control-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.um-control-button .um-icon-hand {
+  width: 2.35rem;
+  height: 2.35rem;
+}
+
 .um-control-button:hover {
   transform: translateY(-1px);
   border-color: #f97316;
@@ -998,11 +1038,16 @@ select {
   }
 
   .um-hand-raise-badge {
-    top: 0.5rem;
     right: 0.5rem;
+    bottom: 0.5rem;
     width: 1.85rem;
     height: 1.85rem;
     font-size: 0.875rem;
+  }
+
+  .um-hand-raise-badge .um-icon-hand {
+    width: 0.98rem;
+    height: 0.98rem;
   }
 
   .um-mobile-grid .lk-participant-media-video,
@@ -1035,6 +1080,16 @@ select {
     min-width: 2.65rem;
     min-height: 2.65rem;
     font-size: 0.68rem;
+  }
+
+  .um-control-icon {
+    width: 1.9rem;
+    height: 1.9rem;
+  }
+
+  .um-control-button .um-icon-hand {
+    width: 1.8rem;
+    height: 1.8rem;
   }
 
   .um-control-button.is-leave {

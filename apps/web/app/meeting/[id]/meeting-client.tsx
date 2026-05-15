@@ -181,7 +181,7 @@ function HandRaisedIcon() {
   return (
     <svg
       aria-hidden="true"
-      className="h-4 w-4"
+      className="um-icon-hand"
       fill="none"
       viewBox="0 0 24 24"
     >
@@ -218,7 +218,7 @@ function MicIcon({ muted = false }: { muted?: boolean }) {
   return (
     <svg
       aria-hidden="true"
-      className="h-5 w-5"
+      className="um-control-icon"
       fill="none"
       viewBox="0 0 24 24"
     >
@@ -250,7 +250,7 @@ function CameraIcon({ off = false }: { off?: boolean }) {
   return (
     <svg
       aria-hidden="true"
-      className="h-5 w-5"
+      className="um-control-icon"
       fill="none"
       viewBox="0 0 24 24"
     >
@@ -283,7 +283,7 @@ function ScreenShareIcon() {
   return (
     <svg
       aria-hidden="true"
-      className="h-5 w-5"
+      className="um-control-icon"
       fill="none"
       viewBox="0 0 24 24"
     >
@@ -311,16 +311,29 @@ function EffectsIcon() {
   return (
     <svg
       aria-hidden="true"
-      className="h-5 w-5"
+      className="um-control-icon"
       fill="none"
       viewBox="0 0 24 24"
     >
       <path
-        d="M6.2 17.8 17.8 6.2M8.2 5.2l.55 1.4 1.4.55-1.4.55-.55 1.4-.55-1.4-1.4-.55 1.4-.55.55-1.4ZM16.5 14.5l.75 1.9 1.9.75-1.9.75-.75 1.9-.75-1.9-1.9-.75 1.9-.75.75-1.9Z"
+        d="m5.4 18.6 9.9-9.9"
         stroke="currentColor"
         strokeLinecap="round"
         strokeLinejoin="round"
-        strokeWidth="1.75"
+        strokeWidth="1.9"
+      />
+      <path
+        d="m13.2 6.8 4 4"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.9"
+      />
+      <path
+        d="M18.4 4.2v2.1M19.45 5.25h-2.1M8.3 5.2l.45 1.15 1.15.45-1.15.45L8.3 8.4l-.45-1.15L6.7 6.8l1.15-.45.45-1.15ZM17.6 15.2l.6 1.55 1.55.6-1.55.6-.6 1.55-.6-1.55-1.55-.6 1.55-.6.6-1.55Z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.6"
       />
     </svg>
   );
@@ -330,12 +343,18 @@ function LeaveIcon() {
   return (
     <svg
       aria-hidden="true"
-      className="h-5 w-5"
+      className="um-control-icon"
       fill="none"
       viewBox="0 0 24 24"
     >
       <path
-        d="M7.5 14.5c3 2.6 6 2.6 9 0l1.4-1.2a1.7 1.7 0 0 0 .1-2.4l-1-1a1.7 1.7 0 0 0-2.2-.2l-1.2.8a1.7 1.7 0 0 1-1.9 0l-1.2-.8a1.7 1.7 0 0 0-2.2.2l-1 1a1.7 1.7 0 0 0 .1 2.4l1.1 1.2Z"
+        d="M5.5 20.5V4.8a1.3 1.3 0 0 1 1-1.25l7-1.75A1.3 1.3 0 0 1 15.1 3v18a1.3 1.3 0 0 1-1.6 1.25l-7-1.75a1.3 1.3 0 0 1-1-1.25Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.9"
+      />
+      <path
+        d="M15.2 5.5h2.7a1.6 1.6 0 0 1 1.6 1.6v9.8a1.6 1.6 0 0 1-1.6 1.6h-2.7M11.2 12h.05"
         stroke="currentColor"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -349,7 +368,7 @@ function ChatIcon() {
   return (
     <svg
       aria-hidden="true"
-      className="h-5 w-5"
+      className="um-control-icon"
       fill="none"
       viewBox="0 0 24 24"
     >
@@ -373,7 +392,7 @@ function CloseIcon() {
   return (
     <svg
       aria-hidden="true"
-      className="h-5 w-5"
+      className="um-control-icon"
       fill="none"
       viewBox="0 0 24 24"
     >
@@ -391,7 +410,7 @@ function FullscreenIcon() {
   return (
     <svg
       aria-hidden="true"
-      className="h-5 w-5"
+      className="um-control-icon"
       fill="none"
       viewBox="0 0 24 24"
     >
