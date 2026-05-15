@@ -675,6 +675,39 @@ async def insert_meeting_agent_action(
         )
 
 
+async def list_meeting_agent_actions(
+    *,
+    settings: Settings,
+    meeting_id: str,
+    limit: int = 20,
+) -> list[dict]:
+    query = """
+    SELECT
+        id,
+        requester_identity,
+        requester_name,
+        action_type,
+        status,
+        payload,
+        result,
+        created_at
+    FROM meeting_agent_actions
+    WHERE meeting_id = %s
+    ORDER BY created_at DESC, id DESC
+    LIMIT %s;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (meeting_id, limit))
+            rows = await cur.fetchall()
+
+    return [dict(row) for row in rows]
+
+
 async def insert_meeting_pending_email(
     *,
     settings: Settings,

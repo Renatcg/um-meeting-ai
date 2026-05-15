@@ -40,6 +40,7 @@ from app.database import (
     insert_transcript_segment,
     insert_meeting,
     insert_trial_request,
+    list_meeting_agent_actions,
     list_pending_meeting_emails,
     list_meeting_participants,
     list_trial_requests,
@@ -953,6 +954,18 @@ async def defer_meeting_email_action(
         result={"pending_email_id": pending_email_id},
     )
     return MeetingEmailDeferResponse(deferred=True, pending_email_id=pending_email_id)
+
+
+@app.get(
+    "/meetings/{meeting_id}/agent-actions",
+    dependencies=[Depends(verify_agent_api_key)],
+)
+async def get_meeting_agent_actions(meeting_id: str) -> list[dict]:
+    await ensure_meeting(settings=settings, meeting_id=meeting_id)
+    return await list_meeting_agent_actions(
+        settings=settings,
+        meeting_id=meeting_id,
+    )
 
 
 @app.post(
