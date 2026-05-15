@@ -23,6 +23,41 @@ GOOGLE_SCOPES = [
 ]
 
 
+class GoogleCalendarAPIError(RuntimeError):
+    def __init__(self, public_detail: str) -> None:
+        super().__init__(public_detail)
+        self.public_detail = public_detail
+
+
+def parse_google_error(exc: HTTPError) -> GoogleCalendarAPIError:
+    body = exc.read().decode("utf-8", errors="replace")
+    status = ""
+    reason = ""
+    try:
+        payload = json.loads(body)
+        error = payload.get("error", {})
+        status = str(error.get("status") or "")
+        errors = error.get("errors") or []
+        if errors:
+            reason = str(errors[0].get("reason") or "")
+    except json.JSONDecodeError:
+        pass
+
+    category = status or reason or f"HTTP_{exc.code}"
+    if category in {"PERMISSION_DENIED", "insufficientPermissions"}:
+        message = "Google Calendar permission denied. Reconnect Google Agenda and approve calendar event creation."
+    elif category in {"UNAUTHENTICATED", "invalid_grant", "authError"}:
+        message = "Google Calendar token is invalid or expired. Reconnect Google Agenda."
+    elif category in {"INVALID_ARGUMENT", "badRequest", "invalid"}:
+        message = "Google Calendar rejected the event payload."
+    elif exc.code == 403:
+        message = "Google Calendar rejected this action by permission or account policy."
+    else:
+        message = f"Google Calendar request failed: {category}."
+
+    return GoogleCalendarAPIError(message)
+
+
 def google_calendar_configured(settings: Settings) -> bool:
     return bool(settings.google_client_id and settings.google_client_secret)
 
@@ -68,8 +103,7 @@ def _request_json(url: str, payload: dict | None = None, headers: dict | None = 
             body = response.read().decode("utf-8", errors="replace")
             return json.loads(body) if body else {}
     except HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Google returned HTTP {exc.code}: {body}") from exc
+        raise parse_google_error(exc) from exc
     except URLError as exc:
         raise RuntimeError(f"Could not reach Google: {exc.reason}") from exc
 
@@ -90,8 +124,7 @@ def _request_form(url: str, payload: dict) -> dict:
             body = response.read().decode("utf-8", errors="replace")
             return json.loads(body) if body else {}
     except HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Google returned HTTP {exc.code}: {body}") from exc
+        raise parse_google_error(exc) from exc
     except URLError as exc:
         raise RuntimeError(f"Could not reach Google: {exc.reason}") from exc
 

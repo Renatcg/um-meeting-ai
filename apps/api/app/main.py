@@ -21,6 +21,7 @@ from app.calendar_service import (
     build_google_calendar_auth_url,
     create_google_calendar_event,
     exchange_google_calendar_code,
+    GoogleCalendarAPIError,
     google_calendar_configured,
     google_calendar_can_create_events,
 )
@@ -752,6 +753,22 @@ async def send_meeting_email_payload(
             subject=payload.subject,
             body=body,
         )
+    except GoogleCalendarAPIError as exc:
+        await insert_meeting_agent_action(
+            settings=settings,
+            meeting_id=meeting_id,
+            requester_identity=payload.requester_identity,
+            requester_name=payload.requester_name,
+            action_type="schedule_meeting",
+            status="failed",
+            payload=payload.model_dump(mode="json"),
+            result={"reason": exc.public_detail},
+        )
+        logger.exception("meeting calendar action failed")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=exc.public_detail,
+        ) from exc
     except Exception as exc:
         await insert_meeting_agent_action(
             settings=settings,
