@@ -197,6 +197,25 @@ CREATE INDEX IF NOT EXISTS idx_meeting_agent_actions_meeting_created
 ON meeting_agent_actions (meeting_id, created_at DESC, id DESC);
 """
 
+CREATE_MEETING_PENDING_EMAILS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS meeting_pending_emails (
+    id BIGSERIAL PRIMARY KEY,
+    meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+    requester_identity TEXT NOT NULL,
+    requester_name TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    result JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    sent_at TIMESTAMPTZ
+);
+"""
+
+CREATE_MEETING_PENDING_EMAILS_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_meeting_pending_emails_status
+ON meeting_pending_emails (meeting_id, status, created_at, id);
+"""
+
 CREATE_GOOGLE_CALENDAR_CONNECTION_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS google_calendar_connection (
     id TEXT PRIMARY KEY,
@@ -221,6 +240,8 @@ async def init_database(settings: Settings) -> None:
         await conn.execute(CREATE_AGENT_PROFILE_TABLE_SQL)
         await conn.execute(CREATE_MEETING_AGENT_ACTIONS_TABLE_SQL)
         await conn.execute(CREATE_MEETING_AGENT_ACTIONS_INDEX_SQL)
+        await conn.execute(CREATE_MEETING_PENDING_EMAILS_TABLE_SQL)
+        await conn.execute(CREATE_MEETING_PENDING_EMAILS_INDEX_SQL)
         await conn.execute(CREATE_GOOGLE_CALENDAR_CONNECTION_TABLE_SQL)
         await conn.execute(CREATE_TRIAL_REQUESTS_TABLE_SQL)
         await conn.execute(ALTER_TRIAL_REQUESTS_SELECTED_PLAN_SQL)
@@ -654,6 +675,97 @@ async def insert_meeting_agent_action(
         )
 
 
+async def insert_meeting_pending_email(
+    *,
+    settings: Settings,
+    meeting_id: str,
+    requester_identity: str,
+    requester_name: str,
+    payload: dict,
+) -> int:
+    query = """
+    INSERT INTO meeting_pending_emails (
+        meeting_id,
+        requester_identity,
+        requester_name,
+        payload
+    )
+    VALUES (%s, %s, %s, %s::jsonb)
+    RETURNING id;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                query,
+                (
+                    meeting_id,
+                    requester_identity,
+                    requester_name,
+                    json.dumps(payload),
+                ),
+            )
+            row = await cur.fetchone()
+
+    if row is None:
+        raise RuntimeError("Pending email insert did not return an id.")
+
+    return int(row["id"])
+
+
+async def list_pending_meeting_emails(
+    *,
+    settings: Settings,
+    meeting_id: str,
+) -> list[dict]:
+    query = """
+    SELECT id, requester_identity, requester_name, payload
+    FROM meeting_pending_emails
+    WHERE meeting_id = %s AND status = 'pending'
+    ORDER BY created_at ASC, id ASC;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (meeting_id,))
+            rows = await cur.fetchall()
+
+    return [dict(row) for row in rows]
+
+
+async def mark_pending_meeting_email(
+    *,
+    settings: Settings,
+    pending_email_id: int,
+    status: str,
+    result: dict | None = None,
+) -> None:
+    query = """
+    UPDATE meeting_pending_emails
+    SET status = %s,
+        result = %s::jsonb,
+        sent_at = CASE WHEN %s = 'sent' THEN now() ELSE sent_at END
+    WHERE id = %s;
+    """
+
+    async with await psycopg.AsyncConnection.connect(settings.database_url) as conn:
+        await conn.execute(
+            query,
+            (
+                status,
+                json.dumps(result) if result is not None else None,
+                status,
+                pending_email_id,
+            ),
+        )
+
+
 async def get_google_calendar_connection(*, settings: Settings) -> dict | None:
     query = """
     SELECT access_token, refresh_token, expires_at, calendar_email, scope, updated_at
@@ -1016,10 +1128,15 @@ async def get_agent_profile(*, settings: Settings) -> AgentProfile:
             await cur.execute(query)
             row = await cur.fetchone()
 
+    defaults = AgentProfile()
     if row is None:
-        return AgentProfile()
+        return defaults
 
     profile = AgentProfile.model_validate(row["config"])
+    if set(profile.enabled_actions) == {"send_email"}:
+        profile.enabled_actions = defaults.enabled_actions
+    if set(profile.enabled_integrations) == {"resend_email"}:
+        profile.enabled_integrations = defaults.enabled_integrations
     profile.updated_at = row["updated_at"]
     return profile
 

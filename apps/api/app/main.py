@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile, status
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from livekit import api
@@ -33,14 +33,17 @@ from app.database import (
     has_host_or_commercial_joined,
     init_database,
     insert_meeting_agent_action,
+    insert_meeting_pending_email,
     insert_sales_recommendations,
     insert_transcript_segment,
     insert_meeting,
     insert_trial_request,
+    list_pending_meeting_emails,
     list_meeting_participants,
     list_trial_requests,
     list_sales_recommendations,
     list_transcript_segments,
+    mark_pending_meeting_email,
     mark_meeting_ended,
     register_meeting_participant,
     update_trial_request,
@@ -60,6 +63,7 @@ from app.models import (
     GoogleCalendarStatus,
     MeetingCalendarActionRequest,
     MeetingCalendarActionResponse,
+    MeetingEmailDeferResponse,
     MeetingEmailActionRequest,
     MeetingEmailActionResponse,
     MeetingInterventionCheckRequest,
@@ -86,6 +90,9 @@ from app.web_search_service import search_web
 settings = get_settings()
 MEETING_JOIN_GRACE_PERIOD = timedelta(minutes=15)
 logger = logging.getLogger(__name__)
+
+
+LIVEKIT_WEBHOOK_ROOM_FINISHED = "room_finished"
 
 
 @asynccontextmanager
@@ -336,13 +343,48 @@ async def get_meeting(meeting_id: str) -> Meeting:
     return await ensure_meeting(settings=settings, meeting_id=meeting_id)
 
 
+async def finalize_meeting(meeting_id: str) -> Meeting:
+    meeting = await mark_meeting_ended(settings=settings, meeting_id=meeting_id)
+    await send_deferred_meeting_emails(meeting_id)
+    return meeting
+
+
 @app.post("/meetings/{meeting_id}/end", response_model=Meeting)
 async def end_meeting(
     meeting_id: str,
     claims: ParticipantClaims = Depends(get_participant_claims),
 ) -> Meeting:
     require_sales_panel_access(claims, meeting_id)
-    return await mark_meeting_ended(settings=settings, meeting_id=meeting_id)
+    return await finalize_meeting(meeting_id)
+
+
+@app.post("/livekit/webhook")
+async def livekit_webhook(request: Request) -> dict[str, str]:
+    body = await request.body()
+    auth_header = request.headers.get("Authorization", "")
+    try:
+        receiver = api.WebhookReceiver(
+            api.TokenVerifier(settings.livekit_api_key, settings.livekit_api_secret)
+        )
+        event = receiver.receive(body.decode("utf-8"), auth_header)
+    except Exception as exc:
+        logger.warning("invalid livekit webhook", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid LiveKit webhook.",
+        ) from exc
+
+    event_name = getattr(event, "event", "")
+    room = getattr(event, "room", None)
+    meeting_id = getattr(room, "name", None)
+    if event_name == LIVEKIT_WEBHOOK_ROOM_FINISHED and meeting_id:
+        try:
+            await finalize_meeting(meeting_id)
+        except Exception:
+            logger.exception("failed to finalize meeting from livekit webhook")
+
+    return {"status": "ok"}
+
 
 
 @app.post("/meetings/{meeting_id}/token", response_model=LiveKitTokenResponse)
@@ -562,16 +604,11 @@ def ensure_host_requester(*, participants, requester_identity: str, requester_na
     return requester
 
 
-@app.post(
-    "/meetings/{meeting_id}/actions/email",
-    response_model=MeetingEmailActionResponse,
-    dependencies=[Depends(verify_agent_api_key)],
-)
-async def send_meeting_email_action(
+async def resolve_meeting_email_action(
+    *,
     meeting_id: str,
     payload: MeetingEmailActionRequest,
-) -> MeetingEmailActionResponse:
-    await ensure_meeting(settings=settings, meeting_id=meeting_id)
+):
     profile = await get_agent_profile(settings=settings)
     if "send_email" not in profile.enabled_actions:
         raise HTTPException(
@@ -686,6 +723,19 @@ async def send_meeting_email_action(
             detail="No recipients were found for this email action.",
         )
 
+    return requester, recipients
+
+
+async def send_meeting_email_payload(
+    *,
+    meeting_id: str,
+    payload: MeetingEmailActionRequest,
+    action_status: str = "sent",
+) -> MeetingEmailActionResponse:
+    requester, recipients = await resolve_meeting_email_action(
+        meeting_id=meeting_id,
+        payload=payload,
+    )
     body = (
         f"{payload.body.strip()}\n\n"
         f"---\n"
@@ -730,11 +780,87 @@ async def send_meeting_email_action(
         requester_identity=payload.requester_identity,
         requester_name=requester.name,
         action_type="send_email",
-        status="sent",
+        status=action_status,
         payload=payload.model_dump(mode="json"),
         result=response.model_dump(mode="json"),
     )
     return response
+
+
+async def send_deferred_meeting_emails(meeting_id: str) -> None:
+    pending_emails = await list_pending_meeting_emails(
+        settings=settings,
+        meeting_id=meeting_id,
+    )
+    for pending_email in pending_emails:
+        pending_email_id = int(pending_email["id"])
+        try:
+            payload = MeetingEmailActionRequest.model_validate(pending_email["payload"])
+            response = await send_meeting_email_payload(
+                meeting_id=meeting_id,
+                payload=payload,
+                action_status="sent_after_meeting",
+            )
+            await mark_pending_meeting_email(
+                settings=settings,
+                pending_email_id=pending_email_id,
+                status="sent",
+                result=response.model_dump(mode="json"),
+            )
+        except Exception as exc:
+            await mark_pending_meeting_email(
+                settings=settings,
+                pending_email_id=pending_email_id,
+                status="failed",
+                result={"reason": str(exc)},
+            )
+
+
+@app.post(
+    "/meetings/{meeting_id}/actions/email",
+    response_model=MeetingEmailActionResponse,
+    dependencies=[Depends(verify_agent_api_key)],
+)
+async def send_meeting_email_action(
+    meeting_id: str,
+    payload: MeetingEmailActionRequest,
+) -> MeetingEmailActionResponse:
+    await ensure_meeting(settings=settings, meeting_id=meeting_id)
+    return await send_meeting_email_payload(meeting_id=meeting_id, payload=payload)
+
+
+@app.post(
+    "/meetings/{meeting_id}/actions/email/defer",
+    response_model=MeetingEmailDeferResponse,
+    dependencies=[Depends(verify_agent_api_key)],
+)
+async def defer_meeting_email_action(
+    meeting_id: str,
+    payload: MeetingEmailActionRequest,
+) -> MeetingEmailDeferResponse:
+    await ensure_meeting(settings=settings, meeting_id=meeting_id)
+    requester, _ = await resolve_meeting_email_action(
+        meeting_id=meeting_id,
+        payload=payload,
+    )
+    pending_email_id = await insert_meeting_pending_email(
+        settings=settings,
+        meeting_id=meeting_id,
+        requester_identity=payload.requester_identity,
+        requester_name=requester.name,
+        payload=payload.model_dump(mode="json"),
+    )
+    await insert_meeting_agent_action(
+        settings=settings,
+        meeting_id=meeting_id,
+        requester_identity=payload.requester_identity,
+        requester_name=requester.name,
+        action_type="send_email",
+        status="deferred",
+        payload=payload.model_dump(mode="json"),
+        result={"pending_email_id": pending_email_id},
+    )
+    return MeetingEmailDeferResponse(deferred=True, pending_email_id=pending_email_id)
 
 
 @app.post(

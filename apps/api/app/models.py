@@ -155,9 +155,11 @@ class AgentProfile(BaseModel):
     )
     custom_instructions: str = Field(default="", max_length=1600)
     voice_command_roles: list[ParticipantRole] = Field(default_factory=lambda: ["host"])
-    enabled_actions: list[AgentAction] = Field(default_factory=lambda: ["send_email"])
+    enabled_actions: list[AgentAction] = Field(
+        default_factory=lambda: ["send_email", "schedule_meeting", "web_search"]
+    )
     enabled_integrations: list[AgentIntegration] = Field(
-        default_factory=lambda: ["resend_email"]
+        default_factory=lambda: ["resend_email", "google_calendar", "web_search"]
     )
     require_voice_confirmation: bool = True
     updated_at: datetime | None = None
@@ -178,6 +180,11 @@ class MeetingEmailActionResponse(BaseModel):
     recipients: list[EmailStr]
     sender_name: str
     sender_email: EmailStr
+
+
+class MeetingEmailDeferResponse(BaseModel):
+    deferred: bool
+    pending_email_id: int
 
 
 class GoogleCalendarStatus(BaseModel):

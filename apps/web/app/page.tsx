@@ -126,7 +126,7 @@ const defaultProfile: AgentProfile = {
   custom_instructions: "",
   voice_command_roles: ["host"],
   enabled_actions: ["send_email", "schedule_meeting", "web_search"],
-  enabled_integrations: ["resend_email", "web_search"],
+  enabled_integrations: ["resend_email", "google_calendar", "web_search"],
   require_voice_confirmation: true,
 };
 

@@ -287,6 +287,7 @@ def get_pending_calendar_action(meeting_id: str, speaker_identity: str) -> tuple
         "proximos passos. Nao envia ainda: esta ferramenta apenas deixa a acao "
         "pendente. Depois de preparar, pergunte se o Host quer enviar agora ou "
         "ao fim da reuniao. Se ele escolher agora, peca confirmacao por voz. "
+        "Se ele escolher fim da reuniao, use defer_meeting_email_until_end. "
         "Quando recipient_scope for custom, recipients deve conter apenas nomes "
         "ou e-mails de pessoas que entraram nesta sala."
     )
@@ -323,8 +324,8 @@ async def prepare_meeting_email(
         "Resuma em uma frase o assunto e os destinatarios, e pergunte: "
         "'Voce quer que eu envie agora ou ao fim da reuniao?'. "
         "Se o Host escolher envio imediato, peca confirmacao por voz antes de enviar. "
-        "Se ele escolher fim da reuniao, diga que deixara preparado e que ele pode "
-        "confirmar o envio ao encerrar."
+        "Se ele escolher fim da reuniao, use defer_meeting_email_until_end e diga "
+        "que o envio ficou agendado para o encerramento."
     )
 
 
@@ -367,6 +368,48 @@ async def send_confirmed_meeting_email() -> str:
     return (
         "SENT: E-mail enviado com sucesso para "
         f"{payload.get('recipient_count', 0)} destinatarios."
+    )
+
+
+@function_tool(
+    description=(
+        "Agenda o envio do e-mail pendente para o fim da reuniao. Use quando "
+        "o Host escolher explicitamente enviar ao fim da reuniao, ao encerrar "
+        "ou depois que a chamada acabar."
+    )
+)
+async def defer_meeting_email_until_end() -> str:
+    enabled, reason = voice_email_actions_enabled()
+    if not enabled:
+        return f"BLOCKED: {reason}"
+
+    meeting_id = current_meeting_id.get()
+    speaker_identity = current_speaker_identity.get()
+    action_key, pending = get_pending_email_action(meeting_id, speaker_identity)
+    if not pending:
+        return "NO_PENDING_EMAIL: Nao ha e-mail pendente para agendar."
+
+    headers = {"Content-Type": "application/json"}
+    if AGENT_API_KEY:
+        headers["X-Agent-API-Key"] = AGENT_API_KEY
+
+    async with aiohttp.ClientSession() as http:
+        async with http.post(
+            f"{API_URL}/meetings/{meeting_id}/actions/email/defer",
+            headers=headers,
+            json=pending,
+            timeout=aiohttp.ClientTimeout(total=20),
+        ) as response:
+            body = await response.text()
+            if response.status >= 400:
+                return f"DEFER_FAILED: {body}"
+            payload = await response.json()
+
+    if action_key:
+        pending_email_actions.pop(action_key, None)
+    return (
+        "DEFERRED: E-mail agendado para envio automatico ao fim da reuniao. "
+        f"ID pendente: {payload.get('pending_email_id')}."
     )
 
 
@@ -601,6 +644,7 @@ class JarvisAgent(Agent):
                 search_knowledge_base,
                 prepare_meeting_email,
                 send_confirmed_meeting_email,
+                defer_meeting_email_until_end,
                 cancel_pending_meeting_email,
                 prepare_calendar_event,
                 send_confirmed_calendar_event,
@@ -877,7 +921,8 @@ async def jarvis(ctx: agents.JobContext):
                 "confirme por voz antes de enviar. So use "
                 "send_confirmed_meeting_email quando o Host confirmar claramente "
                 "por voz. Se o Host escolher fim da reuniao, diga que deixou o "
-                "e-mail preparado e que ele pode confirmar o envio ao encerrar. "
+                "e-mail agendado para envio automatico ao fim da reuniao e use "
+                "defer_meeting_email_until_end imediatamente. "
                 "E-mails so podem ser enviados para pessoas que entraram nesta "
                 "reuniao. Se o Host selecionar destinatarios, use os nomes ou "
                 "e-mails informados no lobby e nunca invente destinatarios externos. "
