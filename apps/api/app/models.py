@@ -9,6 +9,9 @@ RecommendationKind = Literal["objection", "risk", "opportunity"]
 RecommendationSeverity = Literal["low", "medium", "high"]
 AgentGender = Literal["masculine", "feminine", "neutral"]
 WeeklyMeetingVolume = Literal["ate-5", "5-10", "10-20", "mais-20"]
+AgentAction = Literal["send_email"]
+AgentIntegration = Literal["resend_email"]
+EmailRecipientScope = Literal["all_participants", "clients", "host", "custom"]
 AgentVoice = Literal[
     "alloy",
     "ash",
@@ -48,6 +51,7 @@ class Meeting(BaseModel):
 class MeetingParticipant(BaseModel):
     id: int
     meeting_id: str
+    identity: str | None = None
     name: str
     email: EmailStr
     role: ParticipantRole
@@ -149,7 +153,30 @@ class AgentProfile(BaseModel):
         max_length=240,
     )
     custom_instructions: str = Field(default="", max_length=1600)
+    voice_command_roles: list[ParticipantRole] = Field(default_factory=lambda: ["host"])
+    enabled_actions: list[AgentAction] = Field(default_factory=lambda: ["send_email"])
+    enabled_integrations: list[AgentIntegration] = Field(
+        default_factory=lambda: ["resend_email"]
+    )
+    require_voice_confirmation: bool = True
     updated_at: datetime | None = None
+
+
+class MeetingEmailActionRequest(BaseModel):
+    requester_identity: str = Field(min_length=3, max_length=180)
+    requester_name: str = Field(min_length=1, max_length=120)
+    recipient_scope: EmailRecipientScope = "all_participants"
+    recipients: list[EmailStr] = Field(default_factory=list, max_length=30)
+    subject: str = Field(min_length=3, max_length=180)
+    body: str = Field(min_length=3, max_length=5000)
+
+
+class MeetingEmailActionResponse(BaseModel):
+    sent: bool
+    recipient_count: int
+    recipients: list[EmailStr]
+    sender_name: str
+    sender_email: EmailStr
 
 
 class VoiceDemoRequest(BaseModel):

@@ -8,6 +8,9 @@ const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 type Section = "meetings" | "coevo" | "knowledge" | "leads";
 type AgentGender = "masculine" | "feminine" | "neutral";
 type WeeklyMeetingVolume = "ate-5" | "5-10" | "10-20" | "mais-20";
+type ParticipantRole = "host" | "commercial" | "client" | "observer";
+type AgentAction = "send_email";
+type AgentIntegration = "resend_email";
 type AgentVoice =
   | "alloy"
   | "ash"
@@ -36,6 +39,10 @@ type AgentProfile = {
   sales_method: string;
   language_policy: string;
   custom_instructions: string;
+  voice_command_roles: ParticipantRole[];
+  enabled_actions: AgentAction[];
+  enabled_integrations: AgentIntegration[];
+  require_voice_confirmation: boolean;
   updated_at?: string | null;
 };
 
@@ -102,6 +109,10 @@ const defaultProfile: AgentProfile = {
   sales_method: "consultivo",
   language_policy: "Responder sempre na mesma lingua usada pelo participante.",
   custom_instructions: "",
+  voice_command_roles: ["host"],
+  enabled_actions: ["send_email"],
+  enabled_integrations: ["resend_email"],
+  require_voice_confirmation: true,
 };
 
 const toneOptions = ["consultivo", "executivo", "acolhedor", "didatico", "provocativo"];
@@ -121,6 +132,30 @@ const weeklyMeetingVolumeOptions: Array<{
   { value: "mais-20", label: "+20" },
 ];
 const planOptions = ["Teste Gratis", "Essencial", "Business", "Enterprise"];
+const commandRoleOptions: Array<{ value: ParticipantRole; label: string }> = [
+  { value: "host", label: "Host" },
+  { value: "commercial", label: "Comercial" },
+  { value: "client", label: "Participante" },
+  { value: "observer", label: "Observador" },
+];
+const actionOptions: Array<{ value: AgentAction; label: string; description: string }> = [
+  {
+    value: "send_email",
+    label: "Enviar e-mails",
+    description: "Resumo, follow-up, proximos passos e mensagens aos participantes.",
+  },
+];
+const integrationOptions: Array<{
+  value: AgentIntegration;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "resend_email",
+    label: "Resend",
+    description: "Envio transacional usando o dominio verificado da Coevo.",
+  },
+];
 const keywordOptions = [
   "clareza",
   "objetividade",
@@ -482,6 +517,19 @@ export default function HomePage() {
       const nextValues = values.includes(value)
         ? values.filter((item) => item !== value)
         : [...values, value];
+      return { ...current, [key]: nextValues };
+    });
+  }
+
+  function toggleProfileArrayValue<
+    K extends "voice_command_roles" | "enabled_actions" | "enabled_integrations",
+  >(key: K, value: AgentProfile[K][number]) {
+    setProfile((current) => {
+      const values = current[key] as string[];
+      const stringValue = String(value);
+      const nextValues = values.includes(stringValue)
+        ? values.filter((item) => item !== stringValue)
+        : [...values, stringValue];
       return { ...current, [key]: nextValues };
     });
   }
@@ -1107,6 +1155,123 @@ export default function HomePage() {
                         Demo de voz
                       </audio>
                     ) : null}
+                  </div>
+
+                  <div className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                    <p className="font-mono text-xs uppercase text-[#F97316]">
+                      Comandos de voz
+                    </p>
+                    <h2 className="mt-2 font-display text-xl font-semibold">
+                      Acoes que o Coevo pode executar
+                    </h2>
+                    <p className="mt-2 text-sm leading-6 text-[#73736B]">
+                      Nesta fase, apenas o Host executa comandos. O envio usa o
+                      nome/e-mail do Host como referencia e sempre exige confirmacao
+                      por voz antes de disparar.
+                    </p>
+
+                    <div className="mt-5 space-y-5">
+                      <div>
+                        <p className="mb-2 text-sm font-semibold">
+                          Quem pode dar comandos
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {commandRoleOptions.map((role) => (
+                            <Chip
+                              key={role.value}
+                              active={profile.voice_command_roles.includes(role.value)}
+                              onClick={() =>
+                                toggleProfileArrayValue("voice_command_roles", role.value)
+                              }
+                            >
+                              {role.label}
+                            </Chip>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <p className="mb-2 text-sm font-semibold">Acoes habilitadas</p>
+                        <div className="grid gap-2">
+                          {actionOptions.map((action) => (
+                            <button
+                              key={action.value}
+                              className={`rounded-lg border p-3 text-left transition ${
+                                profile.enabled_actions.includes(action.value)
+                                  ? "border-[#F97316] bg-[#FFF3EA]"
+                                  : "border-[#E7E7E2] bg-[#FCFCFB] hover:border-[#FDBA74]"
+                              }`}
+                              type="button"
+                              onClick={() =>
+                                toggleProfileArrayValue("enabled_actions", action.value)
+                              }
+                            >
+                              <span className="block text-sm font-bold text-[#11110F]">
+                                {action.label}
+                              </span>
+                              <span className="mt-1 block text-xs leading-5 text-[#73736B]">
+                                {action.description}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <p className="mb-2 text-sm font-semibold">
+                          Integracoes conectadas
+                        </p>
+                        <div className="grid gap-2">
+                          {integrationOptions.map((integration) => (
+                            <button
+                              key={integration.value}
+                              className={`rounded-lg border p-3 text-left transition ${
+                                profile.enabled_integrations.includes(integration.value)
+                                  ? "border-[#F97316] bg-[#FFF3EA]"
+                                  : "border-[#E7E7E2] bg-[#FCFCFB] hover:border-[#FDBA74]"
+                              }`}
+                              type="button"
+                              onClick={() =>
+                                toggleProfileArrayValue(
+                                  "enabled_integrations",
+                                  integration.value,
+                                )
+                              }
+                            >
+                              <span className="block text-sm font-bold text-[#11110F]">
+                                {integration.label}
+                              </span>
+                              <span className="mt-1 block text-xs leading-5 text-[#73736B]">
+                                {integration.description}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <label className="flex items-start gap-3 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-3">
+                        <input
+                          className="mt-1 accent-[#F97316]"
+                          type="checkbox"
+                          checked={profile.require_voice_confirmation}
+                          onChange={(event) =>
+                            setProfile((current) => ({
+                              ...current,
+                              require_voice_confirmation: event.target.checked,
+                            }))
+                          }
+                        />
+                        <span>
+                          <span className="block text-sm font-bold text-[#11110F]">
+                            Exigir confirmacao por voz
+                          </span>
+                          <span className="mt-1 block text-xs leading-5 text-[#73736B]">
+                            O Coevo prepara o e-mail, pergunta se pode enviar e so
+                            dispara depois de ouvir a confirmacao do Host.
+                          </span>
+                        </span>
+                      </label>
+                    </div>
                   </div>
 
                   <div className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">

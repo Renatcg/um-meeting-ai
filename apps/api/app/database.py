@@ -10,6 +10,7 @@ from app.models import (
     KnowledgeDocument,
     KnowledgeSearchResult,
     Meeting,
+    MeetingParticipant,
     SalesRecommendation,
     TranscriptSegment,
     TranscriptSegmentCreate,
@@ -116,6 +117,7 @@ CREATE_MEETING_PARTICIPANTS_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS meeting_participants (
     id BIGSERIAL PRIMARY KEY,
     meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+    identity TEXT,
     name TEXT NOT NULL,
     email TEXT NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('host', 'commercial', 'client', 'observer')),
@@ -123,9 +125,19 @@ CREATE TABLE IF NOT EXISTS meeting_participants (
 );
 """
 
+ALTER_MEETING_PARTICIPANTS_IDENTITY_SQL = """
+ALTER TABLE meeting_participants
+ADD COLUMN IF NOT EXISTS identity TEXT;
+"""
+
 CREATE_MEETING_PARTICIPANTS_INDEX_SQL = """
 CREATE INDEX IF NOT EXISTS idx_meeting_participants_meeting_joined
 ON meeting_participants (meeting_id, joined_at, id);
+"""
+
+CREATE_MEETING_PARTICIPANTS_IDENTITY_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_meeting_participants_identity
+ON meeting_participants (meeting_id, identity);
 """
 
 CREATE_AGENT_PROFILE_TABLE_SQL = """
@@ -166,14 +178,37 @@ CREATE INDEX IF NOT EXISTS idx_trial_requests_created
 ON trial_requests (created_at DESC, id DESC);
 """
 
+CREATE_MEETING_AGENT_ACTIONS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS meeting_agent_actions (
+    id BIGSERIAL PRIMARY KEY,
+    meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+    requester_identity TEXT NOT NULL,
+    requester_name TEXT NOT NULL,
+    action_type TEXT NOT NULL,
+    status TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    result JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
+
+CREATE_MEETING_AGENT_ACTIONS_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_meeting_agent_actions_meeting_created
+ON meeting_agent_actions (meeting_id, created_at DESC, id DESC);
+"""
+
 
 async def init_database(settings: Settings) -> None:
     async with await psycopg.AsyncConnection.connect(settings.database_url) as conn:
         await conn.execute(CREATE_VECTOR_EXTENSION_SQL)
         await conn.execute(CREATE_MEETINGS_TABLE_SQL)
         await conn.execute(CREATE_MEETING_PARTICIPANTS_TABLE_SQL)
+        await conn.execute(ALTER_MEETING_PARTICIPANTS_IDENTITY_SQL)
         await conn.execute(CREATE_MEETING_PARTICIPANTS_INDEX_SQL)
+        await conn.execute(CREATE_MEETING_PARTICIPANTS_IDENTITY_INDEX_SQL)
         await conn.execute(CREATE_AGENT_PROFILE_TABLE_SQL)
+        await conn.execute(CREATE_MEETING_AGENT_ACTIONS_TABLE_SQL)
+        await conn.execute(CREATE_MEETING_AGENT_ACTIONS_INDEX_SQL)
         await conn.execute(CREATE_TRIAL_REQUESTS_TABLE_SQL)
         await conn.execute(ALTER_TRIAL_REQUESTS_SELECTED_PLAN_SQL)
         await conn.execute(ALTER_TRIAL_REQUESTS_VOLUME_SQL)
@@ -464,6 +499,7 @@ async def register_meeting_participant(
     *,
     settings: Settings,
     meeting_id: str,
+    identity: str,
     name: str,
     email: str,
     role: str,
@@ -472,10 +508,10 @@ async def register_meeting_participant(
         async with conn.cursor() as cur:
             await cur.execute(
                 """
-                INSERT INTO meeting_participants (meeting_id, name, email, role)
-                VALUES (%s, %s, %s, %s);
+                INSERT INTO meeting_participants (meeting_id, identity, name, email, role)
+                VALUES (%s, %s, %s, %s, %s);
                 """,
-                (meeting_id, name, email, role),
+                (meeting_id, identity, name, email, role),
             )
 
             if role in ("host", "commercial"):
@@ -512,6 +548,97 @@ async def has_host_or_commercial_joined(
             row = await cur.fetchone()
 
     return bool(row and row["has_joined"])
+
+
+async def get_meeting_participant_by_identity(
+    *,
+    settings: Settings,
+    meeting_id: str,
+    identity: str,
+) -> MeetingParticipant | None:
+    query = """
+    SELECT id, meeting_id, identity, name, email, role, joined_at
+    FROM meeting_participants
+    WHERE meeting_id = %s
+      AND identity = %s
+    ORDER BY joined_at DESC, id DESC
+    LIMIT 1;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (meeting_id, identity))
+            row = await cur.fetchone()
+
+    if row is None:
+        return None
+
+    return MeetingParticipant.model_validate(row)
+
+
+async def list_meeting_participants(
+    *,
+    settings: Settings,
+    meeting_id: str,
+) -> Sequence[MeetingParticipant]:
+    query = """
+    SELECT id, meeting_id, identity, name, email, role, joined_at
+    FROM meeting_participants
+    WHERE meeting_id = %s
+    ORDER BY joined_at ASC, id ASC;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (meeting_id,))
+            rows = await cur.fetchall()
+
+    return [MeetingParticipant.model_validate(row) for row in rows]
+
+
+async def insert_meeting_agent_action(
+    *,
+    settings: Settings,
+    meeting_id: str,
+    requester_identity: str,
+    requester_name: str,
+    action_type: str,
+    status: str,
+    payload: dict,
+    result: dict | None = None,
+) -> None:
+    query = """
+    INSERT INTO meeting_agent_actions (
+        meeting_id,
+        requester_identity,
+        requester_name,
+        action_type,
+        status,
+        payload,
+        result
+    )
+    VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s::jsonb);
+    """
+
+    async with await psycopg.AsyncConnection.connect(settings.database_url) as conn:
+        await conn.execute(
+            query,
+            (
+                meeting_id,
+                requester_identity,
+                requester_name,
+                action_type,
+                status,
+                json.dumps(payload),
+                json.dumps(result) if result is not None else None,
+            ),
+        )
 
 
 async def insert_transcript_segment(

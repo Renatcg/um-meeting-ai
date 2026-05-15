@@ -64,6 +64,19 @@ current_meeting_id: contextvars.ContextVar[str] = contextvars.ContextVar(
     "current_meeting_id",
     default="unknown-meeting",
 )
+current_speaker_identity: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "current_speaker_identity",
+    default="unknown-speaker",
+)
+current_speaker_name: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "current_speaker_name",
+    default="Participante",
+)
+current_agent_profile: contextvars.ContextVar[dict] = contextvars.ContextVar(
+    "current_agent_profile",
+    default={},
+)
+pending_email_actions: dict[tuple[str, str], dict] = {}
 
 
 def normalize_text(value: str) -> str:
@@ -155,6 +168,122 @@ async def search_knowledge_base(query: str) -> str:
     return "\n\n---\n\n".join(formatted_results)
 
 
+def voice_email_actions_enabled() -> tuple[bool, str]:
+    profile = current_agent_profile.get() or {}
+    enabled_actions = profile.get("enabled_actions") or ["send_email"]
+    enabled_integrations = profile.get("enabled_integrations") or ["resend_email"]
+    allowed_roles = profile.get("voice_command_roles") or ["host"]
+
+    if "send_email" not in enabled_actions:
+        return False, "O envio de e-mails por voz esta desativado nas configuracoes."
+
+    if "resend_email" not in enabled_integrations:
+        return False, "A integracao de e-mail esta desativada nas configuracoes."
+
+    if "host" not in allowed_roles:
+        return False, "O Host nao esta autorizado a executar comandos por voz."
+
+    return True, ""
+
+
+@function_tool(
+    description=(
+        "Prepara um e-mail solicitado por voz durante a reuniao. Use apenas "
+        "quando o Host pedir ao Coevo para enviar e-mail, resumo, follow-up ou "
+        "proximos passos. Nao envia ainda: esta ferramenta apenas deixa a acao "
+        "pendente e exige confirmacao por voz."
+    )
+)
+async def prepare_meeting_email(
+    subject: str,
+    body: str,
+    recipient_scope: str = "all_participants",
+    recipients: list[str] | None = None,
+) -> str:
+    enabled, reason = voice_email_actions_enabled()
+    if not enabled:
+        return f"BLOCKED: {reason}"
+
+    normalized_scope = recipient_scope
+    if normalized_scope not in {"all_participants", "clients", "host", "custom"}:
+        normalized_scope = "all_participants"
+
+    meeting_id = current_meeting_id.get()
+    speaker_identity = current_speaker_identity.get()
+    speaker_name = current_speaker_name.get()
+    pending_email_actions[(meeting_id, speaker_identity)] = {
+        "requester_identity": speaker_identity,
+        "requester_name": speaker_name,
+        "recipient_scope": normalized_scope,
+        "recipients": recipients or [],
+        "subject": subject,
+        "body": body,
+    }
+
+    return (
+        "PENDING_CONFIRMATION: E-mail preparado, mas ainda nao enviado. "
+        "Resuma em uma frase o assunto e os destinatarios, e pergunte: "
+        "'Posso enviar?'. Envie somente se o Host confirmar por voz."
+    )
+
+
+@function_tool(
+    description=(
+        "Envia o e-mail pendente depois que o Host confirmar por voz. Use apenas "
+        "quando a fala atual confirmar claramente o envio, como 'sim', 'pode "
+        "enviar', 'confirmo' ou equivalente."
+    )
+)
+async def send_confirmed_meeting_email() -> str:
+    enabled, reason = voice_email_actions_enabled()
+    if not enabled:
+        return f"BLOCKED: {reason}"
+
+    meeting_id = current_meeting_id.get()
+    speaker_identity = current_speaker_identity.get()
+    action_key = (meeting_id, speaker_identity)
+    pending = pending_email_actions.get(action_key)
+    if not pending:
+        return "NO_PENDING_EMAIL: Nao ha e-mail pendente para confirmar."
+
+    headers = {"Content-Type": "application/json"}
+    if AGENT_API_KEY:
+        headers["X-Agent-API-Key"] = AGENT_API_KEY
+
+    async with aiohttp.ClientSession() as http:
+        async with http.post(
+            f"{API_URL}/meetings/{meeting_id}/actions/email",
+            headers=headers,
+            json=pending,
+            timeout=aiohttp.ClientTimeout(total=20),
+        ) as response:
+            body = await response.text()
+            if response.status >= 400:
+                return f"SEND_FAILED: {body}"
+            payload = await response.json()
+
+    pending_email_actions.pop(action_key, None)
+    return (
+        "SENT: E-mail enviado com sucesso para "
+        f"{payload.get('recipient_count', 0)} destinatarios."
+    )
+
+
+@function_tool(
+    description=(
+        "Cancela o e-mail pendente quando o Host disser para cancelar, nao enviar "
+        "ou descartar."
+    )
+)
+async def cancel_pending_meeting_email() -> str:
+    action_key = (current_meeting_id.get(), current_speaker_identity.get())
+    if action_key in pending_email_actions:
+        pending_email_actions.pop(action_key, None)
+        return "CANCELLED: E-mail pendente cancelado."
+
+    return "NO_PENDING_EMAIL: Nao ha e-mail pendente para cancelar."
+
+
 async def fetch_agent_profile() -> dict:
     headers = {"Content-Type": "application/json"}
     if AGENT_API_KEY:
@@ -200,6 +329,10 @@ Personalidade configurada pelo usuario:
 - Tracos comportamentais: {behavior_tags or "nenhum configurado"}
 - Politica de idioma: {profile.get("language_policy", "Responder na mesma lingua do participante.")}
 - Instrucoes adicionais: {custom_instructions or "nenhuma"}
+- Papeis autorizados a comandos por voz: {", ".join(profile.get("voice_command_roles") or ["host"])}
+- Acoes por voz habilitadas: {", ".join(profile.get("enabled_actions") or ["send_email"])}
+- Integracoes habilitadas: {", ".join(profile.get("enabled_integrations") or ["resend_email"])}
+- Confirmacao por voz antes de executar: {"sim" if profile.get("require_voice_confirmation", True) else "nao"}
 
 Use esta personalidade como guia, sem violar as regras obrigatorias acima.
 """.strip()
@@ -211,7 +344,12 @@ class JarvisAgent(Agent):
     def __init__(self, instructions: str) -> None:
         super().__init__(
             instructions=instructions,
-            tools=[search_knowledge_base],
+            tools=[
+                search_knowledge_base,
+                prepare_meeting_email,
+                send_confirmed_meeting_email,
+                cancel_pending_meeting_email,
+            ],
         )
 
 
@@ -282,6 +420,7 @@ async def jarvis(ctx: agents.JobContext):
     active_until = 0.0
     silenced_until_new_wake = False
     profile = await fetch_agent_profile()
+    current_agent_profile.set(profile)
     profile_instructions = build_profile_instructions(profile)
     profile_voice = profile.get("voice") or OPENAI_REALTIME_VOICE
 
@@ -319,6 +458,8 @@ async def jarvis(ctx: agents.JobContext):
 
         timestamp_seconds = time.monotonic() - started_at
         speaker_name = get_speaker_name(ctx, event.speaker_id)
+        current_speaker_identity.set(event.speaker_id or "unknown-speaker")
+        current_speaker_name.set(speaker_name)
         task = asyncio.create_task(
             save_transcript_segment(
                 meeting_id=meeting_id,
@@ -370,7 +511,13 @@ async def jarvis(ctx: agents.JobContext):
                 "Se a pergunta depender de informacao documental, "
                 "consulte a ferramenta search_knowledge_base antes de responder. "
                 "Se a ferramenta retornar NO_MATCH, diga que nao encontrou "
-                "informacao suficiente."
+                "informacao suficiente. "
+                "Para enviar e-mail, resumo, follow-up ou proximos passos, use "
+                "prepare_meeting_email primeiro e peca confirmacao por voz. "
+                "So use send_confirmed_meeting_email quando o Host confirmar "
+                "claramente por voz. Se o Host cancelar, use "
+                "cancel_pending_meeting_email. Nunca diga que enviou antes da "
+                "ferramenta confirmar SENT."
             ),
         )
 

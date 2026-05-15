@@ -22,12 +22,15 @@ from app.database import (
     delete_trial_request,
     ensure_meeting,
     get_agent_profile,
+    get_meeting_participant_by_identity,
     has_host_or_commercial_joined,
     init_database,
+    insert_meeting_agent_action,
     insert_sales_recommendations,
     insert_transcript_segment,
     insert_meeting,
     insert_trial_request,
+    list_meeting_participants,
     list_trial_requests,
     list_sales_recommendations,
     list_transcript_segments,
@@ -36,7 +39,7 @@ from app.database import (
     update_trial_request,
     upsert_agent_profile,
 )
-from app.email_service import send_trial_confirmation_email
+from app.email_service import send_meeting_action_email, send_trial_confirmation_email
 from app.models import (
     AgentProfile,
     CreateMeetingRequest,
@@ -46,6 +49,8 @@ from app.models import (
     KnowledgeUploadResponse,
     LiveKitTokenResponse,
     Meeting,
+    MeetingEmailActionRequest,
+    MeetingEmailActionResponse,
     SalesRecommendation,
     TranscriptSegment,
     TranscriptSegmentCreate,
@@ -354,6 +359,7 @@ async def create_livekit_token(
     await register_meeting_participant(
         settings=settings,
         meeting_id=meeting.id,
+        identity=identity,
         name=payload.name,
         email=str(payload.email),
         role=payload.role,
@@ -382,6 +388,161 @@ def verify_agent_api_key(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid agent API key.",
         )
+
+
+def dedupe_emails(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for value in values:
+        email = value.strip().lower()
+        if email and email not in seen:
+            seen.add(email)
+            deduped.append(email)
+    return deduped
+
+
+@app.post(
+    "/meetings/{meeting_id}/actions/email",
+    response_model=MeetingEmailActionResponse,
+    dependencies=[Depends(verify_agent_api_key)],
+)
+async def send_meeting_email_action(
+    meeting_id: str,
+    payload: MeetingEmailActionRequest,
+) -> MeetingEmailActionResponse:
+    await ensure_meeting(settings=settings, meeting_id=meeting_id)
+    profile = await get_agent_profile(settings=settings)
+    if "send_email" not in profile.enabled_actions:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email action is disabled in agent settings.",
+        )
+
+    if "resend_email" not in profile.enabled_integrations:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Resend email integration is disabled in agent settings.",
+        )
+
+    requester = await get_meeting_participant_by_identity(
+        settings=settings,
+        meeting_id=meeting_id,
+        identity=payload.requester_identity,
+    )
+    if requester is None:
+        await insert_meeting_agent_action(
+            settings=settings,
+            meeting_id=meeting_id,
+            requester_identity=payload.requester_identity,
+            requester_name=payload.requester_name,
+            action_type="send_email",
+            status="blocked",
+            payload=payload.model_dump(mode="json"),
+            result={"reason": "requester_not_found"},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Requester was not found in this meeting.",
+        )
+
+    if requester.role not in profile.voice_command_roles:
+        await insert_meeting_agent_action(
+            settings=settings,
+            meeting_id=meeting_id,
+            requester_identity=payload.requester_identity,
+            requester_name=payload.requester_name,
+            action_type="send_email",
+            status="blocked",
+            payload=payload.model_dump(mode="json"),
+            result={"reason": "role_not_allowed", "role": requester.role},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Requester role cannot execute this voice command.",
+        )
+
+    if requester.role != "host":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="For now, only the Host can send emails by voice.",
+        )
+
+    participants = await list_meeting_participants(
+        settings=settings,
+        meeting_id=meeting_id,
+    )
+    if payload.recipient_scope == "custom":
+        recipients = dedupe_emails([str(email) for email in payload.recipients])
+    elif payload.recipient_scope == "clients":
+        recipients = dedupe_emails(
+            [
+                str(participant.email)
+                for participant in participants
+                if participant.role in ("client", "observer")
+            ]
+        )
+    elif payload.recipient_scope == "host":
+        recipients = [str(requester.email)]
+    else:
+        recipients = dedupe_emails(
+            [str(participant.email) for participant in participants]
+        )
+
+    if not recipients:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No recipients were found for this email action.",
+        )
+
+    body = (
+        f"{payload.body.strip()}\n\n"
+        f"---\n"
+        f"Enviado pelo Coevo a pedido de {requester.name} durante a reuniao."
+    )
+    try:
+        await send_meeting_action_email(
+            settings=settings,
+            sender_name=requester.name,
+            sender_email=requester.email,
+            recipients=recipients,
+            subject=payload.subject,
+            body=body,
+        )
+    except Exception as exc:
+        await insert_meeting_agent_action(
+            settings=settings,
+            meeting_id=meeting_id,
+            requester_identity=payload.requester_identity,
+            requester_name=payload.requester_name,
+            action_type="send_email",
+            status="failed",
+            payload=payload.model_dump(mode="json"),
+            result={"reason": str(exc)},
+        )
+        logger.exception("meeting email action failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Email could not be sent.",
+        ) from exc
+
+    response = MeetingEmailActionResponse(
+        sent=True,
+        recipient_count=len(recipients),
+        recipients=recipients,
+        sender_name=requester.name,
+        sender_email=requester.email,
+    )
+    await insert_meeting_agent_action(
+        settings=settings,
+        meeting_id=meeting_id,
+        requester_identity=payload.requester_identity,
+        requester_name=requester.name,
+        action_type="send_email",
+        status="sent",
+        payload=payload.model_dump(mode="json"),
+        result=response.model_dump(mode="json"),
+    )
+    return response
 
 
 @app.post(
