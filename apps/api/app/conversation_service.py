@@ -59,6 +59,80 @@ def _history_context(messages: list[ConversationMessage]) -> str:
     )
 
 
+def _should_search_memory(payload: AgentRespondRequest) -> bool:
+    if payload.context_scope.meeting_id or payload.context_scope.customer:
+        return True
+
+    message = payload.message.strip().lower()
+    words = [word for word in message.replace("?", " ").replace(".", " ").split() if word]
+
+    if len(words) <= 4 and any(
+        greeting in message
+        for greeting in {
+            "oi",
+            "ola",
+            "olá",
+            "bom dia",
+            "boa tarde",
+            "boa noite",
+            "tudo bem",
+            "coevo",
+        }
+    ):
+        return False
+
+    memory_terms = {
+        "reuniao",
+        "reunião",
+        "reunioes",
+        "reuniões",
+        "cliente",
+        "clientes",
+        "projeto",
+        "projetos",
+        "pendencia",
+        "pendência",
+        "pendencias",
+        "pendências",
+        "decisao",
+        "decisão",
+        "decisoes",
+        "decisões",
+        "resumo",
+        "transcricao",
+        "transcrição",
+        "risco",
+        "riscos",
+        "objecao",
+        "objeção",
+        "objecoes",
+        "objeções",
+        "promessa",
+        "promessas",
+        "prazo",
+        "prazos",
+        "follow-up",
+        "followup",
+        "historico",
+        "histórico",
+        "memoria",
+        "memória",
+        "lembra",
+        "lembrar",
+        "ficou",
+        "combinado",
+        "combinamos",
+        "falou",
+        "disse",
+        "última",
+        "ultima",
+        "último",
+        "ultimo",
+    }
+
+    return any(term in message for term in memory_terms)
+
+
 async def _search_memory(
     *,
     settings: Settings,
@@ -87,17 +161,58 @@ async def _generate_answer(
     payload: AgentRespondRequest,
     history: list[ConversationMessage],
     memory_results: list[MeetingMemorySearchResult],
+    searched_memory: bool,
 ) -> str:
+    profile = await get_agent_profile(settings=settings)
+    history_text = _history_context(history)
+
+    if not searched_memory:
+        prompt = f"""
+Voce e o {profile.name}, assistente corporativo do Coevo Meet.
+Converse de forma fluida, humana, consultiva e breve.
+
+Objetivo neste canal:
+- entender a demanda do usuario antes de buscar memorias;
+- fazer perguntas de esclarecimento quando o pedido estiver aberto;
+- orientar o usuario sobre o que voce consegue fazer;
+- nao despejar resumo de reuniao sem ele pedir.
+
+Historico recente do chat:
+{history_text}
+
+Mensagem do usuario:
+{payload.message}
+
+Responda naturalmente. Se for uma saudacao, cumprimente e pergunte como pode ajudar.
+Se o pedido estiver vago, pergunte qual cliente, projeto, reuniao, prazo ou objetivo ele quer consultar.
+"""
+        if not settings.openai_api_key:
+            return (
+                "Oi, eu sou o Coevo. Posso te ajudar a consultar reunioes, pendencias, "
+                "decisoes e proximos passos. O que voce quer encontrar?"
+            )
+
+        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        try:
+            response = await client.responses.create(
+                model=settings.openai_summary_model,
+                input=prompt,
+            )
+            return response.output_text.strip()
+        except OpenAIError:
+            return (
+                "Oi, eu sou o Coevo. Me diga o que voce quer consultar ou resolver "
+                "e eu te ajudo a chegar no ponto certo."
+            )
+
     if not memory_results:
         return (
-            "Nao encontrei informacao suficiente nas memorias disponiveis para "
-            "responder com seguranca. Se quiser, refine a pergunta com o nome "
-            "do cliente, projeto ou reuniao."
+            "Nao encontrei informacao suficiente nas memorias disponiveis para responder "
+            "com seguranca. Me diga o cliente, projeto, reuniao ou periodo que voce quer "
+            "consultar para eu procurar melhor."
         )
 
-    profile = await get_agent_profile(settings=settings)
     context = _memory_context(memory_results)
-    history_text = _history_context(history)
     prompt = f"""
 Voce e o {profile.name}, assistente corporativo do Coevo Meet.
 Responda em portugues do Brasil, de forma objetiva, consultiva e segura.
@@ -116,7 +231,9 @@ Memorias de reunioes encontradas:
 Pergunta do usuario:
 {payload.message}
 
-Responda usando apenas as memorias fornecidas. Quando fizer sentido, cite a reuniao ou o tipo de memoria usado.
+Responda usando apenas as memorias fornecidas.
+Se a pergunta for ampla, sintetize e ofereca continuar por cliente, reuniao ou periodo.
+Quando fizer sentido, cite a reuniao ou o tipo de memoria usado.
 """
     if not settings.openai_api_key:
         first = memory_results[0]
@@ -170,7 +287,12 @@ async def respond_with_agent_memory(
             limit=40,
         )
     )
-    memory_results = await _search_memory(settings=settings, payload=payload)
+    searched_memory = _should_search_memory(payload)
+    memory_results = (
+        await _search_memory(settings=settings, payload=payload)
+        if searched_memory
+        else []
+    )
     user_message = await insert_conversation_message(
         settings=settings,
         session_id=session.id,
@@ -183,6 +305,7 @@ async def respond_with_agent_memory(
         payload=payload,
         history=history,
         memory_results=memory_results,
+        searched_memory=searched_memory,
     )
     assistant_message = await insert_conversation_message(
         settings=settings,
@@ -192,6 +315,7 @@ async def respond_with_agent_memory(
         metadata={
             "memory_result_ids": [item.id for item in memory_results],
             "memory_count": len(memory_results),
+            "searched_memory": searched_memory,
         },
     )
 
