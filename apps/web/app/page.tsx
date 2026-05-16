@@ -61,6 +61,18 @@ type MeetingListItem = {
   role: string;
 };
 
+type MeetingHistoryItem = {
+  id: string;
+  title: string;
+  created_at: string;
+  started_at?: string | null;
+  ended_at?: string | null;
+  recording_url?: string | null;
+  participant_count: number;
+  transcript_count: number;
+  memory_count: number;
+};
+
 type TrialRequest = {
   id: number;
   full_name: string;
@@ -123,7 +135,6 @@ const sessionUser = {
 };
 
 const invitedMeetings: MeetingListItem[] = [];
-const meetingHistory: MeetingListItem[] = [];
 
 const emptyLeadForm: LeadForm = {
   fullName: "",
@@ -404,6 +415,9 @@ export default function HomePage() {
   const [trialRequests, setTrialRequests] = useState<TrialRequest[]>([]);
   const [trialRequestsStatus, setTrialRequestsStatus] = useState<string | null>(null);
   const [isLoadingTrialRequests, setIsLoadingTrialRequests] = useState(false);
+  const [meetingHistory, setMeetingHistory] = useState<MeetingHistoryItem[]>([]);
+  const [meetingHistoryStatus, setMeetingHistoryStatus] = useState<string | null>(null);
+  const [isLoadingMeetingHistory, setIsLoadingMeetingHistory] = useState(false);
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [editingLeadId, setEditingLeadId] = useState<number | null>(null);
   const [leadForm, setLeadForm] = useState<LeadForm>(emptyLeadForm);
@@ -462,6 +476,23 @@ export default function HomePage() {
       setTrialRequestsStatus(err instanceof Error ? err.message : "Erro inesperado.");
     } finally {
       setIsLoadingTrialRequests(false);
+    }
+  }
+
+  async function loadMeetingHistory() {
+    setIsLoadingMeetingHistory(true);
+    setMeetingHistoryStatus(null);
+
+    try {
+      const response = await fetch(`${apiUrl}/meetings/history?limit=12`);
+      if (!response.ok) {
+        throw new Error("Nao foi possivel carregar o historico.");
+      }
+      setMeetingHistory((await response.json()) as MeetingHistoryItem[]);
+    } catch (err) {
+      setMeetingHistoryStatus(err instanceof Error ? err.message : "Erro inesperado.");
+    } finally {
+      setIsLoadingMeetingHistory(false);
     }
   }
 
@@ -571,6 +602,27 @@ export default function HomePage() {
       weeklyMeetingVolumeOptions.find((option) => option.value === value)?.label ??
       value
     );
+  }
+
+  function formatMeetingDate(value?: string | null) {
+    if (!value) {
+      return "Sem data";
+    }
+
+    return new Intl.DateTimeFormat("pt-BR", {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(new Date(value));
+  }
+
+  function meetingStatusLabel(meeting: MeetingHistoryItem) {
+    if (meeting.ended_at) {
+      return "Encerrada";
+    }
+    if (meeting.started_at) {
+      return "Em andamento";
+    }
+    return "Criada";
   }
 
   function openNewLeadModal() {
@@ -700,6 +752,7 @@ export default function HomePage() {
     loadProfile();
     loadGoogleCalendarStatus();
     loadConversationSessions();
+    loadMeetingHistory();
 
     return () => {
       cancelled = true;
@@ -1073,12 +1126,22 @@ export default function HomePage() {
                   <h2 className="font-display text-xl font-semibold text-[#11110F]">
                     Historico das reunioes que participou
                   </h2>
-                  <p className="font-mono text-xs uppercase text-[#73736B]">
-                    Mais recentes primeiro
-                  </p>
+                  <button
+                    className="rounded-md border border-[#E7E7E2] bg-white px-3 py-2 font-mono text-xs uppercase text-[#73736B] transition hover:border-[#F97316] hover:bg-[#FFF3EA] hover:text-[#11110F]"
+                    disabled={isLoadingMeetingHistory}
+                    onClick={loadMeetingHistory}
+                    type="button"
+                  >
+                    {isLoadingMeetingHistory ? "Atualizando" : "Atualizar"}
+                  </button>
                 </div>
 
                 <div className="overflow-hidden rounded-lg border border-[#E7E7E2] bg-white shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                  {meetingHistoryStatus ? (
+                    <div className="border-b border-red-100 bg-red-50 px-5 py-3 text-sm text-red-700">
+                      {meetingHistoryStatus}
+                    </div>
+                  ) : null}
                   {meetingHistory.length === 0 ? (
                     <div className="px-5 py-7 text-center">
                       <p className="text-sm font-semibold text-[#11110F]">
@@ -1088,7 +1151,55 @@ export default function HomePage() {
                         As reunioes encerradas em que voce participou serao listadas aqui.
                       </p>
                     </div>
-                  ) : null}
+                  ) : (
+                    <div className="divide-y divide-[#E7E7E2]">
+                      {meetingHistory.map((meeting) => (
+                        <article
+                          className="grid gap-4 px-5 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
+                          key={meeting.id}
+                        >
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="truncate text-sm font-bold text-[#11110F]">
+                                {meeting.title}
+                              </p>
+                              <span className="rounded-full border border-[#E7E7E2] bg-[#FCFCFB] px-2 py-1 text-[11px] font-bold uppercase text-[#73736B]">
+                                {meetingStatusLabel(meeting)}
+                              </span>
+                              {meeting.recording_url ? (
+                                <span className="rounded-full border border-[#FDBA74] bg-[#FFF3EA] px-2 py-1 text-[11px] font-bold uppercase text-[#F97316]">
+                                  Gravada
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="mt-2 font-mono text-xs text-[#73736B]">
+                              {meeting.id}
+                            </p>
+                            <p className="mt-2 text-xs text-[#73736B]">
+                              Criada em {formatMeetingDate(meeting.created_at)}
+                              {meeting.ended_at
+                                ? ` - encerrada em ${formatMeetingDate(meeting.ended_at)}`
+                                : ""}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2 md:justify-end">
+                            <span className="rounded-md bg-[#FCFCFB] px-3 py-2 text-xs font-semibold text-[#73736B]">
+                              {meeting.participant_count} participante
+                              {meeting.participant_count === 1 ? "" : "s"}
+                            </span>
+                            <span className="rounded-md bg-[#FCFCFB] px-3 py-2 text-xs font-semibold text-[#73736B]">
+                              {meeting.transcript_count} transcricao
+                              {meeting.transcript_count === 1 ? "" : "s"}
+                            </span>
+                            <span className="rounded-md bg-[#FCFCFB] px-3 py-2 text-xs font-semibold text-[#73736B]">
+                              {meeting.memory_count} memoria
+                              {meeting.memory_count === 1 ? "" : "s"}
+                            </span>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </section>
             </div>

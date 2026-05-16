@@ -444,6 +444,12 @@ async def get_recent_meetings(limit: int = 20) -> list[MeetingRecentSummary]:
     return list(await list_recent_meetings(settings=settings, limit=safe_limit))
 
 
+@app.get("/meetings/history", response_model=list[MeetingRecentSummary])
+async def get_meeting_history(limit: int = 20) -> list[MeetingRecentSummary]:
+    safe_limit = min(max(limit, 1), 50)
+    return list(await list_recent_meetings(settings=settings, limit=safe_limit))
+
+
 @app.get("/meetings/{meeting_id}", response_model=Meeting)
 async def get_meeting(meeting_id: str) -> Meeting:
     return await ensure_meeting(settings=settings, meeting_id=meeting_id)
