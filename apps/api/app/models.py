@@ -61,6 +61,16 @@ class Meeting(BaseModel):
         )
 
 
+class MeetingParticipant(BaseModel):
+    id: int
+    meeting_id: str
+    identity: str | None = None
+    name: str
+    email: EmailStr
+    role: ParticipantRole
+    joined_at: datetime
+
+
 class MeetingRecentSummary(BaseModel):
     id: str
     title: str
@@ -72,17 +82,7 @@ class MeetingRecentSummary(BaseModel):
     participant_count: int = 0
     transcript_count: int = 0
     memory_count: int = 0
-    participants: list["MeetingParticipant"] = Field(default_factory=list)
-
-
-class MeetingParticipant(BaseModel):
-    id: int
-    meeting_id: str
-    identity: str | None = None
-    name: str
-    email: EmailStr
-    role: ParticipantRole
-    joined_at: datetime
+    participants: list[MeetingParticipant] = Field(default_factory=list)
 
 
 class CreateTokenRequest(BaseModel):
