@@ -13,6 +13,7 @@ from app.models import (
     MeetingMemoryItem,
     MeetingMemorySearchResult,
     MeetingParticipant,
+    MeetingRecentSummary,
     SalesRecommendation,
     TranscriptSegment,
     TranscriptSegmentCreate,
@@ -548,6 +549,57 @@ async def ensure_meeting(*, settings: Settings, meeting_id: str) -> Meeting:
     meeting = Meeting.create("Reuniao UM")
     meeting.id = meeting_id
     return await insert_meeting(settings=settings, meeting=meeting)
+
+
+async def list_recent_meetings(
+    *,
+    settings: Settings,
+    limit: int = 20,
+) -> Sequence[MeetingRecentSummary]:
+    query = """
+    SELECT
+        m.id,
+        m.title,
+        m.created_at,
+        m.started_at,
+        m.ended_at,
+        m.recording_url,
+        m.copilot_dispatched,
+        COUNT(DISTINCT mp.id)::int AS participant_count,
+        COUNT(DISTINCT ts.id)::int AS transcript_count,
+        COUNT(DISTINCT mmi.id)::int AS memory_count,
+        COALESCE(
+            jsonb_agg(
+                DISTINCT jsonb_build_object(
+                    'id', mp.id,
+                    'meeting_id', mp.meeting_id,
+                    'identity', mp.identity,
+                    'name', mp.name,
+                    'email', mp.email,
+                    'role', mp.role,
+                    'joined_at', mp.joined_at
+                )
+            ) FILTER (WHERE mp.id IS NOT NULL),
+            '[]'::jsonb
+        ) AS participants
+    FROM meetings m
+    LEFT JOIN meeting_participants mp ON mp.meeting_id = m.id
+    LEFT JOIN transcript_segments ts ON ts.meeting_id = m.id
+    LEFT JOIN meeting_memory_items mmi ON mmi.meeting_id = m.id
+    GROUP BY m.id
+    ORDER BY m.created_at DESC
+    LIMIT %s;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (limit,))
+            rows = await cur.fetchall()
+
+    return [MeetingRecentSummary.model_validate(row) for row in rows]
 
 
 async def mark_meeting_copilot_dispatched(

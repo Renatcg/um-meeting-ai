@@ -42,6 +42,7 @@ from app.database import (
     insert_meeting,
     insert_trial_request,
     list_meeting_agent_actions,
+    list_recent_meetings,
     list_pending_meeting_emails,
     list_meeting_participants,
     list_trial_requests,
@@ -76,6 +77,7 @@ from app.models import (
     MeetingMemoryProcessResponse,
     MeetingMemorySearchRequest,
     MeetingMemorySearchResponse,
+    MeetingRecentSummary,
     MeetingWebSearchRequest,
     MeetingWebSearchResponse,
     SalesRecommendation,
@@ -357,6 +359,16 @@ async def search_meeting_knowledge_base(
 async def create_meeting(payload: CreateMeetingRequest) -> Meeting:
     meeting = meeting_store.create(payload.title)
     return await insert_meeting(settings=settings, meeting=meeting)
+
+
+@app.get(
+    "/meetings/recent",
+    response_model=list[MeetingRecentSummary],
+    dependencies=[Depends(verify_agent_api_key)],
+)
+async def get_recent_meetings(limit: int = 20) -> list[MeetingRecentSummary]:
+    safe_limit = min(max(limit, 1), 100)
+    return list(await list_recent_meetings(settings=settings, limit=safe_limit))
 
 
 @app.get("/meetings/{meeting_id}", response_model=Meeting)
