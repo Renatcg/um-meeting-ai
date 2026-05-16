@@ -42,6 +42,15 @@ def _first_text(*values: object) -> str:
     return ""
 
 
+def _get_nested_text(data: dict, *path: str) -> str:
+    current: object = data
+    for key in path:
+        if not isinstance(current, dict):
+            return ""
+        current = current.get(key)
+    return current.strip() if isinstance(current, str) else ""
+
+
 def _strip_data_uri(value: str) -> str:
     if "," in value and value.strip().lower().startswith("data:"):
         return value.split(",", 1)[1]
@@ -131,13 +140,18 @@ def parse_evo_webhook_payload(payload: dict) -> WhatsAppInboundMessage | None:
         key.get("remoteJid"),
         data.get("remoteJid"),
         data.get("sender"),
+        data.get("chatId"),
+        _get_nested_text(data, "message", "key", "remoteJid"),
     )
     participant_jid = _first_text(
         key.get("participant"),
         data.get("participant"),
         data.get("sender"),
+        data.get("senderPn"),
+        data.get("participantJid"),
+        _get_nested_text(data, "message", "key", "participant"),
     )
-    is_group = remote_jid.endswith("@g.us")
+    is_group = remote_jid.endswith("@g.us") or "@g.us" in remote_jid
     phone = normalize_phone(participant_jid if is_group else remote_jid)
     if not phone:
         return None
@@ -145,7 +159,11 @@ def parse_evo_webhook_payload(payload: dict) -> WhatsAppInboundMessage | None:
     sender_name = _first_text(data.get("pushName"), data.get("senderName"), phone)
     instance = _first_text(payload.get("instance"), data.get("instance"))
     message_id = _first_text(key.get("id"), data.get("id")) or None
-    group_name = _first_text(data.get("groupName"), data.get("subject")) or None
+    group_name = _first_text(
+        data.get("groupName"),
+        data.get("subject"),
+        data.get("chatName"),
+    ) or None
 
     return WhatsAppInboundMessage(
         instance=instance or None,
@@ -171,6 +189,12 @@ def whatsapp_phone_is_allowed(*, settings: Settings, phone: str) -> bool:
     return normalize_phone(phone) in allowed
 
 
+def _recipient_number(value: str) -> str:
+    if value.endswith("@g.us"):
+        return value
+    return normalize_phone(value)
+
+
 def _send_evo_text(
     *,
     settings: Settings,
@@ -185,7 +209,7 @@ def _send_evo_text(
     url = f"{base_url}/message/sendText/{instance}"
     body = json.dumps(
         {
-            "number": normalize_phone(phone),
+            "number": _recipient_number(phone),
             "text": text,
         }
     ).encode("utf-8")
@@ -223,7 +247,7 @@ def _send_evo_audio(
     url = f"{base_url}/message/sendWhatsAppAudio/{instance}"
     body = json.dumps(
         {
-            "number": normalize_phone(phone),
+            "number": _recipient_number(phone),
             "audio": audio_base64,
         }
     ).encode("utf-8")

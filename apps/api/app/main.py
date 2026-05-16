@@ -706,11 +706,16 @@ async def evo_whatsapp_webhook(
     payload = await request.json()
     inbound = parse_evo_webhook_payload(payload)
     if inbound is None:
+        logger.info("ignored whatsapp webhook payload without supported message")
         return {"status": "ignored"}
 
     permission_phone = inbound.sender_phone or inbound.phone
     if not whatsapp_phone_is_allowed(settings=settings, phone=permission_phone):
-        logger.warning("blocked whatsapp message from unauthorized phone")
+        logger.warning(
+            "blocked whatsapp message from unauthorized phone: phone=%s group=%s",
+            permission_phone,
+            inbound.is_group,
+        )
         return {"status": "blocked"}
 
     instance = inbound.instance or settings.evo_api_instance
@@ -766,6 +771,12 @@ async def evo_whatsapp_webhook(
         if not settings.whatsapp_group_enabled or not inbound.group_id:
             return {"status": "group-disabled"}
 
+        logger.info(
+            "received whatsapp group message: group_id=%s sender=%s type=%s",
+            inbound.group_id,
+            inbound.sender_phone or inbound.phone,
+            inbound.message_type,
+        )
         await insert_whatsapp_group_message(
             settings=settings,
             group_id=inbound.group_id,
