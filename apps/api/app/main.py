@@ -361,6 +361,19 @@ async def create_meeting(payload: CreateMeetingRequest) -> Meeting:
     return await insert_meeting(settings=settings, meeting=meeting)
 
 
+def verify_agent_api_key(
+    x_agent_api_key: str | None = Header(default=None),
+) -> None:
+    if not settings.agent_api_key:
+        return
+
+    if x_agent_api_key != settings.agent_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid agent API key.",
+        )
+
+
 @app.get(
     "/meetings/recent",
     response_model=list[MeetingRecentSummary],
@@ -514,19 +527,6 @@ async def create_livekit_token(
         copilot_dispatch_requested=copilot_dispatch_requested,
         copilot_dispatch_error=copilot_dispatch_error,
     )
-
-
-def verify_agent_api_key(
-    x_agent_api_key: str | None = Header(default=None),
-) -> None:
-    if not settings.agent_api_key:
-        return
-
-    if x_agent_api_key != settings.agent_api_key:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid agent API key.",
-        )
 
 
 def dedupe_emails(values: list[str]) -> list[str]:
