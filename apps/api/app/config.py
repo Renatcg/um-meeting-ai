@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     recording_s3_force_path_style: bool = True
     recording_public_base_url: str | None = None
     recording_object_prefix: str = "recordings"
+    evo_api_enabled: bool = False
+    evo_api_base_url: str | None = None
+    evo_api_key: str | None = None
+    evo_api_instance: str | None = None
+    evo_api_webhook_secret: str | None = None
+    whatsapp_allowed_phones: str = ""
 
     model_config = SettingsConfigDict(
         env_file=("../../.env", ".env"),
@@ -68,6 +74,14 @@ class Settings(BaseSettings):
         if self.google_calendar_redirect_uri:
             return self.google_calendar_redirect_uri
         return "http://localhost:8000/integrations/google-calendar/callback"
+
+    @property
+    def allowed_whatsapp_phones(self) -> set[str]:
+        return {
+            "".join(character for character in phone if character.isdigit())
+            for phone in self.whatsapp_allowed_phones.split(",")
+            if phone.strip()
+        }
 
 
 @lru_cache

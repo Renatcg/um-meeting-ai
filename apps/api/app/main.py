@@ -137,6 +137,11 @@ from app.recording_service import (
 from app.sales_coach_service import analyze_segment
 from app.store import meeting_store
 from app.web_search_service import search_web
+from app.whatsapp_service import (
+    parse_evo_webhook_payload,
+    send_evo_text,
+    whatsapp_phone_is_allowed,
+)
 
 settings = get_settings()
 MEETING_JOIN_GRACE_PERIOD = timedelta(minutes=15)
@@ -671,6 +676,67 @@ async def livekit_webhook(request: Request) -> dict[str, str]:
                 logger.exception("failed to save egress info from livekit webhook")
 
     return {"status": "ok"}
+
+
+@app.post("/integrations/whatsapp/evo/webhook")
+async def evo_whatsapp_webhook(
+    request: Request,
+    x_evo_webhook_secret: str | None = Header(default=None),
+) -> dict[str, str]:
+    if not settings.evo_api_enabled:
+        return {"status": "disabled"}
+
+    if (
+        settings.evo_api_webhook_secret
+        and x_evo_webhook_secret != settings.evo_api_webhook_secret
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Evo webhook secret.",
+        )
+
+    payload = await request.json()
+    inbound = parse_evo_webhook_payload(payload)
+    if inbound is None:
+        return {"status": "ignored"}
+
+    if not whatsapp_phone_is_allowed(settings=settings, phone=inbound.phone):
+        logger.warning("blocked whatsapp message from unauthorized phone")
+        return {"status": "blocked"}
+
+    instance = inbound.instance or settings.evo_api_instance
+    if not instance:
+        logger.error("whatsapp webhook received without configured Evo instance")
+        return {"status": "missing-instance"}
+
+    response = await respond_with_agent_memory(
+        settings=settings,
+        payload=AgentRespondRequest(
+            message=inbound.text,
+            agent_id="coevo",
+            organization_id="default",
+            channel="whatsapp",
+            user_id=f"whatsapp:{inbound.phone}",
+            user_name=inbound.sender_name,
+            requester_role="host",
+        ),
+    )
+
+    try:
+        await send_evo_text(
+            settings=settings,
+            instance=instance,
+            phone=inbound.phone,
+            text=response.assistant_message.content,
+        )
+    except Exception:
+        logger.exception("failed to send whatsapp response through Evo API")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to send WhatsApp response.",
+        )
+
+    return {"status": "sent"}
 
 
 
