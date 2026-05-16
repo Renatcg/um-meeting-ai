@@ -15,6 +15,7 @@ from app.models import (
     MeetingMemoryItem,
     MeetingMemorySearchResult,
     MeetingParticipant,
+    MeetingRecording,
     MeetingRecentSummary,
     SalesRecommendation,
     TranscriptSegment,
@@ -281,6 +282,32 @@ CREATE TABLE IF NOT EXISTS google_calendar_connection (
 );
 """
 
+CREATE_MEETING_RECORDINGS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS meeting_recordings (
+    id BIGSERIAL PRIMARY KEY,
+    meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+    egress_id TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL,
+    storage_provider TEXT NOT NULL,
+    bucket TEXT,
+    object_key TEXT,
+    file_type TEXT NOT NULL DEFAULT 'mp4',
+    started_at TIMESTAMPTZ,
+    ended_at TIMESTAMPTZ,
+    duration_seconds DOUBLE PRECISION,
+    size_bytes BIGINT,
+    location TEXT,
+    error TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
+
+CREATE_MEETING_RECORDINGS_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_meeting_recordings_meeting_created
+ON meeting_recordings (meeting_id, created_at DESC, id DESC);
+"""
+
 CREATE_CONVERSATION_SESSIONS_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS conversation_sessions (
     id TEXT PRIMARY KEY,
@@ -333,6 +360,8 @@ async def init_database(settings: Settings) -> None:
         await conn.execute(CREATE_MEETING_PENDING_EMAILS_TABLE_SQL)
         await conn.execute(CREATE_MEETING_PENDING_EMAILS_INDEX_SQL)
         await conn.execute(CREATE_GOOGLE_CALENDAR_CONNECTION_TABLE_SQL)
+        await conn.execute(CREATE_MEETING_RECORDINGS_TABLE_SQL)
+        await conn.execute(CREATE_MEETING_RECORDINGS_INDEX_SQL)
         await conn.execute(CREATE_CONVERSATION_SESSIONS_TABLE_SQL)
         await conn.execute(CREATE_CONVERSATION_SESSIONS_INDEX_SQL)
         await conn.execute(CREATE_CONVERSATION_MESSAGES_TABLE_SQL)
@@ -643,6 +672,232 @@ async def list_recent_meetings(
             rows = await cur.fetchall()
 
     return [MeetingRecentSummary.model_validate(row) for row in rows]
+
+
+async def insert_meeting_recording(
+    *,
+    settings: Settings,
+    meeting_id: str,
+    egress_id: str,
+    status: str,
+    storage_provider: str,
+    bucket: str | None,
+    object_key: str | None,
+    file_type: str = "mp4",
+    location: str | None = None,
+) -> MeetingRecording:
+    query = """
+    INSERT INTO meeting_recordings (
+        meeting_id,
+        egress_id,
+        status,
+        storage_provider,
+        bucket,
+        object_key,
+        file_type,
+        location
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    ON CONFLICT (egress_id) DO UPDATE
+    SET
+        status = EXCLUDED.status,
+        location = COALESCE(EXCLUDED.location, meeting_recordings.location),
+        updated_at = now()
+    RETURNING
+        id,
+        meeting_id,
+        egress_id,
+        status,
+        storage_provider,
+        bucket,
+        object_key,
+        file_type,
+        started_at,
+        ended_at,
+        duration_seconds,
+        size_bytes,
+        location,
+        error,
+        created_at,
+        updated_at;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                query,
+                (
+                    meeting_id,
+                    egress_id,
+                    status,
+                    storage_provider,
+                    bucket,
+                    object_key,
+                    file_type,
+                    location,
+                ),
+            )
+            row = await cur.fetchone()
+
+    if row is None:
+        raise RuntimeError("Recording insert did not return a row.")
+
+    return MeetingRecording.model_validate(row)
+
+
+async def list_meeting_recordings(
+    *,
+    settings: Settings,
+    meeting_id: str,
+) -> Sequence[MeetingRecording]:
+    query = """
+    SELECT
+        id,
+        meeting_id,
+        egress_id,
+        status,
+        storage_provider,
+        bucket,
+        object_key,
+        file_type,
+        started_at,
+        ended_at,
+        duration_seconds,
+        size_bytes,
+        location,
+        error,
+        created_at,
+        updated_at
+    FROM meeting_recordings
+    WHERE meeting_id = %s
+    ORDER BY created_at DESC, id DESC;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (meeting_id,))
+            rows = await cur.fetchall()
+
+    return [MeetingRecording.model_validate(row) for row in rows]
+
+
+async def get_active_meeting_recording(
+    *,
+    settings: Settings,
+    meeting_id: str,
+) -> MeetingRecording | None:
+    query = """
+    SELECT
+        id,
+        meeting_id,
+        egress_id,
+        status,
+        storage_provider,
+        bucket,
+        object_key,
+        file_type,
+        started_at,
+        ended_at,
+        duration_seconds,
+        size_bytes,
+        location,
+        error,
+        created_at,
+        updated_at
+    FROM meeting_recordings
+    WHERE meeting_id = %s
+      AND status IN ('EGRESS_STARTING', 'EGRESS_ACTIVE', 'STARTING', 'ACTIVE')
+    ORDER BY created_at DESC, id DESC
+    LIMIT 1;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (meeting_id,))
+            row = await cur.fetchone()
+
+    return MeetingRecording.model_validate(row) if row else None
+
+
+async def update_meeting_recording(
+    *,
+    settings: Settings,
+    egress_id: str,
+    status: str,
+    started_at,
+    ended_at,
+    duration_seconds: float | None = None,
+    size_bytes: int | None = None,
+    location: str | None = None,
+    error: str | None = None,
+) -> MeetingRecording | None:
+    query = """
+    UPDATE meeting_recordings
+    SET
+        status = %s,
+        started_at = COALESCE(%s, started_at),
+        ended_at = COALESCE(%s, ended_at),
+        duration_seconds = COALESCE(%s, duration_seconds),
+        size_bytes = COALESCE(%s, size_bytes),
+        location = COALESCE(%s, location),
+        error = COALESCE(%s, error),
+        updated_at = now()
+    WHERE egress_id = %s
+    RETURNING
+        id,
+        meeting_id,
+        egress_id,
+        status,
+        storage_provider,
+        bucket,
+        object_key,
+        file_type,
+        started_at,
+        ended_at,
+        duration_seconds,
+        size_bytes,
+        location,
+        error,
+        created_at,
+        updated_at;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                query,
+                (
+                    status,
+                    started_at,
+                    ended_at,
+                    duration_seconds,
+                    size_bytes,
+                    location,
+                    error,
+                    egress_id,
+                ),
+            )
+            row = await cur.fetchone()
+
+            if row and location:
+                await cur.execute(
+                    "UPDATE meetings SET recording_url = %s WHERE id = %s;",
+                    (location, row["meeting_id"]),
+                )
+
+    return MeetingRecording.model_validate(row) if row else None
 
 
 async def upsert_conversation_session(

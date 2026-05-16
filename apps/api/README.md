@@ -32,6 +32,9 @@ Endpoints implementados:
 - `POST /meetings/{meeting_id}/memory/process`
 - `GET /meetings/{meeting_id}/memory`
 - `POST /meetings/{meeting_id}/memory/search`
+- `POST /meetings/{meeting_id}/recording/start`
+- `POST /meetings/{meeting_id}/recording/stop`
+- `GET /meetings/{meeting_id}/recordings`
 - `POST /agent/respond`
 - `GET /agent/conversations`
 - `GET /agent/conversations/{session_id}/messages`
@@ -117,6 +120,31 @@ Exemplo:
   }
 }
 ```
+
+## Gravacao com LiveKit Egress
+
+Quando `RECORDINGS_ENABLED=true`, o frontend solicita `POST
+/meetings/{meeting_id}/recording/start` quando Host ou Comercial conecta na
+sala. A API inicia um Room Composite Egress no LiveKit e envia o arquivo MP4
+para S3/R2.
+
+Variaveis principais:
+
+- `RECORDINGS_ENABLED`
+- `RECORDING_STORAGE_PROVIDER`
+- `RECORDING_S3_BUCKET`
+- `RECORDING_S3_REGION`
+- `RECORDING_S3_ACCESS_KEY_ID`
+- `RECORDING_S3_SECRET_ACCESS_KEY`
+- `RECORDING_S3_ENDPOINT`
+- `RECORDING_S3_FORCE_PATH_STYLE`
+- `RECORDING_PUBLIC_BASE_URL`
+- `RECORDING_OBJECT_PREFIX`
+
+Os metadados ficam em `meeting_recordings`, incluindo `meeting_id`,
+`egress_id`, `status`, `bucket`, `object_key`, duracao, tamanho e localizacao.
+Ao finalizar a reuniao, a API tenta parar o Egress ativo antes de marcar a sala
+como encerrada.
 
 ## Painel comercial
 

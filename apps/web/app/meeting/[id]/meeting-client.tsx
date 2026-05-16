@@ -1551,6 +1551,50 @@ function MeetingSidePanel({
   );
 }
 
+function RecordingStarter({
+  connection,
+  meetingId,
+}: {
+  connection: TokenResponse;
+  meetingId: string;
+}) {
+  const room = useRoomContext();
+  const hasRequestedRecording = useRef(false);
+
+  useEffect(() => {
+    if (connection.role !== "host" && connection.role !== "commercial") {
+      return;
+    }
+
+    function requestRecording() {
+      if (hasRequestedRecording.current) {
+        return;
+      }
+
+      hasRequestedRecording.current = true;
+      void fetch(`${apiUrl}/meetings/${meetingId}/recording/start`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${connection.participant_access_token}`,
+        },
+      }).catch(() => {
+        // Recording is best-effort; the meeting should keep running if Egress is unavailable.
+      });
+    }
+
+    if (room.state === "connected") {
+      requestRecording();
+    }
+
+    room.on(RoomEvent.Connected, requestRecording);
+    return () => {
+      room.off(RoomEvent.Connected, requestRecording);
+    };
+  }, [connection, meetingId, room]);
+
+  return null;
+}
+
 export default function MeetingClient({ meetingId }: { meetingId: string }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("lobby");
@@ -1940,6 +1984,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
           }`}
           onDisconnected={leaveMeeting}
         >
+          <RecordingStarter connection={connection} meetingId={meetingId} />
           <section className="relative h-full min-h-0 overflow-hidden">
             <button
               className="absolute left-4 top-4 z-20 grid h-11 w-11 place-items-center rounded-lg border border-[#E7E7E2] bg-white/90 text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-[#F97316] hover:bg-[#FFF3EA]"

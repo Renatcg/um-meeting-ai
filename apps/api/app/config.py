@@ -34,6 +34,16 @@ class Settings(BaseSettings):
     google_client_secret: str | None = None
     google_calendar_redirect_uri: str | None = None
     google_calendar_time_zone: str = "America/Sao_Paulo"
+    recordings_enabled: bool = False
+    recording_storage_provider: str = "s3"
+    recording_s3_bucket: str | None = None
+    recording_s3_region: str = "auto"
+    recording_s3_access_key_id: str | None = None
+    recording_s3_secret_access_key: str | None = None
+    recording_s3_endpoint: str | None = None
+    recording_s3_force_path_style: bool = True
+    recording_public_base_url: str | None = None
+    recording_object_prefix: str = "recordings"
 
     model_config = SettingsConfigDict(
         env_file=("../../.env", ".env"),

@@ -87,6 +87,32 @@ class MeetingRecentSummary(BaseModel):
     participants: list[MeetingParticipant] = Field(default_factory=list)
 
 
+class MeetingRecording(BaseModel):
+    id: int
+    meeting_id: str
+    egress_id: str
+    status: str
+    storage_provider: str
+    bucket: str | None = None
+    object_key: str | None = None
+    file_type: str = "mp4"
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    duration_seconds: float | None = None
+    size_bytes: int | None = None
+    location: str | None = None
+    error: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class RecordingStartResponse(BaseModel):
+    started: bool
+    configured: bool
+    recording: MeetingRecording | None = None
+    detail: str | None = None
+
+
 class CreateTokenRequest(BaseModel):
     name: str = Field(min_length=2, max_length=80)
     email: EmailStr

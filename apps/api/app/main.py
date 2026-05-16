@@ -45,6 +45,7 @@ from app.database import (
     insert_trial_request,
     list_conversation_messages,
     list_conversation_sessions,
+    list_meeting_recordings,
     list_meeting_agent_actions,
     list_recent_meetings,
     list_pending_meeting_emails,
@@ -86,8 +87,10 @@ from app.models import (
     MeetingMemorySearchRequest,
     MeetingMemorySearchResponse,
     MeetingRecentSummary,
+    MeetingRecording,
     MeetingWebSearchRequest,
     MeetingWebSearchResponse,
+    RecordingStartResponse,
     SalesRecommendation,
     TranscriptSegment,
     TranscriptSegmentCreate,
@@ -106,6 +109,11 @@ from app.memory_service import (
     require_memory_or_404,
     search_meeting_memory,
 )
+from app.recording_service import (
+    save_egress_info,
+    start_meeting_recording,
+    stop_active_meeting_recording,
+)
 from app.sales_coach_service import analyze_segment
 from app.store import meeting_store
 from app.web_search_service import search_web
@@ -116,6 +124,8 @@ logger = logging.getLogger(__name__)
 
 
 LIVEKIT_WEBHOOK_ROOM_FINISHED = "room_finished"
+LIVEKIT_WEBHOOK_EGRESS_ENDED = "egress_ended"
+LIVEKIT_WEBHOOK_EGRESS_UPDATED = "egress_updated"
 
 
 def log_background_task_failure(task: asyncio.Task) -> None:
@@ -440,6 +450,11 @@ async def get_meeting(meeting_id: str) -> Meeting:
 
 
 async def finalize_meeting(meeting_id: str) -> Meeting:
+    try:
+        await stop_active_meeting_recording(settings=settings, meeting_id=meeting_id)
+    except Exception:
+        logger.exception("failed to stop active recording during meeting finalization")
+
     meeting = await mark_meeting_ended(settings=settings, meeting_id=meeting_id)
     await send_deferred_meeting_emails(meeting_id)
     task = asyncio.create_task(
@@ -456,6 +471,62 @@ async def end_meeting(
 ) -> Meeting:
     require_sales_panel_access(claims, meeting_id)
     return await finalize_meeting(meeting_id)
+
+
+@app.post(
+    "/meetings/{meeting_id}/recording/start",
+    response_model=RecordingStartResponse,
+)
+async def start_recording(
+    meeting_id: str,
+    claims: ParticipantClaims = Depends(get_participant_claims),
+) -> RecordingStartResponse:
+    require_sales_panel_access(claims, meeting_id)
+    await ensure_meeting(settings=settings, meeting_id=meeting_id)
+    try:
+        return await start_meeting_recording(
+            settings=settings,
+            meeting_id=meeting_id,
+        )
+    except Exception as exc:
+        logger.exception("failed to start meeting recording")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not start LiveKit Egress recording.",
+        ) from exc
+
+
+@app.post("/meetings/{meeting_id}/recording/stop", response_model=MeetingRecording | None)
+async def stop_recording(
+    meeting_id: str,
+    claims: ParticipantClaims = Depends(get_participant_claims),
+) -> MeetingRecording | None:
+    require_sales_panel_access(claims, meeting_id)
+    await ensure_meeting(settings=settings, meeting_id=meeting_id)
+    try:
+        return await stop_active_meeting_recording(
+            settings=settings,
+            meeting_id=meeting_id,
+        )
+    except Exception as exc:
+        logger.exception("failed to stop meeting recording")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not stop LiveKit Egress recording.",
+        ) from exc
+
+
+@app.get("/meetings/{meeting_id}/recordings", response_model=list[MeetingRecording])
+async def get_meeting_recordings(
+    meeting_id: str,
+    claims: ParticipantClaims = Depends(get_participant_claims),
+) -> list[MeetingRecording]:
+    if claims.meeting_id != meeting_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Participant token does not belong to this meeting.",
+        )
+    return list(await list_meeting_recordings(settings=settings, meeting_id=meeting_id))
 
 
 @app.post("/livekit/webhook")
@@ -482,6 +553,13 @@ async def livekit_webhook(request: Request) -> dict[str, str]:
             await finalize_meeting(meeting_id)
         except Exception:
             logger.exception("failed to finalize meeting from livekit webhook")
+    elif event_name in {LIVEKIT_WEBHOOK_EGRESS_ENDED, LIVEKIT_WEBHOOK_EGRESS_UPDATED}:
+        egress_info = getattr(event, "egress_info", None) or getattr(event, "egress", None)
+        if egress_info:
+            try:
+                await save_egress_info(settings=settings, info=egress_info)
+            except Exception:
+                logger.exception("failed to save egress info from livekit webhook")
 
     return {"status": "ok"}
 
