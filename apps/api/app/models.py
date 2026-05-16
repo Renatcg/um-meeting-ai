@@ -27,6 +27,8 @@ EmailRecipientScope = Literal["all_participants", "clients", "host", "custom"]
 CalendarAttendeeScope = Literal["all_participants", "clients", "host", "custom"]
 ConversationChannel = Literal["web", "whatsapp", "voice", "meeting"]
 ConversationMessageRole = Literal["user", "assistant", "system"]
+MeetingProcessingJobType = Literal["memory"]
+MeetingProcessingJobStatus = Literal["pending", "running", "completed", "failed"]
 AgentVoice = Literal[
     "alloy",
     "ash",
@@ -260,6 +262,22 @@ class MeetingMemorySearchResult(BaseModel):
 class MeetingMemorySearchResponse(BaseModel):
     query: str
     results: list[MeetingMemorySearchResult]
+
+
+class MeetingProcessingJob(BaseModel):
+    id: int
+    meeting_id: str
+    job_type: MeetingProcessingJobType
+    status: MeetingProcessingJobStatus
+    attempts: int = 0
+    max_attempts: int = 3
+    locked_at: datetime | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    error: str | None = None
+    result: dict = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime
 
 
 class ConversationSession(BaseModel):

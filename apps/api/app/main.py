@@ -61,6 +61,7 @@ from app.database import (
     list_recent_meetings,
     list_pending_meeting_emails,
     list_meeting_participants,
+    list_meeting_processing_jobs,
     list_trial_requests,
     list_sales_recommendations,
     list_transcript_segments,
@@ -95,9 +96,9 @@ from app.models import (
     MeetingInterventionCheckRequest,
     MeetingInterventionCheckResponse,
     MeetingMemoryItem,
-    MeetingMemoryProcessResponse,
     MeetingMemorySearchRequest,
     MeetingMemorySearchResponse,
+    MeetingProcessingJob,
     MeetingRecentSummary,
     MeetingRecording,
     MeetingWebSearchRequest,
@@ -120,9 +121,13 @@ from app.knowledge_service import (
     search_knowledge,
 )
 from app.memory_service import (
-    process_meeting_memory,
     require_memory_or_404,
     search_meeting_memory,
+)
+from app.processing_service import (
+    enqueue_meeting_memory_processing,
+    run_due_meeting_processing_jobs,
+    run_meeting_processing_job,
 )
 from app.recording_service import (
     save_egress_info,
@@ -557,8 +562,12 @@ async def finalize_meeting(meeting_id: str) -> Meeting:
 
     meeting = await mark_meeting_ended(settings=settings, meeting_id=meeting_id)
     await send_deferred_meeting_emails(meeting_id)
+    job = await enqueue_meeting_memory_processing(
+        settings=settings,
+        meeting_id=meeting_id,
+    )
     task = asyncio.create_task(
-        process_meeting_memory(settings=settings, meeting_id=meeting_id)
+        run_meeting_processing_job(settings=settings, job_id=job.id)
     )
     task.add_done_callback(log_background_task_failure)
     return meeting
@@ -1515,19 +1524,71 @@ def can_read_memory_item(item: MeetingMemoryItem, claims: ParticipantClaims) -> 
 
 @app.post(
     "/meetings/{meeting_id}/memory/process",
-    response_model=MeetingMemoryProcessResponse,
+    response_model=MeetingProcessingJob,
     dependencies=[Depends(verify_agent_api_key)],
 )
 async def process_meeting_memory_endpoint(
     meeting_id: str,
     force: bool = False,
-) -> MeetingMemoryProcessResponse:
+) -> MeetingProcessingJob:
     await ensure_meeting(settings=settings, meeting_id=meeting_id)
-    return await process_meeting_memory(
+    job = await enqueue_meeting_memory_processing(
         settings=settings,
         meeting_id=meeting_id,
         force=force,
     )
+    processed = await run_meeting_processing_job(
+        settings=settings,
+        job_id=job.id,
+        force=force,
+    )
+    return processed or job
+
+
+@app.post(
+    "/meetings/{meeting_id}/processing/retry",
+    response_model=MeetingProcessingJob,
+    dependencies=[Depends(verify_agent_api_key)],
+)
+async def retry_meeting_processing(
+    meeting_id: str,
+) -> MeetingProcessingJob:
+    await ensure_meeting(settings=settings, meeting_id=meeting_id)
+    job = await enqueue_meeting_memory_processing(
+        settings=settings,
+        meeting_id=meeting_id,
+        force=True,
+    )
+    processed = await run_meeting_processing_job(
+        settings=settings,
+        job_id=job.id,
+        force=True,
+    )
+    return processed or job
+
+
+@app.get(
+    "/meetings/{meeting_id}/processing",
+    response_model=list[MeetingProcessingJob],
+    dependencies=[Depends(verify_agent_api_key)],
+)
+async def get_meeting_processing(
+    meeting_id: str,
+) -> list[MeetingProcessingJob]:
+    await ensure_meeting(settings=settings, meeting_id=meeting_id)
+    return list(
+        await list_meeting_processing_jobs(settings=settings, meeting_id=meeting_id)
+    )
+
+
+@app.post(
+    "/processing/run-pending",
+    response_model=list[MeetingProcessingJob],
+    dependencies=[Depends(verify_agent_api_key)],
+)
+async def run_pending_processing_jobs(limit: int = 10) -> list[MeetingProcessingJob]:
+    safe_limit = min(max(limit, 1), 25)
+    return await run_due_meeting_processing_jobs(settings=settings, limit=safe_limit)
 
 
 @app.get(

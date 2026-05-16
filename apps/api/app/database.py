@@ -15,6 +15,7 @@ from app.models import (
     MeetingMemoryItem,
     MeetingMemorySearchResult,
     MeetingParticipant,
+    MeetingProcessingJob,
     MeetingRecording,
     MeetingRecentSummary,
     SalesRecommendation,
@@ -362,6 +363,37 @@ CREATE INDEX IF NOT EXISTS idx_conversation_messages_session_created
 ON conversation_messages (session_id, created_at, id);
 """
 
+CREATE_MEETING_PROCESSING_JOBS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS meeting_processing_jobs (
+    id BIGSERIAL PRIMARY KEY,
+    meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+    job_type TEXT NOT NULL CHECK (job_type IN ('memory')),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (
+        status IN ('pending', 'running', 'completed', 'failed')
+    ),
+    attempts INTEGER NOT NULL DEFAULT 0,
+    max_attempts INTEGER NOT NULL DEFAULT 3,
+    locked_at TIMESTAMPTZ,
+    started_at TIMESTAMPTZ,
+    finished_at TIMESTAMPTZ,
+    error TEXT,
+    result JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (meeting_id, job_type)
+);
+"""
+
+CREATE_MEETING_PROCESSING_JOBS_STATUS_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_meeting_processing_jobs_status
+ON meeting_processing_jobs (status, updated_at, id);
+"""
+
+CREATE_MEETING_PROCESSING_JOBS_MEETING_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_meeting_processing_jobs_meeting
+ON meeting_processing_jobs (meeting_id, id);
+"""
+
 
 async def init_database(settings: Settings) -> None:
     async with await psycopg.AsyncConnection.connect(settings.database_url) as conn:
@@ -385,6 +417,9 @@ async def init_database(settings: Settings) -> None:
         await conn.execute(CREATE_CONVERSATION_SESSIONS_INDEX_SQL)
         await conn.execute(CREATE_CONVERSATION_MESSAGES_TABLE_SQL)
         await conn.execute(CREATE_CONVERSATION_MESSAGES_INDEX_SQL)
+        await conn.execute(CREATE_MEETING_PROCESSING_JOBS_TABLE_SQL)
+        await conn.execute(CREATE_MEETING_PROCESSING_JOBS_STATUS_INDEX_SQL)
+        await conn.execute(CREATE_MEETING_PROCESSING_JOBS_MEETING_INDEX_SQL)
         await conn.execute(CREATE_TRIAL_REQUESTS_TABLE_SQL)
         await conn.execute(ALTER_TRIAL_REQUESTS_SELECTED_PLAN_SQL)
         await conn.execute(ALTER_TRIAL_REQUESTS_VOLUME_SQL)
@@ -1289,6 +1324,343 @@ async def mark_meeting_ended(*, settings: Settings, meeting_id: str) -> Meeting:
         return await ensure_meeting(settings=settings, meeting_id=meeting_id)
 
     return Meeting.model_validate(row)
+
+
+async def upsert_meeting_processing_job(
+    *,
+    settings: Settings,
+    meeting_id: str,
+    job_type: str = "memory",
+    max_attempts: int = 3,
+    force: bool = False,
+) -> MeetingProcessingJob:
+    status_filter = "" if force else "WHERE meeting_processing_jobs.status != 'completed'"
+    query = f"""
+    INSERT INTO meeting_processing_jobs (meeting_id, job_type, max_attempts)
+    VALUES (%s, %s, %s)
+    ON CONFLICT (meeting_id, job_type)
+    DO UPDATE SET
+        status = 'pending',
+        attempts = CASE
+            WHEN %s THEN 0
+            ELSE meeting_processing_jobs.attempts
+        END,
+        max_attempts = EXCLUDED.max_attempts,
+        locked_at = NULL,
+        started_at = CASE
+            WHEN %s THEN NULL
+            ELSE meeting_processing_jobs.started_at
+        END,
+        finished_at = NULL,
+        error = NULL,
+        result = CASE
+            WHEN %s THEN '{{}}'::jsonb
+            ELSE meeting_processing_jobs.result
+        END,
+        updated_at = now()
+    {status_filter}
+    RETURNING
+        id,
+        meeting_id,
+        job_type,
+        status,
+        attempts,
+        max_attempts,
+        locked_at,
+        started_at,
+        finished_at,
+        error,
+        result,
+        created_at,
+        updated_at;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                query,
+                (meeting_id, job_type, max_attempts, force, force, force),
+            )
+            row = await cur.fetchone()
+
+    if row is not None:
+        return MeetingProcessingJob.model_validate(row)
+
+    existing = await get_meeting_processing_job(
+        settings=settings,
+        meeting_id=meeting_id,
+        job_type=job_type,
+    )
+    if existing is None:
+        raise RuntimeError("Processing job upsert did not return a row.")
+    return existing
+
+
+async def get_meeting_processing_job(
+    *,
+    settings: Settings,
+    meeting_id: str,
+    job_type: str = "memory",
+) -> MeetingProcessingJob | None:
+    query = """
+    SELECT
+        id,
+        meeting_id,
+        job_type,
+        status,
+        attempts,
+        max_attempts,
+        locked_at,
+        started_at,
+        finished_at,
+        error,
+        result,
+        created_at,
+        updated_at
+    FROM meeting_processing_jobs
+    WHERE meeting_id = %s AND job_type = %s
+    LIMIT 1;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (meeting_id, job_type))
+            row = await cur.fetchone()
+
+    return MeetingProcessingJob.model_validate(row) if row else None
+
+
+async def list_meeting_processing_jobs(
+    *,
+    settings: Settings,
+    meeting_id: str,
+) -> Sequence[MeetingProcessingJob]:
+    query = """
+    SELECT
+        id,
+        meeting_id,
+        job_type,
+        status,
+        attempts,
+        max_attempts,
+        locked_at,
+        started_at,
+        finished_at,
+        error,
+        result,
+        created_at,
+        updated_at
+    FROM meeting_processing_jobs
+    WHERE meeting_id = %s
+    ORDER BY created_at DESC, id DESC;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (meeting_id,))
+            rows = await cur.fetchall()
+
+    return [MeetingProcessingJob.model_validate(row) for row in rows]
+
+
+async def claim_meeting_processing_job(
+    *,
+    settings: Settings,
+    job_id: int,
+    stale_after_minutes: int = 15,
+) -> MeetingProcessingJob | None:
+    query = """
+    UPDATE meeting_processing_jobs
+    SET
+        status = 'running',
+        attempts = attempts + 1,
+        locked_at = now(),
+        started_at = COALESCE(started_at, now()),
+        finished_at = NULL,
+        error = NULL,
+        updated_at = now()
+    WHERE id = %s
+      AND attempts < max_attempts
+      AND (
+        status = 'pending'
+        OR (
+            status = 'failed'
+            AND attempts < max_attempts
+        )
+        OR (
+            status = 'running'
+            AND locked_at < now() - (%s || ' minutes')::interval
+        )
+      )
+    RETURNING
+        id,
+        meeting_id,
+        job_type,
+        status,
+        attempts,
+        max_attempts,
+        locked_at,
+        started_at,
+        finished_at,
+        error,
+        result,
+        created_at,
+        updated_at;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (job_id, stale_after_minutes))
+            row = await cur.fetchone()
+
+    return MeetingProcessingJob.model_validate(row) if row else None
+
+
+async def list_due_meeting_processing_jobs(
+    *,
+    settings: Settings,
+    limit: int = 10,
+    stale_after_minutes: int = 15,
+) -> Sequence[MeetingProcessingJob]:
+    query = """
+    SELECT
+        id,
+        meeting_id,
+        job_type,
+        status,
+        attempts,
+        max_attempts,
+        locked_at,
+        started_at,
+        finished_at,
+        error,
+        result,
+        created_at,
+        updated_at
+    FROM meeting_processing_jobs
+    WHERE attempts < max_attempts
+      AND (
+        status = 'pending'
+        OR status = 'failed'
+        OR (
+            status = 'running'
+            AND locked_at < now() - (%s || ' minutes')::interval
+        )
+      )
+    ORDER BY created_at ASC, id ASC
+    LIMIT %s;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (stale_after_minutes, limit))
+            rows = await cur.fetchall()
+
+    return [MeetingProcessingJob.model_validate(row) for row in rows]
+
+
+async def mark_meeting_processing_job_completed(
+    *,
+    settings: Settings,
+    job_id: int,
+    result: dict,
+) -> MeetingProcessingJob:
+    query = """
+    UPDATE meeting_processing_jobs
+    SET
+        status = 'completed',
+        locked_at = NULL,
+        finished_at = now(),
+        error = NULL,
+        result = %s::jsonb,
+        updated_at = now()
+    WHERE id = %s
+    RETURNING
+        id,
+        meeting_id,
+        job_type,
+        status,
+        attempts,
+        max_attempts,
+        locked_at,
+        started_at,
+        finished_at,
+        error,
+        result,
+        created_at,
+        updated_at;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (json.dumps(result), job_id))
+            row = await cur.fetchone()
+
+    if row is None:
+        raise RuntimeError("Completed processing job was not found.")
+    return MeetingProcessingJob.model_validate(row)
+
+
+async def mark_meeting_processing_job_failed(
+    *,
+    settings: Settings,
+    job_id: int,
+    error: str,
+) -> MeetingProcessingJob:
+    query = """
+    UPDATE meeting_processing_jobs
+    SET
+        status = 'failed',
+        locked_at = NULL,
+        finished_at = now(),
+        error = %s,
+        updated_at = now()
+    WHERE id = %s
+    RETURNING
+        id,
+        meeting_id,
+        job_type,
+        status,
+        attempts,
+        max_attempts,
+        locked_at,
+        started_at,
+        finished_at,
+        error,
+        result,
+        created_at,
+        updated_at;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (error[:2000], job_id))
+            row = await cur.fetchone()
+
+    if row is None:
+        raise RuntimeError("Failed processing job was not found.")
+    return MeetingProcessingJob.model_validate(row)
 
 
 async def register_meeting_participant(
