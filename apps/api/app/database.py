@@ -23,6 +23,7 @@ from app.models import (
     TrialRequest,
     TrialRequestCreate,
     TrialRequestUpdate,
+    UserPublic,
 )
 from app.sales_coach_service import RecommendationDraft
 
@@ -202,6 +203,22 @@ CREATE TABLE IF NOT EXISTS agent_profile (
 );
 """
 
+CREATE_APP_USERS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS app_users (
+    id BIGSERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
+
+CREATE_APP_USERS_EMAIL_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_app_users_email
+ON app_users (lower(email));
+"""
+
 CREATE_TRIAL_REQUESTS_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS trial_requests (
     id BIGSERIAL PRIMARY KEY,
@@ -355,6 +372,8 @@ async def init_database(settings: Settings) -> None:
         await conn.execute(CREATE_MEETING_PARTICIPANTS_INDEX_SQL)
         await conn.execute(CREATE_MEETING_PARTICIPANTS_IDENTITY_INDEX_SQL)
         await conn.execute(CREATE_AGENT_PROFILE_TABLE_SQL)
+        await conn.execute(CREATE_APP_USERS_TABLE_SQL)
+        await conn.execute(CREATE_APP_USERS_EMAIL_INDEX_SQL)
         await conn.execute(CREATE_MEETING_AGENT_ACTIONS_TABLE_SQL)
         await conn.execute(CREATE_MEETING_AGENT_ACTIONS_INDEX_SQL)
         await conn.execute(CREATE_MEETING_PENDING_EMAILS_TABLE_SQL)
@@ -550,6 +569,115 @@ async def delete_trial_request(*, settings: Settings, lead_id: int) -> None:
 
     if row is None:
         raise ValueError("Trial request not found.")
+
+
+async def count_app_users(*, settings: Settings) -> int:
+    query = "SELECT COUNT(*)::int AS count FROM app_users;"
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query)
+            row = await cur.fetchone()
+    return int(row["count"]) if row else 0
+
+
+async def insert_app_user(
+    *,
+    settings: Settings,
+    name: str,
+    email: str,
+    password_hash: str,
+    is_admin: bool,
+) -> UserPublic:
+    query = """
+    INSERT INTO app_users (name, email, password_hash, is_admin)
+    VALUES (%s, %s, %s, %s)
+    RETURNING id, name, email, is_admin, created_at;
+    """
+
+    try:
+        async with await psycopg.AsyncConnection.connect(
+            settings.database_url,
+            row_factory=dict_row,
+        ) as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(
+                    query,
+                    (name, email.lower(), password_hash, is_admin),
+                )
+                row = await cur.fetchone()
+    except psycopg.errors.UniqueViolation as exc:
+        raise ValueError("User already exists.") from exc
+
+    if row is None:
+        raise RuntimeError("User insert did not return a row.")
+    return UserPublic.model_validate(row)
+
+
+async def get_app_user_by_email(
+    *,
+    settings: Settings,
+    email: str,
+) -> dict | None:
+    query = """
+    SELECT id, name, email, password_hash, is_admin, created_at
+    FROM app_users
+    WHERE lower(email) = lower(%s)
+    LIMIT 1;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (email,))
+            row = await cur.fetchone()
+
+    return dict(row) if row else None
+
+
+async def get_app_user_by_id(
+    *,
+    settings: Settings,
+    user_id: int,
+) -> UserPublic | None:
+    query = """
+    SELECT id, name, email, is_admin, created_at
+    FROM app_users
+    WHERE id = %s
+    LIMIT 1;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (user_id,))
+            row = await cur.fetchone()
+
+    return UserPublic.model_validate(row) if row else None
+
+
+async def list_app_users(*, settings: Settings) -> Sequence[UserPublic]:
+    query = """
+    SELECT id, name, email, is_admin, created_at
+    FROM app_users
+    ORDER BY created_at DESC, id DESC;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query)
+            rows = await cur.fetchall()
+
+    return [UserPublic.model_validate(row) for row in rows]
 
 
 async def insert_meeting(*, settings: Settings, meeting: Meeting) -> Meeting:

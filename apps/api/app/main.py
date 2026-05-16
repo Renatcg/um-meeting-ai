@@ -12,10 +12,16 @@ from livekit import api
 from openai import AsyncOpenAI, OpenAIError
 
 from app.auth import (
+    AppUserClaims,
+    create_app_access_token,
     create_participant_access_token,
+    get_current_user_claims,
     get_participant_claims,
+    hash_password,
+    require_admin_user,
     require_sales_panel_access,
     ParticipantClaims,
+    verify_password,
 )
 from app.config import get_settings
 from app.calendar_service import (
@@ -29,10 +35,13 @@ from app.calendar_service import (
 from app.copilot import dispatch_copilot
 from app.conversation_service import respond_with_agent_memory
 from app.database import (
+    count_app_users,
     get_conversation_session,
     delete_trial_request,
     ensure_meeting,
     get_agent_profile,
+    get_app_user_by_email,
+    get_app_user_by_id,
     get_google_calendar_connection,
     get_meeting_participant_by_identity,
     has_host_or_commercial_joined,
@@ -42,7 +51,9 @@ from app.database import (
     insert_sales_recommendations,
     insert_transcript_segment,
     insert_meeting,
+    insert_app_user,
     insert_trial_request,
+    list_app_users,
     list_conversation_messages,
     list_conversation_sessions,
     list_meeting_recordings,
@@ -65,6 +76,7 @@ from app.models import (
     AgentProfile,
     AgentRespondRequest,
     AgentRespondResponse,
+    AuthResponse,
     ConversationMessage,
     ConversationSession,
     CreateMeetingRequest,
@@ -97,6 +109,9 @@ from app.models import (
     TrialRequest,
     TrialRequestCreate,
     TrialRequestUpdate,
+    UserCreate,
+    UserLoginRequest,
+    UserPublic,
     VoiceDemoRequest,
 )
 from app.knowledge_service import (
@@ -158,6 +173,85 @@ app.add_middleware(
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/auth/register", response_model=AuthResponse, status_code=201)
+async def register_user(
+    payload: UserCreate,
+    authorization: str | None = Header(default=None),
+) -> AuthResponse:
+    user_count = await count_app_users(settings=settings)
+    requested_admin = payload.is_admin
+    is_admin = user_count == 0
+
+    if user_count > 0 and requested_admin:
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only administrators can create administrator users.",
+            )
+        claims = get_current_user_claims(authorization=authorization)
+        if not claims.is_admin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only administrators can create administrator users.",
+            )
+        is_admin = True
+
+    try:
+        user = await insert_app_user(
+            settings=settings,
+            name=payload.name,
+            email=str(payload.email),
+            password_hash=hash_password(payload.password),
+            is_admin=is_admin,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User already exists.",
+        ) from exc
+
+    return AuthResponse(
+        access_token=create_app_access_token(settings=settings, user=user),
+        user=user,
+    )
+
+
+@app.post("/auth/login", response_model=AuthResponse)
+async def login_user(payload: UserLoginRequest) -> AuthResponse:
+    row = await get_app_user_by_email(settings=settings, email=str(payload.email))
+    if not row or not verify_password(payload.password, row["password_hash"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password.",
+        )
+
+    user = UserPublic.model_validate(row)
+    return AuthResponse(
+        access_token=create_app_access_token(settings=settings, user=user),
+        user=user,
+    )
+
+
+@app.get("/auth/me", response_model=UserPublic)
+async def read_current_user(
+    claims: AppUserClaims = Depends(get_current_user_claims),
+) -> UserPublic:
+    user = await get_app_user_by_id(settings=settings, user_id=claims.user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found.",
+        )
+    return user
+
+
+@app.get("/users", response_model=list[UserPublic])
+async def read_users(
+    _: AppUserClaims = Depends(require_admin_user),
+) -> list[UserPublic]:
+    return list(await list_app_users(settings=settings))
 
 
 @app.post("/trial-requests", response_model=TrialRequest, status_code=201)

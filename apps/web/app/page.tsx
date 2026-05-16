@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-type Section = "meetings" | "memory" | "coevo" | "knowledge" | "leads";
+type Section = "meetings" | "memory" | "coevo" | "knowledge" | "leads" | "users";
 type CoevoConfigTab =
   | "identity"
   | "voice"
@@ -128,10 +128,30 @@ type MemorySearchResult = {
   score: number;
 };
 
-const sessionUser = {
+type AppUser = {
+  id: number;
+  name: string;
+  email: string;
+  is_admin: boolean;
+  created_at: string;
+};
+
+type AuthForm = {
+  name: string;
+  email: string;
+  password: string;
+};
+
+type UserForm = AuthForm & {
+  isAdmin: boolean;
+};
+
+const defaultSessionUser: AppUser = {
+  id: 0,
   name: "Acesso local",
   email: "Login pendente",
-  initials: "CO",
+  is_admin: false,
+  created_at: new Date(0).toISOString(),
 };
 
 const invitedMeetings: MeetingListItem[] = [];
@@ -143,6 +163,19 @@ const emptyLeadForm: LeadForm = {
   companyName: "",
   weeklyMeetingVolume: "ate-5",
   selectedPlan: "Teste Gratis",
+};
+
+const emptyAuthForm: AuthForm = {
+  name: "",
+  email: "",
+  password: "",
+};
+
+const emptyUserForm: UserForm = {
+  name: "",
+  email: "",
+  password: "",
+  isAdmin: false,
 };
 
 const defaultProfile: AgentProfile = {
@@ -364,6 +397,17 @@ function Chip({
   );
 }
 
+function getInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) {
+    return "CO";
+  }
+  return parts
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+}
+
 function Slider({
   label,
   value,
@@ -403,6 +447,16 @@ export default function HomePage() {
   const router = useRouter();
   const [activeSection, setActiveSection] = useState<Section>("meetings");
   const [activeCoevoTab, setActiveCoevoTab] = useState<CoevoConfigTab>("identity");
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [sessionUser, setSessionUser] = useState<AppUser | null>(null);
+  const [authForm, setAuthForm] = useState<AuthForm>(emptyAuthForm);
+  const [authStatus, setAuthStatus] = useState<string | null>(null);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [users, setUsers] = useState<AppUser[]>([]);
+  const [usersStatus, setUsersStatus] = useState<string | null>(null);
+  const [userForm, setUserForm] = useState<UserForm>(emptyUserForm);
+  const [isSavingUser, setIsSavingUser] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [currentDate, setCurrentDate] = useState("");
@@ -437,6 +491,7 @@ export default function HomePage() {
   const companyMediaRef = useRef<HTMLInputElement | null>(null);
   const companyLinksRef = useRef<HTMLTextAreaElement | null>(null);
   const companyNotesRef = useRef<HTMLTextAreaElement | null>(null);
+  const displayUser = sessionUser ?? defaultSessionUser;
 
   useEffect(() => {
     const formattedDate = new Intl.DateTimeFormat("pt-BR", {
@@ -448,6 +503,142 @@ export default function HomePage() {
     }).format(new Date());
     setCurrentDate(formattedDate);
   }, []);
+
+  useEffect(() => {
+    const token = window.localStorage.getItem("coevo-auth-token");
+    if (!token) {
+      return;
+    }
+
+    setAuthToken(token);
+    void loadCurrentUser(token);
+  }, []);
+
+  async function loadCurrentUser(token: string) {
+    try {
+      const response = await fetch(`${apiUrl}/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        window.localStorage.removeItem("coevo-auth-token");
+        setAuthToken(null);
+        setSessionUser(null);
+        return;
+      }
+      setSessionUser((await response.json()) as AppUser);
+    } catch {
+      window.localStorage.removeItem("coevo-auth-token");
+      setAuthToken(null);
+      setSessionUser(null);
+    }
+  }
+
+  async function submitAuth(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsAuthenticating(true);
+    setAuthStatus(null);
+
+    try {
+      const endpoint = authMode === "login" ? "/auth/login" : "/auth/register";
+      const body =
+        authMode === "login"
+          ? { email: authForm.email, password: authForm.password }
+          : {
+              name: authForm.name,
+              email: authForm.email,
+              password: authForm.password,
+            };
+      const response = await fetch(`${apiUrl}${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          authMode === "login"
+            ? "Nao foi possivel entrar. Confira e-mail e senha."
+            : "Nao foi possivel criar o usuario.",
+        );
+      }
+
+      const result = (await response.json()) as {
+        access_token: string;
+        user: AppUser;
+      };
+      window.localStorage.setItem("coevo-auth-token", result.access_token);
+      setAuthToken(result.access_token);
+      setSessionUser(result.user);
+      setAuthForm(emptyAuthForm);
+      setAuthStatus(null);
+    } catch (err) {
+      setAuthStatus(err instanceof Error ? err.message : "Erro inesperado.");
+    } finally {
+      setIsAuthenticating(false);
+    }
+  }
+
+  function logout() {
+    window.localStorage.removeItem("coevo-auth-token");
+    setAuthToken(null);
+    setSessionUser(null);
+    setActiveSection("meetings");
+  }
+
+  async function loadUsers() {
+    if (!authToken || !sessionUser?.is_admin) {
+      return;
+    }
+
+    setUsersStatus(null);
+    try {
+      const response = await fetch(`${apiUrl}/users`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (!response.ok) {
+        throw new Error("Nao foi possivel carregar os usuarios.");
+      }
+      setUsers((await response.json()) as AppUser[]);
+    } catch (err) {
+      setUsersStatus(err instanceof Error ? err.message : "Erro inesperado.");
+    }
+  }
+
+  async function createUser(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!authToken) {
+      return;
+    }
+
+    setIsSavingUser(true);
+    setUsersStatus(null);
+    try {
+      const response = await fetch(`${apiUrl}/auth/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          name: userForm.name,
+          email: userForm.email,
+          password: userForm.password,
+          is_admin: userForm.isAdmin,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Nao foi possivel cadastrar o usuario.");
+      }
+      setUserForm(emptyUserForm);
+      await loadUsers();
+      setUsersStatus("Usuario cadastrado.");
+    } catch (err) {
+      setUsersStatus(err instanceof Error ? err.message : "Erro inesperado.");
+    } finally {
+      setIsSavingUser(false);
+    }
+  }
 
   async function loadGoogleCalendarStatus() {
     try {
@@ -557,8 +748,8 @@ export default function HomePage() {
           session_id: activeConversationId,
           message: question,
           user_id: "local-user",
-          user_name: sessionUser.name,
-          user_email: null,
+          user_name: displayUser.name,
+          user_email: displayUser.email === defaultSessionUser.email ? null : displayUser.email,
           requester_role: "host",
           context_scope: {
             meeting_id: memoryMeetingId.trim() || null,
@@ -759,6 +950,12 @@ export default function HomePage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (sessionUser?.is_admin) {
+      void loadUsers();
+    }
+  }, [sessionUser?.is_admin, authToken]);
+
   function toggleArrayValue(key: "keywords" | "avoid_words" | "behavior_tags", value: string) {
     setProfile((current) => {
       const values = current[key];
@@ -954,6 +1151,144 @@ export default function HomePage() {
         : "font-medium text-[#73736B] hover:bg-[#F8F8F6] hover:text-[#11110F]"
     }`;
 
+  if (!sessionUser) {
+    return (
+      <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-white px-5 py-10 text-[#11110F]">
+        <div
+          className="pointer-events-none fixed inset-0 opacity-60"
+          style={{
+            backgroundImage:
+              "linear-gradient(rgba(17,17,15,.055) 1px, transparent 1px), linear-gradient(90deg, rgba(17,17,15,.055) 1px, transparent 1px)",
+            backgroundSize: "42px 42px",
+          }}
+        />
+        <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_70%_0%,rgba(249,115,22,0.14),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.9),#FFFFFF_72%)]" />
+
+        <section className="relative z-10 grid w-full max-w-5xl overflow-hidden rounded-2xl border border-[#E7E7E2] bg-white shadow-[0_24px_90px_rgba(17,17,15,0.12)] lg:grid-cols-[1fr_440px]">
+          <div className="flex min-h-[520px] flex-col justify-between bg-[#11110F] p-8 text-white">
+            <div>
+              <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-white font-display text-2xl font-bold text-[#11110F]">
+                C
+              </div>
+              <p className="mt-8 font-mono text-xs uppercase tracking-[0.18em] text-[#FDBA74]">
+                Coevo Meet
+              </p>
+              <h1 className="mt-4 max-w-xl font-display text-4xl font-semibold leading-tight">
+                Acesse sua central de videochamadas assistidas por IA.
+              </h1>
+              <p className="mt-5 max-w-lg text-sm leading-7 text-white/68">
+                Entre com login e senha para criar reunioes, consultar memoria,
+                configurar o Coevo e gerenciar usuarios.
+              </p>
+            </div>
+            <p className="text-xs leading-5 text-white/45">
+              O primeiro usuario cadastrado neste ambiente sera definido como
+              administrador automaticamente.
+            </p>
+          </div>
+
+          <form className="p-6 sm:p-8" onSubmit={submitAuth}>
+            <div className="mb-6 flex rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-1">
+              <button
+                className={`flex-1 rounded-md px-4 py-2 text-sm font-bold transition ${
+                  authMode === "login"
+                    ? "bg-white text-[#11110F] shadow-sm"
+                    : "text-[#73736B]"
+                }`}
+                onClick={() => setAuthMode("login")}
+                type="button"
+              >
+                Entrar
+              </button>
+              <button
+                className={`flex-1 rounded-md px-4 py-2 text-sm font-bold transition ${
+                  authMode === "register"
+                    ? "bg-white text-[#11110F] shadow-sm"
+                    : "text-[#73736B]"
+                }`}
+                onClick={() => setAuthMode("register")}
+                type="button"
+              >
+                Criar conta
+              </button>
+            </div>
+
+            <h2 className="font-display text-2xl font-semibold">
+              {authMode === "login" ? "Acessar conta" : "Cadastrar usuario"}
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-[#73736B]">
+              {authMode === "login"
+                ? "Use seu e-mail e senha para acessar o dashboard."
+                : "Se for o primeiro cadastro, este usuario sera o administrador."}
+            </p>
+
+            <div className="mt-6 space-y-4">
+              {authMode === "register" ? (
+                <label className="block">
+                  <span className="mb-2 block text-sm font-semibold">Nome</span>
+                  <input
+                    className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm outline-none focus:border-[#F97316]"
+                    value={authForm.name}
+                    onChange={(event) =>
+                      setAuthForm((current) => ({ ...current, name: event.target.value }))
+                    }
+                    required
+                  />
+                </label>
+              ) : null}
+              <label className="block">
+                <span className="mb-2 block text-sm font-semibold">E-mail</span>
+                <input
+                  className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm outline-none focus:border-[#F97316]"
+                  type="email"
+                  value={authForm.email}
+                  onChange={(event) =>
+                    setAuthForm((current) => ({ ...current, email: event.target.value }))
+                  }
+                  required
+                />
+              </label>
+              <label className="block">
+                <span className="mb-2 block text-sm font-semibold">Senha</span>
+                <input
+                  className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm outline-none focus:border-[#F97316]"
+                  type="password"
+                  minLength={authMode === "register" ? 8 : 1}
+                  value={authForm.password}
+                  onChange={(event) =>
+                    setAuthForm((current) => ({
+                      ...current,
+                      password: event.target.value,
+                    }))
+                  }
+                  required
+                />
+              </label>
+            </div>
+
+            {authStatus ? (
+              <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {authStatus}
+              </p>
+            ) : null}
+
+            <button
+              className="mt-6 w-full rounded-lg bg-[#11110F] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#F97316] disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isAuthenticating}
+              type="submit"
+            >
+              {isAuthenticating
+                ? "Aguarde..."
+                : authMode === "login"
+                  ? "Entrar"
+                  : "Criar usuario"}
+            </button>
+          </form>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen overflow-hidden bg-white text-[#11110F]">
       <div
@@ -979,12 +1314,19 @@ export default function HomePage() {
         <div className="ml-auto flex items-center gap-3 sm:gap-5">
           <p className="hidden font-mono text-xs text-[#73736B] sm:block">{currentDate}</p>
           <div className="hidden text-right sm:block">
-            <p className="text-sm font-semibold text-[#11110F]">{sessionUser.name}</p>
-            <p className="text-xs text-[#73736B]">{sessionUser.email}</p>
+            <p className="text-sm font-semibold text-[#11110F]">{displayUser.name}</p>
+            <p className="text-xs text-[#73736B]">{displayUser.email}</p>
           </div>
           <div className="flex h-11 w-11 items-center justify-center rounded-full border border-[#FDBA74] bg-[#FFF3EA] text-sm font-bold text-[#F97316] shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
-            {sessionUser.initials}
+            {getInitials(displayUser.name)}
           </div>
+          <button
+            className="hidden rounded-lg border border-[#E7E7E2] bg-white px-3 py-2 text-xs font-bold text-[#73736B] transition hover:border-[#F97316] hover:bg-[#FFF3EA] hover:text-[#11110F] sm:block"
+            onClick={logout}
+            type="button"
+          >
+            Sair
+          </button>
         </div>
       </header>
 
@@ -1046,6 +1388,21 @@ export default function HomePage() {
             </span>
             Leads de teste
           </button>
+          {sessionUser.is_admin ? (
+            <button
+              className={navItemClass("users")}
+              type="button"
+              onClick={() => {
+                setActiveSection("users");
+                void loadUsers();
+              }}
+            >
+              <span className="flex h-8 w-8 items-center justify-center rounded-md border border-[#E7E7E2] font-mono text-xs">
+                U
+              </span>
+              Usuarios
+            </button>
+          ) : null}
         </nav>
 
         <div className="absolute bottom-5 left-5 right-5 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">
@@ -1418,6 +1775,167 @@ export default function HomePage() {
                     </div>
                   </section>
                 </aside>
+              </div>
+            </div>
+          ) : null}
+
+          {activeSection === "users" && sessionUser.is_admin ? (
+            <div className="space-y-6">
+              <div>
+                <p className="font-mono text-xs uppercase text-[#F97316]">
+                  Administracao
+                </p>
+                <h1 className="mt-2 font-display text-4xl font-semibold text-[#11110F]">
+                  Usuarios do Coevo Meet
+                </h1>
+                <p className="mt-3 max-w-3xl text-sm leading-6 text-[#73736B]">
+                  Cadastre usuarios com login e senha. Administradores podem
+                  criar outros administradores.
+                </p>
+              </div>
+
+              <div className="grid gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
+                <form
+                  className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]"
+                  onSubmit={createUser}
+                >
+                  <p className="font-mono text-xs uppercase text-[#F97316]">
+                    Novo usuario
+                  </p>
+                  <label className="mt-4 block">
+                    <span className="mb-2 block text-sm font-semibold">Nome</span>
+                    <input
+                      className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm outline-none focus:border-[#F97316]"
+                      value={userForm.name}
+                      onChange={(event) =>
+                        setUserForm((current) => ({
+                          ...current,
+                          name: event.target.value,
+                        }))
+                      }
+                      required
+                    />
+                  </label>
+                  <label className="mt-4 block">
+                    <span className="mb-2 block text-sm font-semibold">E-mail</span>
+                    <input
+                      className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm outline-none focus:border-[#F97316]"
+                      type="email"
+                      value={userForm.email}
+                      onChange={(event) =>
+                        setUserForm((current) => ({
+                          ...current,
+                          email: event.target.value,
+                        }))
+                      }
+                      required
+                    />
+                  </label>
+                  <label className="mt-4 block">
+                    <span className="mb-2 block text-sm font-semibold">Senha</span>
+                    <input
+                      className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm outline-none focus:border-[#F97316]"
+                      type="password"
+                      minLength={8}
+                      value={userForm.password}
+                      onChange={(event) =>
+                        setUserForm((current) => ({
+                          ...current,
+                          password: event.target.value,
+                        }))
+                      }
+                      required
+                    />
+                  </label>
+                  <label className="mt-4 flex items-start gap-3 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">
+                    <input
+                      className="mt-1 accent-[#F97316]"
+                      type="checkbox"
+                      checked={userForm.isAdmin}
+                      onChange={(event) =>
+                        setUserForm((current) => ({
+                          ...current,
+                          isAdmin: event.target.checked,
+                        }))
+                      }
+                    />
+                    <span>
+                      <span className="block text-sm font-semibold">
+                        Definir como administrador
+                      </span>
+                      <span className="mt-1 block text-xs leading-5 text-[#73736B]">
+                        Administradores podem cadastrar usuarios e acessar esta area.
+                      </span>
+                    </span>
+                  </label>
+                  <button
+                    className="mt-5 w-full rounded-lg bg-[#11110F] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#F97316] disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isSavingUser}
+                    type="submit"
+                  >
+                    {isSavingUser ? "Cadastrando..." : "Cadastrar usuario"}
+                  </button>
+                  {usersStatus ? (
+                    <p className="mt-4 rounded-lg border border-[#FDBA74] bg-[#FFF3EA] px-3 py-2 text-sm text-[#8A4B13]">
+                      {usersStatus}
+                    </p>
+                  ) : null}
+                </form>
+
+                <section className="overflow-hidden rounded-xl border border-[#E7E7E2] bg-white shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                  <div className="flex items-center justify-between border-b border-[#E7E7E2] px-5 py-4">
+                    <div>
+                      <p className="font-mono text-xs uppercase text-[#F97316]">
+                        Cadastrados
+                      </p>
+                      <h2 className="mt-1 text-xl font-bold">Usuarios</h2>
+                    </div>
+                    <button
+                      className="rounded-md border border-[#E7E7E2] bg-white px-3 py-2 text-xs font-bold text-[#73736B] transition hover:border-[#F97316] hover:bg-[#FFF3EA] hover:text-[#11110F]"
+                      onClick={loadUsers}
+                      type="button"
+                    >
+                      Atualizar
+                    </button>
+                  </div>
+                  {users.length === 0 ? (
+                    <div className="px-5 py-8 text-center text-sm text-[#73736B]">
+                      Nenhum usuario encontrado.
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-[#E7E7E2]">
+                      {users.map((user) => (
+                        <article
+                          className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
+                          key={user.id}
+                        >
+                          <div>
+                            <p className="font-semibold text-[#11110F]">
+                              {user.name}
+                            </p>
+                            <p className="mt-1 text-sm text-[#73736B]">
+                              {user.email}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {user.is_admin ? (
+                              <span className="rounded-full border border-[#FDBA74] bg-[#FFF3EA] px-3 py-1 text-xs font-bold uppercase text-[#F97316]">
+                                Admin
+                              </span>
+                            ) : (
+                              <span className="rounded-full border border-[#E7E7E2] bg-[#FCFCFB] px-3 py-1 text-xs font-bold uppercase text-[#73736B]">
+                                Usuario
+                              </span>
+                            )}
+                            <span className="rounded-full border border-[#E7E7E2] bg-white px-3 py-1 text-xs text-[#73736B]">
+                              {formatMeetingDate(user.created_at)}
+                            </span>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                </section>
               </div>
             </div>
           ) : null}

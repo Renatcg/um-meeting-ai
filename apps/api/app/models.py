@@ -41,6 +41,32 @@ AgentVoice = Literal[
 ]
 
 
+class UserPublic(BaseModel):
+    id: int
+    name: str
+    email: EmailStr
+    is_admin: bool = False
+    created_at: datetime
+
+
+class UserCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=120)
+    is_admin: bool = False
+
+
+class UserLoginRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=120)
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserPublic
+
+
 class CreateMeetingRequest(BaseModel):
     title: str = Field(default="Reuniao UM", min_length=1, max_length=120)
 

@@ -24,6 +24,10 @@ Backend do UM Meeting AI.
 Endpoints implementados:
 
 - `GET /health`
+- `POST /auth/register`
+- `POST /auth/login`
+- `GET /auth/me`
+- `GET /users`
 - `POST /meetings`
 - `POST /meetings/{meeting_id}/token`
 - `POST /meetings/{meeting_id}/transcript`
@@ -42,6 +46,21 @@ Endpoints implementados:
 - `POST /knowledge/search`
 
 As reunioes ainda ficam em memoria nesta sprint. Os trechos de transcricao e recomendacoes comerciais sao persistidos em PostgreSQL.
+
+## Autenticacao
+
+A API possui autenticacao propria por e-mail e senha para acesso ao dashboard.
+O primeiro usuario cadastrado vira administrador automaticamente.
+
+Endpoints:
+
+- `POST /auth/register`
+- `POST /auth/login`
+- `GET /auth/me`
+- `GET /users`
+
+Administradores podem cadastrar outros usuarios e definir se eles tambem serao
+administradores. As senhas sao armazenadas com hash PBKDF2.
 
 ## Banco
 
