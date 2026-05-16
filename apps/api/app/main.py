@@ -738,7 +738,7 @@ async def evo_whatsapp_webhook(
             is_group=inbound.is_group,
             group_id=inbound.group_id,
             message_id=inbound.message_id,
-            detail="phone not in WHATSAPP_ALLOWED_PHONES",
+            detail=f"phone not in WHATSAPP_ALLOWED_PHONES | {payload_summary}",
         )
         return {"status": "blocked"}
 
@@ -797,6 +797,7 @@ async def evo_whatsapp_webhook(
             is_group=inbound.is_group,
             group_id=inbound.group_id,
             message_id=inbound.message_id,
+            detail=str(payload_summary),
         )
         return {"status": "message-too-short"}
 
@@ -830,6 +831,7 @@ async def evo_whatsapp_webhook(
                 is_group=True,
                 group_id=inbound.group_id,
                 message_id=inbound.message_id,
+                detail=str(payload_summary),
             )
             return {"status": "group-message-saved"}
 
@@ -853,6 +855,7 @@ async def evo_whatsapp_webhook(
             is_group=True,
             group_id=inbound.group_id,
             message_id=inbound.message_id,
+            detail=str(payload_summary),
         )
         return {"status": "group-response-sent"}
 
