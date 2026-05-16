@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     whatsapp_send_audio_replies: bool = True
     whatsapp_audio_voice: str = "marin"
     whatsapp_tts_model: str = "gpt-4o-mini-tts"
+    whatsapp_group_enabled: bool = True
+    whatsapp_group_summary_limit: int = 80
 
     model_config = SettingsConfigDict(
         env_file=("../../.env", ".env"),

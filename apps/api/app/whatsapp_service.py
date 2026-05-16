@@ -21,6 +21,11 @@ class WhatsAppInboundMessage:
     audio_base64: str | None = None
     audio_mimetype: str | None = None
     has_audio: bool = False
+    is_group: bool = False
+    group_id: str | None = None
+    group_name: str | None = None
+    sender_phone: str | None = None
+    message_type: str = "text"
 
 
 def normalize_phone(value: str | None) -> str:
@@ -73,6 +78,20 @@ def _extract_message_text(message: dict) -> str:
     )
 
 
+def _detect_message_type(message: dict) -> str:
+    if isinstance(message.get("audioMessage"), dict):
+        return "audio"
+    if isinstance(message.get("imageMessage"), dict):
+        return "image"
+    if isinstance(message.get("videoMessage"), dict):
+        return "video"
+    if isinstance(message.get("documentMessage"), dict):
+        return "document"
+    if _extract_message_text(message):
+        return "text"
+    return "unknown"
+
+
 def _extract_audio_info(data: dict, message: dict) -> tuple[bool, str | None, str | None]:
     audio = message.get("audioMessage")
     if not isinstance(audio, dict):
@@ -113,13 +132,20 @@ def parse_evo_webhook_payload(payload: dict) -> WhatsAppInboundMessage | None:
         data.get("remoteJid"),
         data.get("sender"),
     )
-    phone = normalize_phone(remote_jid)
+    participant_jid = _first_text(
+        key.get("participant"),
+        data.get("participant"),
+        data.get("sender"),
+    )
+    is_group = remote_jid.endswith("@g.us")
+    phone = normalize_phone(participant_jid if is_group else remote_jid)
     if not phone:
         return None
 
     sender_name = _first_text(data.get("pushName"), data.get("senderName"), phone)
     instance = _first_text(payload.get("instance"), data.get("instance"))
     message_id = _first_text(key.get("id"), data.get("id")) or None
+    group_name = _first_text(data.get("groupName"), data.get("subject")) or None
 
     return WhatsAppInboundMessage(
         instance=instance or None,
@@ -130,6 +156,11 @@ def parse_evo_webhook_payload(payload: dict) -> WhatsAppInboundMessage | None:
         audio_base64=audio_base64,
         audio_mimetype=audio_mimetype,
         has_audio=has_audio,
+        is_group=is_group,
+        group_id=remote_jid if is_group else None,
+        group_name=group_name,
+        sender_phone=phone,
+        message_type=_detect_message_type(message),
     )
 
 

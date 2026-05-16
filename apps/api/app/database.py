@@ -25,6 +25,7 @@ from app.models import (
     TrialRequestCreate,
     TrialRequestUpdate,
     UserPublic,
+    WhatsAppGroupMessage,
 )
 from app.sales_coach_service import RecommendationDraft
 
@@ -394,6 +395,33 @@ CREATE INDEX IF NOT EXISTS idx_meeting_processing_jobs_meeting
 ON meeting_processing_jobs (meeting_id, id);
 """
 
+CREATE_WHATSAPP_GROUP_MESSAGES_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS whatsapp_group_messages (
+    id BIGSERIAL PRIMARY KEY,
+    group_id TEXT NOT NULL,
+    group_name TEXT,
+    sender_phone TEXT NOT NULL,
+    sender_name TEXT NOT NULL,
+    message_type TEXT NOT NULL DEFAULT 'text' CHECK (
+        message_type IN ('text', 'audio', 'image', 'video', 'document', 'unknown')
+    ),
+    content TEXT NOT NULL,
+    message_id TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
+
+CREATE_WHATSAPP_GROUP_MESSAGES_GROUP_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_whatsapp_group_messages_group_created
+ON whatsapp_group_messages (group_id, created_at DESC, id DESC);
+"""
+
+CREATE_WHATSAPP_GROUP_MESSAGES_MESSAGE_ID_INDEX_SQL = """
+CREATE UNIQUE INDEX IF NOT EXISTS idx_whatsapp_group_messages_message_id
+ON whatsapp_group_messages (message_id)
+WHERE message_id IS NOT NULL;
+"""
+
 
 async def init_database(settings: Settings) -> None:
     async with await psycopg.AsyncConnection.connect(settings.database_url) as conn:
@@ -420,6 +448,9 @@ async def init_database(settings: Settings) -> None:
         await conn.execute(CREATE_MEETING_PROCESSING_JOBS_TABLE_SQL)
         await conn.execute(CREATE_MEETING_PROCESSING_JOBS_STATUS_INDEX_SQL)
         await conn.execute(CREATE_MEETING_PROCESSING_JOBS_MEETING_INDEX_SQL)
+        await conn.execute(CREATE_WHATSAPP_GROUP_MESSAGES_TABLE_SQL)
+        await conn.execute(CREATE_WHATSAPP_GROUP_MESSAGES_GROUP_INDEX_SQL)
+        await conn.execute(CREATE_WHATSAPP_GROUP_MESSAGES_MESSAGE_ID_INDEX_SQL)
         await conn.execute(CREATE_TRIAL_REQUESTS_TABLE_SQL)
         await conn.execute(ALTER_TRIAL_REQUESTS_SELECTED_PLAN_SQL)
         await conn.execute(ALTER_TRIAL_REQUESTS_VOLUME_SQL)
@@ -1661,6 +1692,97 @@ async def mark_meeting_processing_job_failed(
     if row is None:
         raise RuntimeError("Failed processing job was not found.")
     return MeetingProcessingJob.model_validate(row)
+
+
+async def insert_whatsapp_group_message(
+    *,
+    settings: Settings,
+    group_id: str,
+    group_name: str | None,
+    sender_phone: str,
+    sender_name: str,
+    message_type: str,
+    content: str,
+    message_id: str | None,
+) -> WhatsAppGroupMessage | None:
+    query = """
+    INSERT INTO whatsapp_group_messages (
+        group_id,
+        group_name,
+        sender_phone,
+        sender_name,
+        message_type,
+        content,
+        message_id
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s)
+    ON CONFLICT (message_id) WHERE message_id IS NOT NULL DO NOTHING
+    RETURNING
+        id,
+        group_id,
+        group_name,
+        sender_phone,
+        sender_name,
+        message_type,
+        content,
+        message_id,
+        created_at;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                query,
+                (
+                    group_id,
+                    group_name,
+                    sender_phone,
+                    sender_name,
+                    message_type,
+                    content,
+                    message_id,
+                ),
+            )
+            row = await cur.fetchone()
+
+    return WhatsAppGroupMessage.model_validate(row) if row else None
+
+
+async def list_recent_whatsapp_group_messages(
+    *,
+    settings: Settings,
+    group_id: str,
+    limit: int = 80,
+) -> Sequence[WhatsAppGroupMessage]:
+    query = """
+    SELECT
+        id,
+        group_id,
+        group_name,
+        sender_phone,
+        sender_name,
+        message_type,
+        content,
+        message_id,
+        created_at
+    FROM whatsapp_group_messages
+    WHERE group_id = %s
+    ORDER BY created_at DESC, id DESC
+    LIMIT %s;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (group_id, limit))
+            rows = await cur.fetchall()
+
+    return [WhatsAppGroupMessage.model_validate(row) for row in reversed(rows)]
 
 
 async def register_meeting_participant(

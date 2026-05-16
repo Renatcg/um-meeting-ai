@@ -53,6 +53,7 @@ from app.database import (
     insert_meeting,
     insert_app_user,
     insert_trial_request,
+    insert_whatsapp_group_message,
     list_app_users,
     list_conversation_messages,
     list_conversation_sessions,
@@ -137,6 +138,10 @@ from app.recording_service import (
 from app.sales_coach_service import analyze_segment
 from app.store import meeting_store
 from app.web_search_service import search_web
+from app.whatsapp_group_service import (
+    answer_whatsapp_group_message,
+    should_respond_to_group_message,
+)
 from app.whatsapp_service import (
     parse_evo_webhook_payload,
     send_evo_audio,
@@ -703,7 +708,8 @@ async def evo_whatsapp_webhook(
     if inbound is None:
         return {"status": "ignored"}
 
-    if not whatsapp_phone_is_allowed(settings=settings, phone=inbound.phone):
+    permission_phone = inbound.sender_phone or inbound.phone
+    if not whatsapp_phone_is_allowed(settings=settings, phone=permission_phone):
         logger.warning("blocked whatsapp message from unauthorized phone")
         return {"status": "blocked"}
 
@@ -755,6 +761,38 @@ async def evo_whatsapp_webhook(
             text="Nao consegui entender bem. Pode me mandar um pouco mais de contexto?",
         )
         return {"status": "message-too-short"}
+
+    if inbound.is_group:
+        if not settings.whatsapp_group_enabled or not inbound.group_id:
+            return {"status": "group-disabled"}
+
+        await insert_whatsapp_group_message(
+            settings=settings,
+            group_id=inbound.group_id,
+            group_name=inbound.group_name,
+            sender_phone=inbound.sender_phone or inbound.phone,
+            sender_name=inbound.sender_name,
+            message_type=inbound.message_type,
+            content=message_text,
+            message_id=inbound.message_id,
+        )
+
+        if not should_respond_to_group_message(message_text):
+            return {"status": "group-message-saved"}
+
+        answer = await answer_whatsapp_group_message(
+            settings=settings,
+            group_id=inbound.group_id,
+            requester_name=inbound.sender_name,
+            text=message_text,
+        )
+        await send_evo_text(
+            settings=settings,
+            instance=instance,
+            phone=inbound.group_id,
+            text=answer,
+        )
+        return {"status": "group-response-sent"}
 
     response = await respond_with_agent_memory(
         settings=settings,

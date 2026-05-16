@@ -29,6 +29,7 @@ ConversationChannel = Literal["web", "whatsapp", "voice", "meeting"]
 ConversationMessageRole = Literal["user", "assistant", "system"]
 MeetingProcessingJobType = Literal["memory"]
 MeetingProcessingJobStatus = Literal["pending", "running", "completed", "failed"]
+WhatsAppMessageType = Literal["text", "audio", "image", "video", "document", "unknown"]
 AgentVoice = Literal[
     "alloy",
     "ash",
@@ -278,6 +279,18 @@ class MeetingProcessingJob(BaseModel):
     result: dict = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
+
+
+class WhatsAppGroupMessage(BaseModel):
+    id: int
+    group_id: str
+    group_name: str | None = None
+    sender_phone: str
+    sender_name: str
+    message_type: WhatsAppMessageType
+    content: str
+    message_id: str | None = None
+    created_at: datetime
 
 
 class ConversationSession(BaseModel):
