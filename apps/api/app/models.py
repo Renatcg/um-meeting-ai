@@ -25,6 +25,8 @@ AgentAction = Literal["send_email", "schedule_meeting", "web_search"]
 AgentIntegration = Literal["resend_email", "google_calendar", "web_search"]
 EmailRecipientScope = Literal["all_participants", "clients", "host", "custom"]
 CalendarAttendeeScope = Literal["all_participants", "clients", "host", "custom"]
+ConversationChannel = Literal["web", "whatsapp", "voice", "meeting"]
+ConversationMessageRole = Literal["user", "assistant", "system"]
 AgentVoice = Literal[
     "alloy",
     "ash",
@@ -206,6 +208,57 @@ class MeetingMemorySearchResult(BaseModel):
 class MeetingMemorySearchResponse(BaseModel):
     query: str
     results: list[MeetingMemorySearchResult]
+
+
+class ConversationSession(BaseModel):
+    id: str
+    organization_id: str
+    agent_id: str
+    channel: ConversationChannel
+    user_id: str
+    user_name: str
+    user_email: EmailStr | None = None
+    title: str
+    context_scope: dict = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime
+
+
+class ConversationMessage(BaseModel):
+    id: int
+    session_id: str
+    role: ConversationMessageRole
+    content: str
+    metadata: dict = Field(default_factory=dict)
+    created_at: datetime
+
+
+class AgentRespondContextScope(BaseModel):
+    meeting_id: str | None = Field(default=None, max_length=120)
+    customer: str | None = Field(default=None, max_length=160)
+    date_range: str | None = Field(default=None, max_length=80)
+
+
+class AgentRespondRequest(BaseModel):
+    message: str = Field(min_length=3, max_length=4000)
+    session_id: str | None = Field(default=None, max_length=80)
+    agent_id: str = Field(default="coevo", min_length=2, max_length=80)
+    organization_id: str = Field(default="default", min_length=2, max_length=120)
+    channel: ConversationChannel = "web"
+    user_id: str = Field(default="local-user", min_length=2, max_length=180)
+    user_name: str = Field(default="Acesso local", min_length=1, max_length=120)
+    user_email: EmailStr | None = None
+    requester_role: ParticipantRole = "host"
+    context_scope: AgentRespondContextScope = Field(
+        default_factory=AgentRespondContextScope
+    )
+
+
+class AgentRespondResponse(BaseModel):
+    session: ConversationSession
+    user_message: ConversationMessage
+    assistant_message: ConversationMessage
+    memory_results: list[MeetingMemorySearchResult] = Field(default_factory=list)
 
 
 class AgentProfile(BaseModel):

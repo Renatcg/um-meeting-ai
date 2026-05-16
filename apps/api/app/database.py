@@ -7,6 +7,8 @@ from psycopg.rows import dict_row
 from app.config import Settings
 from app.models import (
     AgentProfile,
+    ConversationMessage,
+    ConversationSession,
     KnowledgeDocument,
     KnowledgeSearchResult,
     Meeting,
@@ -279,6 +281,43 @@ CREATE TABLE IF NOT EXISTS google_calendar_connection (
 );
 """
 
+CREATE_CONVERSATION_SESSIONS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS conversation_sessions (
+    id TEXT PRIMARY KEY,
+    organization_id TEXT NOT NULL DEFAULT 'default',
+    agent_id TEXT NOT NULL DEFAULT 'coevo',
+    channel TEXT NOT NULL CHECK (channel IN ('web', 'whatsapp', 'voice', 'meeting')),
+    user_id TEXT NOT NULL,
+    user_name TEXT NOT NULL,
+    user_email TEXT,
+    title TEXT NOT NULL,
+    context_scope JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
+
+CREATE_CONVERSATION_SESSIONS_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_conversation_sessions_user_updated
+ON conversation_sessions (organization_id, user_id, updated_at DESC);
+"""
+
+CREATE_CONVERSATION_MESSAGES_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS conversation_messages (
+    id BIGSERIAL PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES conversation_sessions(id) ON DELETE CASCADE,
+    role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+    content TEXT NOT NULL,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
+
+CREATE_CONVERSATION_MESSAGES_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_conversation_messages_session_created
+ON conversation_messages (session_id, created_at, id);
+"""
+
 
 async def init_database(settings: Settings) -> None:
     async with await psycopg.AsyncConnection.connect(settings.database_url) as conn:
@@ -294,6 +333,10 @@ async def init_database(settings: Settings) -> None:
         await conn.execute(CREATE_MEETING_PENDING_EMAILS_TABLE_SQL)
         await conn.execute(CREATE_MEETING_PENDING_EMAILS_INDEX_SQL)
         await conn.execute(CREATE_GOOGLE_CALENDAR_CONNECTION_TABLE_SQL)
+        await conn.execute(CREATE_CONVERSATION_SESSIONS_TABLE_SQL)
+        await conn.execute(CREATE_CONVERSATION_SESSIONS_INDEX_SQL)
+        await conn.execute(CREATE_CONVERSATION_MESSAGES_TABLE_SQL)
+        await conn.execute(CREATE_CONVERSATION_MESSAGES_INDEX_SQL)
         await conn.execute(CREATE_TRIAL_REQUESTS_TABLE_SQL)
         await conn.execute(ALTER_TRIAL_REQUESTS_SELECTED_PLAN_SQL)
         await conn.execute(ALTER_TRIAL_REQUESTS_VOLUME_SQL)
@@ -600,6 +643,232 @@ async def list_recent_meetings(
             rows = await cur.fetchall()
 
     return [MeetingRecentSummary.model_validate(row) for row in rows]
+
+
+async def upsert_conversation_session(
+    *,
+    settings: Settings,
+    session_id: str,
+    organization_id: str,
+    agent_id: str,
+    channel: str,
+    user_id: str,
+    user_name: str,
+    user_email: str | None,
+    title: str,
+    context_scope: dict,
+) -> ConversationSession:
+    query = """
+    INSERT INTO conversation_sessions (
+        id,
+        organization_id,
+        agent_id,
+        channel,
+        user_id,
+        user_name,
+        user_email,
+        title,
+        context_scope
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+    ON CONFLICT (id) DO UPDATE
+    SET
+        organization_id = EXCLUDED.organization_id,
+        agent_id = EXCLUDED.agent_id,
+        channel = EXCLUDED.channel,
+        user_id = EXCLUDED.user_id,
+        user_name = EXCLUDED.user_name,
+        user_email = EXCLUDED.user_email,
+        context_scope = EXCLUDED.context_scope,
+        updated_at = now()
+    RETURNING
+        id,
+        organization_id,
+        agent_id,
+        channel,
+        user_id,
+        user_name,
+        user_email,
+        title,
+        context_scope,
+        created_at,
+        updated_at;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                query,
+                (
+                    session_id,
+                    organization_id,
+                    agent_id,
+                    channel,
+                    user_id,
+                    user_name,
+                    user_email,
+                    title,
+                    json.dumps(context_scope),
+                ),
+            )
+            row = await cur.fetchone()
+
+    if row is None:
+        raise RuntimeError("Conversation session upsert did not return a row.")
+
+    return ConversationSession.model_validate(row)
+
+
+async def touch_conversation_session(
+    *,
+    settings: Settings,
+    session_id: str,
+) -> None:
+    query = "UPDATE conversation_sessions SET updated_at = now() WHERE id = %s;"
+    async with await psycopg.AsyncConnection.connect(settings.database_url) as conn:
+        await conn.execute(query, (session_id,))
+
+
+async def list_conversation_sessions(
+    *,
+    settings: Settings,
+    organization_id: str = "default",
+    user_id: str | None = None,
+    limit: int = 30,
+) -> Sequence[ConversationSession]:
+    filters = ["organization_id = %s"]
+    params: list[object] = [organization_id]
+    if user_id:
+        filters.append("user_id = %s")
+        params.append(user_id)
+
+    query = f"""
+    SELECT
+        id,
+        organization_id,
+        agent_id,
+        channel,
+        user_id,
+        user_name,
+        user_email,
+        title,
+        context_scope,
+        created_at,
+        updated_at
+    FROM conversation_sessions
+    WHERE {" AND ".join(filters)}
+    ORDER BY updated_at DESC
+    LIMIT %s;
+    """
+    params.append(limit)
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, params)
+            rows = await cur.fetchall()
+
+    return [ConversationSession.model_validate(row) for row in rows]
+
+
+async def get_conversation_session(
+    *,
+    settings: Settings,
+    session_id: str,
+) -> ConversationSession | None:
+    query = """
+    SELECT
+        id,
+        organization_id,
+        agent_id,
+        channel,
+        user_id,
+        user_name,
+        user_email,
+        title,
+        context_scope,
+        created_at,
+        updated_at
+    FROM conversation_sessions
+    WHERE id = %s;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (session_id,))
+            row = await cur.fetchone()
+
+    return ConversationSession.model_validate(row) if row else None
+
+
+async def insert_conversation_message(
+    *,
+    settings: Settings,
+    session_id: str,
+    role: str,
+    content: str,
+    metadata: dict | None = None,
+) -> ConversationMessage:
+    query = """
+    INSERT INTO conversation_messages (session_id, role, content, metadata)
+    VALUES (%s, %s, %s, %s::jsonb)
+    RETURNING id, session_id, role, content, metadata, created_at;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                query,
+                (
+                    session_id,
+                    role,
+                    content,
+                    json.dumps(metadata or {}),
+                ),
+            )
+            row = await cur.fetchone()
+
+    if row is None:
+        raise RuntimeError("Conversation message insert did not return a row.")
+
+    await touch_conversation_session(settings=settings, session_id=session_id)
+    return ConversationMessage.model_validate(row)
+
+
+async def list_conversation_messages(
+    *,
+    settings: Settings,
+    session_id: str,
+    limit: int = 100,
+) -> Sequence[ConversationMessage]:
+    query = """
+    SELECT id, session_id, role, content, metadata, created_at
+    FROM conversation_messages
+    WHERE session_id = %s
+    ORDER BY created_at ASC, id ASC
+    LIMIT %s;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (session_id, limit))
+            rows = await cur.fetchall()
+
+    return [ConversationMessage.model_validate(row) for row in rows]
 
 
 async def mark_meeting_copilot_dispatched(

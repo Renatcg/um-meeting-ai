@@ -27,7 +27,9 @@ from app.calendar_service import (
     google_calendar_can_create_events,
 )
 from app.copilot import dispatch_copilot
+from app.conversation_service import respond_with_agent_memory
 from app.database import (
+    get_conversation_session,
     delete_trial_request,
     ensure_meeting,
     get_agent_profile,
@@ -41,6 +43,8 @@ from app.database import (
     insert_transcript_segment,
     insert_meeting,
     insert_trial_request,
+    list_conversation_messages,
+    list_conversation_sessions,
     list_meeting_agent_actions,
     list_recent_meetings,
     list_pending_meeting_emails,
@@ -58,6 +62,10 @@ from app.email_service import send_meeting_action_email, send_trial_confirmation
 from app.intervention_service import evaluate_intervention
 from app.models import (
     AgentProfile,
+    AgentRespondRequest,
+    AgentRespondResponse,
+    ConversationMessage,
+    ConversationSession,
     CreateMeetingRequest,
     CreateTokenRequest,
     KnowledgeSearchRequest,
@@ -246,6 +254,48 @@ async def create_voice_demo(payload: VoiceDemoRequest) -> Response:
         ) from exc
 
     return Response(content=audio.content, media_type="audio/mpeg")
+
+
+@app.get("/agent/conversations", response_model=list[ConversationSession])
+async def read_conversation_sessions(
+    organization_id: str = "default",
+    user_id: str | None = None,
+    limit: int = 30,
+) -> list[ConversationSession]:
+    safe_limit = min(max(limit, 1), 100)
+    return list(
+        await list_conversation_sessions(
+            settings=settings,
+            organization_id=organization_id,
+            user_id=user_id,
+            limit=safe_limit,
+        )
+    )
+
+
+@app.get(
+    "/agent/conversations/{session_id}/messages",
+    response_model=list[ConversationMessage],
+)
+async def read_conversation_messages(session_id: str) -> list[ConversationMessage]:
+    session = await get_conversation_session(settings=settings, session_id=session_id)
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found.",
+        )
+    return list(
+        await list_conversation_messages(
+            settings=settings,
+            session_id=session_id,
+            limit=200,
+        )
+    )
+
+
+@app.post("/agent/respond", response_model=AgentRespondResponse)
+async def respond_with_agent(payload: AgentRespondRequest) -> AgentRespondResponse:
+    return await respond_with_agent_memory(settings=settings, payload=payload)
 
 
 @app.get("/integrations/google-calendar", response_model=GoogleCalendarStatus)

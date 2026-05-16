@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-type Section = "meetings" | "coevo" | "knowledge" | "leads";
+type Section = "meetings" | "memory" | "coevo" | "knowledge" | "leads";
 type CoevoConfigTab =
   | "identity"
   | "voice"
@@ -88,6 +88,32 @@ type GoogleCalendarStatus = {
   calendar_email?: string | null;
   updated_at?: string | null;
   auth_url?: string | null;
+};
+
+type ConversationSession = {
+  id: string;
+  title: string;
+  channel: string;
+  user_name: string;
+  updated_at: string;
+  context_scope: Record<string, string>;
+};
+
+type ConversationMessage = {
+  id: number;
+  session_id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  created_at: string;
+};
+
+type MemorySearchResult = {
+  id: number;
+  meeting_id: string;
+  meeting_title?: string | null;
+  memory_type: string;
+  content: string;
+  score: number;
 };
 
 const sessionUser = {
@@ -384,6 +410,15 @@ export default function HomePage() {
   const [leadFormStatus, setLeadFormStatus] = useState<string | null>(null);
   const [isSavingLead, setIsSavingLead] = useState(false);
   const [googleCalendar, setGoogleCalendar] = useState<GoogleCalendarStatus | null>(null);
+  const [conversationSessions, setConversationSessions] = useState<ConversationSession[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>([]);
+  const [memoryQuestion, setMemoryQuestion] = useState("");
+  const [memoryCustomer, setMemoryCustomer] = useState("");
+  const [memoryMeetingId, setMemoryMeetingId] = useState("");
+  const [memoryStatus, setMemoryStatus] = useState<string | null>(null);
+  const [memorySources, setMemorySources] = useState<MemorySearchResult[]>([]);
+  const [isSendingMemoryQuestion, setIsSendingMemoryQuestion] = useState(false);
   const companyDocsRef = useRef<HTMLInputElement | null>(null);
   const companyMediaRef = useRef<HTMLInputElement | null>(null);
   const companyLinksRef = useRef<HTMLTextAreaElement | null>(null);
@@ -427,6 +462,107 @@ export default function HomePage() {
       setTrialRequestsStatus(err instanceof Error ? err.message : "Erro inesperado.");
     } finally {
       setIsLoadingTrialRequests(false);
+    }
+  }
+
+  async function loadConversationSessions() {
+    try {
+      const response = await fetch(`${apiUrl}/agent/conversations?limit=20`);
+      if (!response.ok) {
+        throw new Error("Nao foi possivel carregar as conversas.");
+      }
+      setConversationSessions((await response.json()) as ConversationSession[]);
+    } catch (err) {
+      setMemoryStatus(err instanceof Error ? err.message : "Erro inesperado.");
+    }
+  }
+
+  async function loadConversationMessages(sessionId: string) {
+    setActiveConversationId(sessionId);
+    setMemoryStatus(null);
+    try {
+      const response = await fetch(`${apiUrl}/agent/conversations/${sessionId}/messages`);
+      if (!response.ok) {
+        throw new Error("Nao foi possivel carregar essa conversa.");
+      }
+      setConversationMessages((await response.json()) as ConversationMessage[]);
+    } catch (err) {
+      setMemoryStatus(err instanceof Error ? err.message : "Erro inesperado.");
+    }
+  }
+
+  function startNewConversation() {
+    setActiveConversationId(null);
+    setConversationMessages([]);
+    setMemorySources([]);
+    setMemoryStatus(null);
+    setMemoryQuestion("");
+  }
+
+  async function askCoevo(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const question = memoryQuestion.trim();
+    if (!question) {
+      return;
+    }
+
+    const optimisticMessage: ConversationMessage = {
+      id: Date.now(),
+      session_id: activeConversationId ?? "pending",
+      role: "user",
+      content: question,
+      created_at: new Date().toISOString(),
+    };
+    setConversationMessages((current) => [...current, optimisticMessage]);
+    setMemoryQuestion("");
+    setMemoryStatus("Consultando memoria das reunioes...");
+    setIsSendingMemoryQuestion(true);
+
+    try {
+      const response = await fetch(`${apiUrl}/agent/respond`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: activeConversationId,
+          message: question,
+          user_id: "local-user",
+          user_name: sessionUser.name,
+          user_email: null,
+          requester_role: "host",
+          context_scope: {
+            meeting_id: memoryMeetingId.trim() || null,
+            customer: memoryCustomer.trim() || null,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("O Coevo nao conseguiu consultar a memoria agora.");
+      }
+
+      const result = (await response.json()) as {
+        session: ConversationSession;
+        user_message: ConversationMessage;
+        assistant_message: ConversationMessage;
+        memory_results: MemorySearchResult[];
+      };
+
+      setActiveConversationId(result.session.id);
+      setMemorySources(result.memory_results);
+      setConversationMessages((current) => [
+        ...current.filter((message) => message.id !== optimisticMessage.id),
+        result.user_message,
+        result.assistant_message,
+      ]);
+      setMemoryStatus(null);
+      void loadConversationSessions();
+    } catch (err) {
+      setConversationMessages((current) =>
+        current.filter((message) => message.id !== optimisticMessage.id),
+      );
+      setMemoryStatus(err instanceof Error ? err.message : "Erro inesperado.");
+    } finally {
+      setIsSendingMemoryQuestion(false);
     }
   }
 
@@ -563,6 +699,7 @@ export default function HomePage() {
 
     loadProfile();
     loadGoogleCalendarStatus();
+    loadConversationSessions();
 
     return () => {
       cancelled = true;
@@ -818,6 +955,19 @@ export default function HomePage() {
             </span>
             Reunioes
           </button>
+          <button
+            className={navItemClass("memory")}
+            type="button"
+            onClick={() => {
+              setActiveSection("memory");
+              void loadConversationSessions();
+            }}
+          >
+            <span className="flex h-8 w-8 items-center justify-center rounded-md border border-[#E7E7E2] font-mono text-xs">
+              C
+            </span>
+            Conversar com Coevo
+          </button>
           <button className={navItemClass("coevo")} type="button" onClick={() => setActiveSection("coevo")}>
             <span className="flex h-8 w-8 items-center justify-center rounded-md border border-[#E7E7E2] font-mono text-xs">
               IA
@@ -941,6 +1091,223 @@ export default function HomePage() {
                   ) : null}
                 </div>
               </section>
+            </div>
+          ) : null}
+
+          {activeSection === "memory" ? (
+            <div className="space-y-6">
+              <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
+                <div>
+                  <p className="font-mono text-xs uppercase text-[#F97316]">
+                    Memoria do Coevo
+                  </p>
+                  <h1 className="mt-2 font-display text-4xl font-semibold text-[#11110F]">
+                    Pergunte sobre reunioes passadas.
+                  </h1>
+                  <p className="mt-3 max-w-3xl text-sm leading-6 text-[#73736B]">
+                    O Coevo consulta transcricoes, decisoes, riscos, objecoes,
+                    promessas e proximos passos ja salvos na memoria.
+                  </p>
+                </div>
+                <button
+                  className="rounded-lg border border-[#E7E7E2] bg-white px-5 py-3 text-sm font-bold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] transition hover:border-[#F97316] hover:bg-[#FFF3EA]"
+                  onClick={startNewConversation}
+                  type="button"
+                >
+                  Nova conversa
+                </button>
+              </div>
+
+              <div className="grid min-h-[680px] gap-5 xl:grid-cols-[280px_minmax(0,1fr)_300px]">
+                <aside className="rounded-xl border border-[#E7E7E2] bg-white p-4 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-mono text-xs uppercase text-[#F97316]">
+                        Historico
+                      </p>
+                      <h2 className="mt-1 text-lg font-bold">Chats</h2>
+                    </div>
+                    <button
+                      className="rounded-md border border-[#E7E7E2] px-3 py-2 text-xs font-bold transition hover:border-[#F97316] hover:bg-[#FFF3EA]"
+                      onClick={loadConversationSessions}
+                      type="button"
+                    >
+                      Atualizar
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {conversationSessions.length === 0 ? (
+                      <p className="rounded-lg bg-[#FCFCFB] p-4 text-sm leading-6 text-[#73736B]">
+                        Ainda nao ha conversas salvas. Faca a primeira pergunta
+                        ao Coevo.
+                      </p>
+                    ) : null}
+                    {conversationSessions.map((session) => (
+                      <button
+                        key={session.id}
+                        className={`w-full rounded-lg border p-3 text-left transition ${
+                          activeConversationId === session.id
+                            ? "border-[#F97316] bg-[#FFF3EA]"
+                            : "border-[#E7E7E2] bg-white hover:bg-[#FCFCFB]"
+                        }`}
+                        onClick={() => void loadConversationMessages(session.id)}
+                        type="button"
+                      >
+                        <p className="line-clamp-2 text-sm font-bold text-[#11110F]">
+                          {session.title}
+                        </p>
+                        <p className="mt-2 font-mono text-[11px] uppercase text-[#73736B]">
+                          {new Intl.DateTimeFormat("pt-BR", {
+                            dateStyle: "short",
+                            timeStyle: "short",
+                          }).format(new Date(session.updated_at))}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                </aside>
+
+                <section className="flex min-h-[680px] flex-col overflow-hidden rounded-xl border border-[#E7E7E2] bg-white shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                  <div className="flex items-center justify-between gap-4 border-b border-[#E7E7E2] px-5 py-4">
+                    <div>
+                      <p className="font-mono text-xs uppercase text-[#F97316]">
+                        Conversa
+                      </p>
+                      <h2 className="mt-1 text-xl font-bold">
+                        {activeConversationId ? "Chat com memoria" : "Nova pergunta"}
+                      </h2>
+                    </div>
+                    <div className="coevo-memory-orb" aria-hidden="true">
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                  </div>
+
+                  <div className="flex-1 space-y-4 overflow-y-auto bg-[#FCFCFB] p-5">
+                    {conversationMessages.length === 0 ? (
+                      <div className="mx-auto flex h-full max-w-xl flex-col items-center justify-center text-center">
+                        <div className="coevo-memory-orb is-large" aria-hidden="true">
+                          <span />
+                          <span />
+                          <span />
+                        </div>
+                        <h3 className="mt-6 font-display text-2xl font-semibold">
+                          O Coevo lembra das reunioes.
+                        </h3>
+                        <p className="mt-3 text-sm leading-6 text-[#73736B]">
+                          Pergunte sobre prazos, decisoes, riscos, objecoes,
+                          promessas ou proximos passos que apareceram nas chamadas.
+                        </p>
+                      </div>
+                    ) : null}
+                    {conversationMessages.map((message) => (
+                      <div
+                        key={message.id}
+                        className={`flex ${
+                          message.role === "user" ? "justify-end" : "justify-start"
+                        }`}
+                      >
+                        <div
+                          className={`max-w-[82%] rounded-xl px-4 py-3 text-sm leading-6 shadow-sm ${
+                            message.role === "user"
+                              ? "bg-[#11110F] text-white"
+                              : "border border-[#E7E7E2] bg-white text-[#11110F]"
+                          }`}
+                        >
+                          {message.content}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <form className="border-t border-[#E7E7E2] bg-white p-4" onSubmit={askCoevo}>
+                    {memoryStatus ? (
+                      <p className="mb-3 rounded-lg border border-[#FDBA74] bg-[#FFF3EA] px-3 py-2 text-sm text-[#8A4B13]">
+                        {memoryStatus}
+                      </p>
+                    ) : null}
+                    <div className="flex gap-3">
+                      <input
+                        className="min-w-0 flex-1 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm outline-none transition focus:border-[#F97316]"
+                        value={memoryQuestion}
+                        onChange={(event) => setMemoryQuestion(event.target.value)}
+                        placeholder="Ex.: O que ficou pendente com a XPTO?"
+                      />
+                      <button
+                        className="rounded-lg bg-[#11110F] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#F97316] disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={isSendingMemoryQuestion}
+                        type="submit"
+                      >
+                        {isSendingMemoryQuestion ? "..." : "Enviar"}
+                      </button>
+                    </div>
+                  </form>
+                </section>
+
+                <aside className="space-y-4">
+                  <section className="rounded-xl border border-[#E7E7E2] bg-white p-4 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                    <p className="font-mono text-xs uppercase text-[#F97316]">
+                      Contexto
+                    </p>
+                    <label className="mt-4 block">
+                      <span className="mb-2 block text-sm font-semibold">
+                        Cliente ou projeto
+                      </span>
+                      <input
+                        className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-3 py-2 text-sm outline-none focus:border-[#F97316]"
+                        value={memoryCustomer}
+                        onChange={(event) => setMemoryCustomer(event.target.value)}
+                        placeholder="XPTO, ACME..."
+                      />
+                    </label>
+                    <label className="mt-4 block">
+                      <span className="mb-2 block text-sm font-semibold">
+                        ID da reuniao
+                      </span>
+                      <input
+                        className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-3 py-2 text-sm outline-none focus:border-[#F97316]"
+                        value={memoryMeetingId}
+                        onChange={(event) => setMemoryMeetingId(event.target.value)}
+                        placeholder="meeting-..."
+                      />
+                    </label>
+                    <p className="mt-4 text-xs leading-5 text-[#73736B]">
+                      Deixe em branco para o Coevo pesquisar em todas as memorias
+                      acessiveis.
+                    </p>
+                  </section>
+
+                  <section className="rounded-xl border border-[#E7E7E2] bg-white p-4 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                    <p className="font-mono text-xs uppercase text-[#F97316]">
+                      Fontes usadas
+                    </p>
+                    <div className="mt-4 space-y-3">
+                      {memorySources.length === 0 ? (
+                        <p className="text-sm leading-6 text-[#73736B]">
+                          As fontes aparecem aqui depois da resposta.
+                        </p>
+                      ) : null}
+                      {memorySources.slice(0, 5).map((source) => (
+                        <div
+                          key={source.id}
+                          className="rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-3"
+                        >
+                          <p className="text-xs font-bold uppercase text-[#F97316]">
+                            {source.memory_type}
+                          </p>
+                          <p className="mt-1 text-xs text-[#73736B]">
+                            {source.meeting_title ?? source.meeting_id}
+                          </p>
+                          <p className="mt-2 line-clamp-4 text-sm leading-5 text-[#11110F]">
+                            {source.content}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                </aside>
+              </div>
             </div>
           ) : null}
 

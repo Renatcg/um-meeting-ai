@@ -32,6 +32,9 @@ Endpoints implementados:
 - `POST /meetings/{meeting_id}/memory/process`
 - `GET /meetings/{meeting_id}/memory`
 - `POST /meetings/{meeting_id}/memory/search`
+- `POST /agent/respond`
+- `GET /agent/conversations`
+- `GET /agent/conversations/{session_id}/messages`
 - `POST /knowledge/documents`
 - `POST /knowledge/search`
 
@@ -94,6 +97,26 @@ Busca semantica:
 Use `POST /meetings/{meeting_id}/memory/search` com
 `Authorization: Bearer <participant_access_token>`. O retorno respeita a
 permissao basica gravada na memoria.
+
+## Chat com memoria
+
+`POST /agent/respond` permite conversar com o Coevo fora da sala. O endpoint
+salva a conversa em `conversation_sessions` e `conversation_messages`, consulta
+as memorias de reunioes com ACL e retorna a resposta junto com as fontes usadas.
+
+Exemplo:
+
+```json
+{
+  "message": "Quais riscos apareceram com a XPTO?",
+  "user_id": "local-user",
+  "user_name": "Acesso local",
+  "requester_role": "host",
+  "context_scope": {
+    "customer": "XPTO"
+  }
+}
+```
 
 ## Painel comercial
 
