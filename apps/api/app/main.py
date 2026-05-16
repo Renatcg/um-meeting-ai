@@ -139,7 +139,10 @@ from app.store import meeting_store
 from app.web_search_service import search_web
 from app.whatsapp_service import (
     parse_evo_webhook_payload,
+    send_evo_audio,
     send_evo_text,
+    synthesize_whatsapp_audio,
+    transcribe_whatsapp_audio,
     whatsapp_phone_is_allowed,
 )
 
@@ -709,10 +712,54 @@ async def evo_whatsapp_webhook(
         logger.error("whatsapp webhook received without configured Evo instance")
         return {"status": "missing-instance"}
 
+    message_text = inbound.text
+    should_reply_with_audio = False
+    if inbound.has_audio:
+        if not inbound.audio_base64:
+            await send_evo_text(
+                settings=settings,
+                instance=instance,
+                phone=inbound.phone,
+                text=(
+                    "Recebi seu audio, mas minha conexao com o WhatsApp ainda nao recebeu "
+                    "o arquivo de midia. Ative webhook_base64 na Evo API para eu conseguir ouvir."
+                ),
+            )
+            return {"status": "audio-without-base64"}
+
+        try:
+            message_text = await transcribe_whatsapp_audio(
+                settings=settings,
+                audio_base64=inbound.audio_base64,
+                mimetype=inbound.audio_mimetype,
+            )
+            should_reply_with_audio = settings.whatsapp_send_audio_replies
+        except Exception:
+            logger.exception("failed to transcribe whatsapp audio")
+            await send_evo_text(
+                settings=settings,
+                instance=instance,
+                phone=inbound.phone,
+                text=(
+                    "Recebi seu audio, mas nao consegui transcrever agora. "
+                    "Pode me mandar a mensagem em texto?"
+                ),
+            )
+            return {"status": "audio-transcription-failed"}
+
+    if len(message_text.strip()) < 3:
+        await send_evo_text(
+            settings=settings,
+            instance=instance,
+            phone=inbound.phone,
+            text="Nao consegui entender bem. Pode me mandar um pouco mais de contexto?",
+        )
+        return {"status": "message-too-short"}
+
     response = await respond_with_agent_memory(
         settings=settings,
         payload=AgentRespondRequest(
-            message=inbound.text,
+            message=message_text,
             agent_id="coevo",
             organization_id="default",
             channel="whatsapp",
@@ -721,6 +768,22 @@ async def evo_whatsapp_webhook(
             requester_role="host",
         ),
     )
+
+    if should_reply_with_audio:
+        try:
+            audio_base64 = await synthesize_whatsapp_audio(
+                settings=settings,
+                text=response.assistant_message.content,
+            )
+            await send_evo_audio(
+                settings=settings,
+                instance=instance,
+                phone=inbound.phone,
+                audio_base64=audio_base64,
+            )
+            return {"status": "audio-sent"}
+        except Exception:
+            logger.exception("failed to send whatsapp audio response")
 
     try:
         await send_evo_text(

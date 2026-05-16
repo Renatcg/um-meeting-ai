@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     evo_api_instance: str | None = None
     evo_api_webhook_secret: str | None = None
     whatsapp_allowed_phones: str = ""
+    whatsapp_send_audio_replies: bool = True
+    whatsapp_audio_voice: str = "marin"
+    whatsapp_tts_model: str = "gpt-4o-mini-tts"
 
     model_config = SettingsConfigDict(
         env_file=("../../.env", ".env"),

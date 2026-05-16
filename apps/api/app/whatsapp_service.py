@@ -1,8 +1,12 @@
 import asyncio
+import base64
 import json
 from dataclasses import dataclass
+from io import BytesIO
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
+
+from openai import AsyncOpenAI, OpenAIError
 
 from app.config import Settings
 
@@ -14,6 +18,9 @@ class WhatsAppInboundMessage:
     sender_name: str
     text: str
     message_id: str | None = None
+    audio_base64: str | None = None
+    audio_mimetype: str | None = None
+    has_audio: bool = False
 
 
 def normalize_phone(value: str | None) -> str:
@@ -28,6 +35,27 @@ def _first_text(*values: object) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return ""
+
+
+def _strip_data_uri(value: str) -> str:
+    if "," in value and value.strip().lower().startswith("data:"):
+        return value.split(",", 1)[1]
+    return value
+
+
+def _audio_filename(mimetype: str | None) -> str:
+    clean = (mimetype or "").split(";", 1)[0].strip().lower()
+    extension_by_type = {
+        "audio/mpeg": "mp3",
+        "audio/mp3": "mp3",
+        "audio/mp4": "mp4",
+        "audio/m4a": "m4a",
+        "audio/ogg": "ogg",
+        "audio/opus": "ogg",
+        "audio/wav": "wav",
+        "audio/webm": "webm",
+    }
+    return f"whatsapp-audio.{extension_by_type.get(clean, 'ogg')}"
 
 
 def _extract_message_text(message: dict) -> str:
@@ -45,6 +73,26 @@ def _extract_message_text(message: dict) -> str:
     )
 
 
+def _extract_audio_info(data: dict, message: dict) -> tuple[bool, str | None, str | None]:
+    audio = message.get("audioMessage")
+    if not isinstance(audio, dict):
+        return False, None, None
+
+    audio_base64 = _first_text(
+        data.get("base64"),
+        message.get("base64"),
+        audio.get("base64"),
+        audio.get("mediaBase64"),
+    )
+    mimetype = _first_text(
+        audio.get("mimetype"),
+        data.get("mimetype"),
+        message.get("mimetype"),
+    )
+
+    return True, (_strip_data_uri(audio_base64) if audio_base64 else None), mimetype or None
+
+
 def parse_evo_webhook_payload(payload: dict) -> WhatsAppInboundMessage | None:
     data = payload.get("data")
     if not isinstance(data, dict):
@@ -56,7 +104,8 @@ def parse_evo_webhook_payload(payload: dict) -> WhatsAppInboundMessage | None:
 
     message = data.get("message") if isinstance(data.get("message"), dict) else {}
     text = _extract_message_text(message)
-    if not text:
+    has_audio, audio_base64, audio_mimetype = _extract_audio_info(data, message)
+    if not text and not has_audio:
         return None
 
     remote_jid = _first_text(
@@ -78,6 +127,9 @@ def parse_evo_webhook_payload(payload: dict) -> WhatsAppInboundMessage | None:
         sender_name=sender_name,
         text=text,
         message_id=message_id,
+        audio_base64=audio_base64,
+        audio_mimetype=audio_mimetype,
+        has_audio=has_audio,
     )
 
 
@@ -126,6 +178,44 @@ def _send_evo_text(
         ) from exc
 
 
+def _send_evo_audio(
+    *,
+    settings: Settings,
+    instance: str,
+    phone: str,
+    audio_base64: str,
+) -> None:
+    if not settings.evo_api_base_url or not settings.evo_api_key:
+        raise RuntimeError("Evo API is not configured.")
+
+    base_url = settings.evo_api_base_url.rstrip("/")
+    url = f"{base_url}/message/sendWhatsAppAudio/{instance}"
+    body = json.dumps(
+        {
+            "number": normalize_phone(phone),
+            "audio": audio_base64,
+        }
+    ).encode("utf-8")
+    request = Request(
+        url,
+        data=body,
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "apikey": settings.evo_api_key,
+        },
+    )
+
+    try:
+        with urlopen(request, timeout=30) as response:
+            response.read()
+    except HTTPError as exc:
+        response_body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(
+            f"Evo API audio returned HTTP {exc.code}: {response_body}"
+        ) from exc
+
+
 async def send_evo_text(
     *,
     settings: Settings,
@@ -140,3 +230,68 @@ async def send_evo_text(
         phone=phone,
         text=text,
     )
+
+
+async def send_evo_audio(
+    *,
+    settings: Settings,
+    instance: str,
+    phone: str,
+    audio_base64: str,
+) -> None:
+    await asyncio.to_thread(
+        _send_evo_audio,
+        settings=settings,
+        instance=instance,
+        phone=phone,
+        audio_base64=audio_base64,
+    )
+
+
+async def transcribe_whatsapp_audio(
+    *,
+    settings: Settings,
+    audio_base64: str,
+    mimetype: str | None,
+) -> str:
+    if not settings.openai_api_key:
+        raise RuntimeError("OPENAI_API_KEY is required to transcribe WhatsApp audio.")
+
+    try:
+        audio_bytes = base64.b64decode(_strip_data_uri(audio_base64), validate=False)
+    except Exception as exc:
+        raise RuntimeError("Invalid WhatsApp audio base64.") from exc
+
+    audio_file = BytesIO(audio_bytes)
+    audio_file.name = _audio_filename(mimetype)
+    client = AsyncOpenAI(api_key=settings.openai_api_key)
+    try:
+        transcription = await client.audio.transcriptions.create(
+            model=settings.openai_media_transcription_model,
+            file=audio_file,
+        )
+    except OpenAIError as exc:
+        raise RuntimeError("Could not transcribe WhatsApp audio.") from exc
+    return transcription.text.strip()
+
+
+async def synthesize_whatsapp_audio(
+    *,
+    settings: Settings,
+    text: str,
+) -> str:
+    if not settings.openai_api_key:
+        raise RuntimeError("OPENAI_API_KEY is required to synthesize WhatsApp audio.")
+
+    client = AsyncOpenAI(api_key=settings.openai_api_key)
+    try:
+        audio = await client.audio.speech.create(
+            model=settings.whatsapp_tts_model,
+            voice=settings.whatsapp_audio_voice,
+            input=text,
+            response_format="mp3",
+        )
+    except OpenAIError as exc:
+        raise RuntimeError("Could not synthesize WhatsApp audio.") from exc
+
+    return base64.b64encode(audio.content).decode("ascii")
