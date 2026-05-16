@@ -101,6 +101,37 @@ def _detect_message_type(message: dict) -> str:
     return "unknown"
 
 
+def summarize_evo_payload(payload: dict) -> dict[str, object]:
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+    key = data.get("key") if isinstance(data.get("key"), dict) else {}
+    message = data.get("message") if isinstance(data.get("message"), dict) else {}
+    remote_jid = _first_text(
+        key.get("remoteJid"),
+        data.get("remoteJid"),
+        data.get("sender"),
+        data.get("chatId"),
+        _get_nested_text(data, "message", "key", "remoteJid"),
+    )
+    participant = _first_text(
+        key.get("participant"),
+        data.get("participant"),
+        data.get("senderPn"),
+        data.get("participantJid"),
+        _get_nested_text(data, "message", "key", "participant"),
+    )
+    return {
+        "event": payload.get("event"),
+        "instance": _first_text(payload.get("instance"), data.get("instance")),
+        "from_me": key.get("fromMe"),
+        "remote_jid": remote_jid,
+        "participant": participant,
+        "is_group": remote_jid.endswith("@g.us") or "@g.us" in remote_jid,
+        "message_id": _first_text(key.get("id"), data.get("id")) or None,
+        "message_keys": sorted(message.keys()),
+        "has_base64": bool(_first_text(data.get("base64"), message.get("base64"))),
+    }
+
+
 def _extract_audio_info(data: dict, message: dict) -> tuple[bool, str | None, str | None]:
     audio = message.get("audioMessage")
     if not isinstance(audio, dict):

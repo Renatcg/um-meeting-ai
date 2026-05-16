@@ -54,6 +54,7 @@ from app.database import (
     insert_app_user,
     insert_trial_request,
     insert_whatsapp_group_message,
+    insert_whatsapp_webhook_event,
     list_app_users,
     list_conversation_messages,
     list_conversation_sessions,
@@ -64,6 +65,7 @@ from app.database import (
     list_meeting_participants,
     list_meeting_processing_jobs,
     list_trial_requests,
+    list_whatsapp_webhook_events,
     list_sales_recommendations,
     list_transcript_segments,
     mark_pending_meeting_email,
@@ -115,6 +117,7 @@ from app.models import (
     UserLoginRequest,
     UserPublic,
     VoiceDemoRequest,
+    WhatsAppWebhookEvent,
 )
 from app.knowledge_service import (
     ingest_knowledge_document,
@@ -147,6 +150,7 @@ from app.whatsapp_service import (
     send_evo_audio,
     send_evo_text,
     synthesize_whatsapp_audio,
+    summarize_evo_payload,
     transcribe_whatsapp_audio,
     whatsapp_phone_is_allowed,
 )
@@ -704,9 +708,19 @@ async def evo_whatsapp_webhook(
         )
 
     payload = await request.json()
+    payload_summary = summarize_evo_payload(payload)
     inbound = parse_evo_webhook_payload(payload)
     if inbound is None:
         logger.info("ignored whatsapp webhook payload without supported message")
+        await insert_whatsapp_webhook_event(
+            settings=settings,
+            event_type=str(payload_summary.get("event") or "unknown"),
+            status="ignored",
+            is_group=bool(payload_summary.get("is_group")),
+            group_id=str(payload_summary.get("remote_jid") or "") or None,
+            message_id=str(payload_summary.get("message_id") or "") or None,
+            detail=str(payload_summary),
+        )
         return {"status": "ignored"}
 
     permission_phone = inbound.sender_phone or inbound.phone
@@ -715,6 +729,16 @@ async def evo_whatsapp_webhook(
             "blocked whatsapp message from unauthorized phone: phone=%s group=%s",
             permission_phone,
             inbound.is_group,
+        )
+        await insert_whatsapp_webhook_event(
+            settings=settings,
+            event_type=str(payload_summary.get("event") or "unknown"),
+            status="blocked",
+            phone=permission_phone,
+            is_group=inbound.is_group,
+            group_id=inbound.group_id,
+            message_id=inbound.message_id,
+            detail="phone not in WHATSAPP_ALLOWED_PHONES",
         )
         return {"status": "blocked"}
 
@@ -765,6 +789,15 @@ async def evo_whatsapp_webhook(
             phone=inbound.phone,
             text="Nao consegui entender bem. Pode me mandar um pouco mais de contexto?",
         )
+        await insert_whatsapp_webhook_event(
+            settings=settings,
+            event_type=str(payload_summary.get("event") or "unknown"),
+            status="message-too-short",
+            phone=permission_phone,
+            is_group=inbound.is_group,
+            group_id=inbound.group_id,
+            message_id=inbound.message_id,
+        )
         return {"status": "message-too-short"}
 
     if inbound.is_group:
@@ -789,6 +822,15 @@ async def evo_whatsapp_webhook(
         )
 
         if not should_respond_to_group_message(message_text):
+            await insert_whatsapp_webhook_event(
+                settings=settings,
+                event_type=str(payload_summary.get("event") or "unknown"),
+                status="group-message-saved",
+                phone=permission_phone,
+                is_group=True,
+                group_id=inbound.group_id,
+                message_id=inbound.message_id,
+            )
             return {"status": "group-message-saved"}
 
         answer = await answer_whatsapp_group_message(
@@ -802,6 +844,15 @@ async def evo_whatsapp_webhook(
             instance=instance,
             phone=inbound.group_id,
             text=answer,
+        )
+        await insert_whatsapp_webhook_event(
+            settings=settings,
+            event_type=str(payload_summary.get("event") or "unknown"),
+            status="group-response-sent",
+            phone=permission_phone,
+            is_group=True,
+            group_id=inbound.group_id,
+            message_id=inbound.message_id,
         )
         return {"status": "group-response-sent"}
 
@@ -849,6 +900,16 @@ async def evo_whatsapp_webhook(
         )
 
     return {"status": "sent"}
+
+
+@app.get(
+    "/integrations/whatsapp/evo/events",
+    response_model=list[WhatsAppWebhookEvent],
+    dependencies=[Depends(verify_agent_api_key)],
+)
+async def get_evo_whatsapp_events(limit: int = 30) -> list[WhatsAppWebhookEvent]:
+    safe_limit = min(max(limit, 1), 100)
+    return list(await list_whatsapp_webhook_events(settings=settings, limit=safe_limit))
 
 
 

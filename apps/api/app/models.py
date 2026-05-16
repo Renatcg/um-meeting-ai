@@ -293,6 +293,18 @@ class WhatsAppGroupMessage(BaseModel):
     created_at: datetime
 
 
+class WhatsAppWebhookEvent(BaseModel):
+    id: int
+    event_type: str
+    status: str
+    phone: str | None = None
+    is_group: bool = False
+    group_id: str | None = None
+    message_id: str | None = None
+    detail: str | None = None
+    created_at: datetime
+
+
 class ConversationSession(BaseModel):
     id: str
     organization_id: str

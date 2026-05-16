@@ -26,6 +26,7 @@ from app.models import (
     TrialRequestUpdate,
     UserPublic,
     WhatsAppGroupMessage,
+    WhatsAppWebhookEvent,
 )
 from app.sales_coach_service import RecommendationDraft
 
@@ -422,6 +423,25 @@ ON whatsapp_group_messages (message_id)
 WHERE message_id IS NOT NULL;
 """
 
+CREATE_WHATSAPP_WEBHOOK_EVENTS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS whatsapp_webhook_events (
+    id BIGSERIAL PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    status TEXT NOT NULL,
+    phone TEXT,
+    is_group BOOLEAN NOT NULL DEFAULT FALSE,
+    group_id TEXT,
+    message_id TEXT,
+    detail TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
+
+CREATE_WHATSAPP_WEBHOOK_EVENTS_CREATED_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_whatsapp_webhook_events_created
+ON whatsapp_webhook_events (created_at DESC, id DESC);
+"""
+
 
 async def init_database(settings: Settings) -> None:
     async with await psycopg.AsyncConnection.connect(settings.database_url) as conn:
@@ -451,6 +471,8 @@ async def init_database(settings: Settings) -> None:
         await conn.execute(CREATE_WHATSAPP_GROUP_MESSAGES_TABLE_SQL)
         await conn.execute(CREATE_WHATSAPP_GROUP_MESSAGES_GROUP_INDEX_SQL)
         await conn.execute(CREATE_WHATSAPP_GROUP_MESSAGES_MESSAGE_ID_INDEX_SQL)
+        await conn.execute(CREATE_WHATSAPP_WEBHOOK_EVENTS_TABLE_SQL)
+        await conn.execute(CREATE_WHATSAPP_WEBHOOK_EVENTS_CREATED_INDEX_SQL)
         await conn.execute(CREATE_TRIAL_REQUESTS_TABLE_SQL)
         await conn.execute(ALTER_TRIAL_REQUESTS_SELECTED_PLAN_SQL)
         await conn.execute(ALTER_TRIAL_REQUESTS_VOLUME_SQL)
@@ -1783,6 +1805,96 @@ async def list_recent_whatsapp_group_messages(
             rows = await cur.fetchall()
 
     return [WhatsAppGroupMessage.model_validate(row) for row in reversed(rows)]
+
+
+async def insert_whatsapp_webhook_event(
+    *,
+    settings: Settings,
+    event_type: str,
+    status: str,
+    phone: str | None = None,
+    is_group: bool = False,
+    group_id: str | None = None,
+    message_id: str | None = None,
+    detail: str | None = None,
+) -> WhatsAppWebhookEvent:
+    query = """
+    INSERT INTO whatsapp_webhook_events (
+        event_type,
+        status,
+        phone,
+        is_group,
+        group_id,
+        message_id,
+        detail
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s)
+    RETURNING
+        id,
+        event_type,
+        status,
+        phone,
+        is_group,
+        group_id,
+        message_id,
+        detail,
+        created_at;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                query,
+                (
+                    event_type,
+                    status,
+                    phone,
+                    is_group,
+                    group_id,
+                    message_id,
+                    detail[:500] if detail else None,
+                ),
+            )
+            row = await cur.fetchone()
+
+    if row is None:
+        raise RuntimeError("WhatsApp webhook event insert did not return a row.")
+    return WhatsAppWebhookEvent.model_validate(row)
+
+
+async def list_whatsapp_webhook_events(
+    *,
+    settings: Settings,
+    limit: int = 30,
+) -> Sequence[WhatsAppWebhookEvent]:
+    query = """
+    SELECT
+        id,
+        event_type,
+        status,
+        phone,
+        is_group,
+        group_id,
+        message_id,
+        detail,
+        created_at
+    FROM whatsapp_webhook_events
+    ORDER BY created_at DESC, id DESC
+    LIMIT %s;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (limit,))
+            rows = await cur.fetchall()
+
+    return [WhatsAppWebhookEvent.model_validate(row) for row in rows]
 
 
 async def register_meeting_participant(
