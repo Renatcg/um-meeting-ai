@@ -7,6 +7,396 @@
   color: #11110f;
 }
 
+/* Coevo Meet room: permanent dark mode and neon command surface. */
+.lk-room-container.um-room-shell {
+  --room-bg: #05070b;
+  --room-surface: #070a10;
+  --room-surface-2: #0d121b;
+  --room-line: rgba(255, 255, 255, 0.11);
+  --room-text: #ffffff;
+  --room-muted: #b8c7d9;
+  --room-blue: #4fc3f7;
+  --room-blue-soft: rgba(79, 195, 247, 0.13);
+  --room-blue-glow: rgba(79, 195, 247, 0.42);
+  background:
+    radial-gradient(circle at 72% 12%, rgba(79, 195, 247, 0.16), transparent 34%),
+    linear-gradient(180deg, #070a10 0%, #05070b 100%);
+  color: var(--room-text);
+}
+
+.lk-room-container.um-room-shell > section,
+.lk-room-container.um-room-shell .um-meeting-layout,
+.lk-room-container.um-room-shell .um-video-stage-shell {
+  background: transparent;
+  color: var(--room-text);
+}
+
+.lk-room-container.um-room-shell .um-video-stage-shell {
+  padding-top: 1rem;
+}
+
+.lk-room-container.um-room-shell .um-meeting-footer {
+  border-top: 1px solid var(--room-line);
+  background:
+    linear-gradient(180deg, rgba(7, 10, 16, 0.72), rgba(7, 10, 16, 0.96)),
+    var(--room-surface);
+  color: var(--room-text);
+  box-shadow: 0 -22px 70px rgba(0, 0, 0, 0.34);
+}
+
+.lk-room-container.um-room-shell .um-meeting-grid .lk-participant-tile,
+.lk-room-container.um-room-shell .um-participant-tile-wrap,
+.lk-room-container.um-room-shell .um-agent-video-tile,
+.lk-room-container.um-room-shell .um-screen-share-tile {
+  border-color: rgba(79, 195, 247, 0.2);
+  background: #080b10;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 18px 70px rgba(0, 0, 0, 0.36);
+}
+
+.lk-room-container.um-room-shell .um-meeting-grid .lk-participant-tile:hover,
+.lk-room-container.um-room-shell .um-participant-tile-wrap:hover,
+.lk-room-container.um-room-shell .um-agent-video-tile:hover,
+.lk-room-container.um-room-shell .um-screen-share-tile:hover {
+  border-color: rgba(79, 195, 247, 0.55);
+  box-shadow:
+    inset 0 0 0 1px rgba(79, 195, 247, 0.22),
+    0 0 34px rgba(79, 195, 247, 0.12),
+    0 20px 80px rgba(0, 0, 0, 0.42);
+}
+
+.lk-room-container.um-room-shell .um-meeting-grid .lk-participant-name {
+  background: rgba(5, 7, 11, 0.78);
+  color: #ffffff;
+}
+
+.lk-room-container.um-room-shell .um-side-panel-toggle {
+  position: absolute;
+  top: 50%;
+  right: -1.15rem;
+  z-index: 38;
+  width: 2.3rem;
+  height: 2.3rem;
+  transform: translateY(-50%);
+  place-items: center;
+  border: 1px solid rgba(79, 195, 247, 0.32);
+  border-radius: 999px;
+  background: rgba(7, 10, 16, 0.94);
+  color: var(--room-blue);
+  box-shadow:
+    0 0 0 1px rgba(79, 195, 247, 0.08),
+    0 0 24px rgba(79, 195, 247, 0.18),
+    0 18px 60px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(16px);
+}
+
+.lk-room-container.um-room-shell .um-side-panel-toggle:hover {
+  border-color: var(--room-blue);
+  background: rgba(79, 195, 247, 0.14);
+  box-shadow:
+    0 0 0 1px rgba(79, 195, 247, 0.22),
+    0 0 30px rgba(79, 195, 247, 0.32);
+}
+
+.lk-room-container.um-room-shell .um-control-button {
+  width: 3.5rem;
+  height: 3.5rem;
+  min-width: 3.5rem;
+  min-height: 3.5rem;
+  border-color: rgba(255, 255, 255, 0.13);
+  background: rgba(255, 255, 255, 0.07);
+  color: #eef8ff;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+    0 12px 34px rgba(0, 0, 0, 0.22);
+}
+
+.lk-room-container.um-room-shell .um-control-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.lk-room-container.um-room-shell .um-control-icon path,
+.lk-room-container.um-room-shell .um-control-icon rect,
+.lk-room-container.um-room-shell .um-control-icon circle,
+.lk-room-container.um-room-shell .um-icon-hand path {
+  stroke-width: 1.15px;
+}
+
+.lk-room-container.um-room-shell .um-control-button .um-icon-hand {
+  width: 1.65rem;
+  height: 1.65rem;
+}
+
+.lk-room-container.um-room-shell .um-control-button:hover,
+.lk-room-container.um-room-shell .um-control-button.is-on {
+  transform: translateY(-1px);
+  border-color: var(--room-blue);
+  background: var(--room-blue-soft);
+  color: var(--room-blue);
+  box-shadow:
+    0 0 0 1px rgba(79, 195, 247, 0.22),
+    0 0 24px var(--room-blue-glow),
+    0 14px 50px rgba(0, 0, 0, 0.28);
+}
+
+.lk-room-container.um-room-shell .um-control-button.is-off {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(127, 29, 29, 0.22);
+  color: #fca5a5;
+}
+
+.lk-room-container.um-room-shell .um-control-button.is-leave {
+  width: 3.5rem;
+  min-width: 3.5rem;
+  border-color: rgba(239, 68, 68, 0.38);
+  background: rgba(127, 29, 29, 0.2);
+  color: #fecaca;
+}
+
+.lk-room-container.um-room-shell .um-control-button.is-leave:hover {
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.2);
+  color: #ffffff;
+  box-shadow:
+    0 0 0 1px rgba(239, 68, 68, 0.2),
+    0 0 24px rgba(239, 68, 68, 0.36);
+}
+
+.um-control-menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.um-control-dropdown {
+  position: absolute;
+  bottom: calc(100% + 0.75rem);
+  left: 50%;
+  z-index: 45;
+  display: grid;
+  min-width: 13rem;
+  transform: translateX(-50%);
+  overflow: hidden;
+  border: 1px solid rgba(79, 195, 247, 0.22);
+  border-radius: 0.875rem;
+  background: rgba(7, 10, 16, 0.96);
+  box-shadow:
+    0 0 34px rgba(79, 195, 247, 0.14),
+    0 24px 90px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(18px);
+}
+
+.um-control-dropdown button {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.65rem;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  color: #ffffff;
+  padding: 0.75rem 0.85rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-align: left;
+}
+
+.um-control-dropdown button:last-child {
+  border-bottom: 0;
+}
+
+.um-control-dropdown button:hover {
+  background: rgba(79, 195, 247, 0.12);
+  color: var(--room-blue);
+}
+
+.um-control-dropdown button.is-danger:hover {
+  background: rgba(239, 68, 68, 0.14);
+  color: #fecaca;
+}
+
+.um-control-dropdown .um-control-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.lk-room-container.um-room-shell .um-effects-panel {
+  border-color: rgba(79, 195, 247, 0.22);
+  background: rgba(7, 10, 16, 0.96);
+  box-shadow:
+    0 0 34px rgba(79, 195, 247, 0.16),
+    0 24px 90px rgba(0, 0, 0, 0.45);
+}
+
+.lk-room-container.um-room-shell .um-effect-option {
+  border-color: rgba(255, 255, 255, 0.11);
+  background: rgba(255, 255, 255, 0.06);
+  color: #ffffff;
+}
+
+.lk-room-container.um-room-shell .um-effect-option:hover,
+.lk-room-container.um-room-shell .um-effect-option.is-selected {
+  border-color: var(--room-blue);
+  background: rgba(79, 195, 247, 0.12);
+  color: var(--room-blue);
+}
+
+.lk-room-container.um-room-shell .um-effect-preview.is-blur {
+  background:
+    linear-gradient(45deg, rgba(79, 195, 247, 0.32), transparent),
+    repeating-linear-gradient(90deg, #1c2430 0 0.25rem, #0d121b 0.25rem 0.5rem);
+}
+
+.lk-room-container.um-room-shell .um-effect-preview.is-coevo {
+  background:
+    radial-gradient(circle at 80% 15%, rgba(79, 195, 247, 0.46), transparent 42%),
+    #0d121b;
+}
+
+.lk-room-container.um-room-shell .um-effect-preview.is-image {
+  background:
+    linear-gradient(135deg, rgba(79, 195, 247, 0.16), transparent),
+    #0d121b;
+  border-color: var(--room-blue);
+}
+
+.lk-room-container.um-room-shell .um-rec-dot {
+  display: inline-block;
+  width: 0.58rem;
+  height: 0.58rem;
+  margin-right: 0.55rem;
+  border-radius: 999px;
+  background: #ef4444;
+  box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.72);
+  animation: coevo-rec-pulse 1.45s ease-out infinite;
+}
+
+@keyframes coevo-rec-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.72);
+  }
+  100% {
+    box-shadow: 0 0 0 0.55rem rgba(239, 68, 68, 0);
+  }
+}
+
+.lk-room-container.um-room-shell .um-agent-orb-ring {
+  border-color: rgba(79, 195, 247, 0.45);
+  box-shadow: 0 0 20px rgba(79, 195, 247, 0.18);
+}
+
+.lk-room-container.um-room-shell .um-agent-orb-core {
+  box-shadow:
+    0 0 0 0.5rem rgba(79, 195, 247, 0.08),
+    0 0 34px rgba(79, 195, 247, 0.28);
+}
+
+.lk-room-container.um-room-shell .um-agent-orb-bars span {
+  background: var(--room-blue);
+}
+
+.lk-room-container.um-room-shell .um-agent-video-label {
+  background: rgba(5, 7, 11, 0.82);
+  color: #ffffff;
+}
+
+.lk-room-container.um-room-shell .um-agent-video-label span {
+  color: var(--room-muted);
+}
+
+.lk-room-container.um-room-shell .um-hand-raise-badge {
+  background: #4fc3f7;
+  color: #05070b;
+  box-shadow: 0 0 24px rgba(79, 195, 247, 0.36);
+}
+
+.um-chat-compose {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 0.875rem;
+  background: rgba(255, 255, 255, 0.055);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.um-chat-compose:focus-within {
+  border-color: rgba(79, 195, 247, 0.72);
+  box-shadow:
+    0 0 0 1px rgba(79, 195, 247, 0.18),
+    0 0 26px rgba(79, 195, 247, 0.16);
+}
+
+.um-chat-compose-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.45rem 0.55rem;
+}
+
+.um-chat-icon-button {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #b8c7d9;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.um-chat-icon-button .um-control-icon {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.um-chat-icon-button:hover:not(:disabled),
+.um-chat-icon-button.is-send:not(:disabled) {
+  border-color: var(--room-blue);
+  background: rgba(79, 195, 247, 0.14);
+  color: var(--room-blue);
+  box-shadow: 0 0 20px rgba(79, 195, 247, 0.2);
+}
+
+.um-chat-icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.lk-room-container.um-room-shell .um-meeting-side-panel {
+  border-left-color: var(--room-line);
+}
+
+@media (max-width: 1023px) {
+  .lk-room-container.um-room-shell .um-video-stage-shell {
+    padding-top: 0.75rem;
+  }
+
+  .lk-room-container.um-room-shell .um-control-button {
+    width: 2.9rem;
+    height: 2.9rem;
+    min-width: 2.9rem;
+    min-height: 2.9rem;
+  }
+
+  .lk-room-container.um-room-shell .um-control-icon {
+    width: 1.45rem;
+    height: 1.45rem;
+  }
+
+  .lk-room-container.um-room-shell .um-control-button .um-icon-hand {
+    width: 1.35rem;
+    height: 1.35rem;
+  }
+}
+
 * {
   box-sizing: border-box;
 }

@@ -402,6 +402,87 @@ function ChatIcon() {
   );
 }
 
+function MoreIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="um-control-icon"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M6.4 12h.1M12 12h.1M17.6 12h.1"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="2.8"
+      />
+    </svg>
+  );
+}
+
+function LinkIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="um-control-icon"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M9.8 13.7a3.2 3.2 0 0 1 0-4.5l2.3-2.3a3.2 3.2 0 0 1 4.5 4.5l-.8.8"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.9"
+      />
+      <path
+        d="M14.2 10.3a3.2 3.2 0 0 1 0 4.5l-2.3 2.3a3.2 3.2 0 0 1-4.5-4.5l.8-.8"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.9"
+      />
+    </svg>
+  );
+}
+
+function SendIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="um-control-icon"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M5 12h13M13.5 6.5 19 12l-5.5 5.5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.9"
+      />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="um-control-icon"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M12 5.5v13M5.5 12h13"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.9"
+      />
+    </svg>
+  );
+}
+
 function CloseIcon() {
   return (
     <svg
@@ -608,12 +689,12 @@ function AgentPresence() {
   }
 
   return (
-    <div className="absolute right-4 top-16 z-10 rounded-2xl border border-[#E7E7E2] bg-white/92 px-4 py-3 shadow-[0_18px_70px_rgba(17,17,15,0.12)] backdrop-blur-xl sm:right-6 sm:top-20">
+    <div className="absolute right-4 top-4 z-10 rounded-2xl border border-[#4FC3F7]/25 bg-[#070A10]/88 px-4 py-3 shadow-[0_0_34px_rgba(79,195,247,0.14)] backdrop-blur-xl sm:right-6">
       <div className="flex items-center gap-3">
         <AgentOrb isSpeaking={Boolean(agent.isSpeaking)} />
         <div>
-          <p className="text-sm font-semibold text-[#11110F]">Coevo</p>
-          <p className="text-xs text-[#73736B]">
+          <p className="text-sm font-semibold text-white">Coevo</p>
+          <p className="text-xs text-[#B8C7D9]">
             {agent.isSpeaking ? "Falando agora" : "Ouvindo a reuniao"}
           </p>
         </div>
@@ -824,18 +905,34 @@ function VideoEffectPicker({
 }
 
 function MeetingGrid({
+  canViewSalesPanel,
+  copiedInviteLink,
   customBackgroundName,
   customBackgroundUrl,
+  isDesktopSidePanelVisible,
   meetingId,
+  onCopyInviteLink,
   onCustomBackgroundChange,
+  onEndMeeting,
+  onOpenMobileSidePanel,
+  recordingStatus,
   setVideoEffect,
+  setIsDesktopSidePanelVisible,
   videoEffect,
 }: {
+  canViewSalesPanel: boolean;
+  copiedInviteLink: boolean;
   customBackgroundName: string | null;
   customBackgroundUrl: string | null;
+  isDesktopSidePanelVisible: boolean;
   meetingId: string;
+  onCopyInviteLink: () => void;
   onCustomBackgroundChange: (file: File | null) => void;
+  onEndMeeting: () => void | Promise<void>;
+  onOpenMobileSidePanel: () => void;
+  recordingStatus: "idle" | "starting" | "active" | "failed";
   setVideoEffect: (effect: VideoEffectMode) => void;
+  setIsDesktopSidePanelVisible: Dispatch<SetStateAction<boolean>>;
   videoEffect: VideoEffectMode;
 }) {
   const room = useRoomContext();
@@ -1035,10 +1132,26 @@ function MeetingGrid({
         : "";
 
   return (
-    <div className="um-meeting-layout flex h-full min-h-0 flex-col bg-white">
+    <div className="um-meeting-layout flex h-full min-h-0 flex-col">
+      <button
+        className="um-side-panel-toggle hidden lg:grid"
+        type="button"
+        aria-label={
+          isDesktopSidePanelVisible ? "Ocultar painel" : "Mostrar painel"
+        }
+        title={isDesktopSidePanelVisible ? "Ocultar painel" : "Mostrar painel"}
+        onClick={() => setIsDesktopSidePanelVisible((isVisible) => !isVisible)}
+      >
+        <span
+          className={`um-panel-toggle-icon ${
+            isDesktopSidePanelVisible ? "is-open" : "is-closed"
+          }`}
+          aria-hidden="true"
+        />
+      </button>
       <div className="um-video-stage-shell min-h-0 flex-1 px-4 pb-3 pt-16 sm:px-6 sm:pt-20">
         <AgentPresence />
-        <div className="absolute left-4 top-16 z-10 rounded-full border border-[#E7E7E2] bg-white/92 px-3 py-2 font-mono text-xs font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.08)] backdrop-blur-xl sm:left-6 sm:top-20">
+        <div className="absolute left-4 top-4 z-10 rounded-full border border-[#4FC3F7]/25 bg-[#070A10]/88 px-3 py-2 font-mono text-xs font-semibold text-white shadow-[0_0_34px_rgba(79,195,247,0.14)] backdrop-blur-xl sm:left-6">
           {elapsedTime}
         </div>
         <div
@@ -1083,28 +1196,32 @@ function MeetingGrid({
         </div>
       </div>
 
-      <footer className="um-meeting-footer grid min-h-24 shrink-0 grid-cols-1 items-center gap-4 border-t border-[#E7E7E2] bg-white px-4 py-4 text-[#11110F] md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:px-6">
+      <footer className="um-meeting-footer grid min-h-24 shrink-0 grid-cols-1 items-center gap-4 px-4 py-4 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:px-6">
         <div className="hidden min-w-0 md:block">
-          <p className="truncate font-mono text-sm text-[#73736B]">
+          <p className="truncate font-mono text-sm text-[#B8C7D9]">
+            {recordingStatus === "active" ? (
+              <span className="um-rec-dot" aria-label="Gravando" />
+            ) : null}
             {clock || "--:--"} | {elapsedTime} | {meetingId}
           </p>
         </div>
 
         <MeetingControls
+          canEndMeeting={canViewSalesPanel}
+          copiedInviteLink={copiedInviteLink}
           customBackgroundName={customBackgroundName}
           customBackgroundUrl={customBackgroundUrl}
+          onCopyInviteLink={onCopyInviteLink}
           onCustomBackgroundChange={onCustomBackgroundChange}
+          onEndMeeting={onEndMeeting}
+          onOpenChat={onOpenMobileSidePanel}
           setVideoEffect={setVideoEffect}
           isHandRaised={Boolean(raisedHands[room.localParticipant.identity]?.raised)}
           onToggleHand={toggleLocalHand}
           videoEffect={videoEffect}
         />
 
-        <div className="hidden justify-end gap-3 md:flex">
-          <span className="rounded-full border border-[#E7E7E2] bg-[#FCFCFB] px-3 py-2 text-xs text-[#73736B]">
-            Grid
-          </span>
-        </div>
+        <div className="hidden md:block" />
       </footer>
 
       <RoomAudioRenderer />
@@ -1113,18 +1230,28 @@ function MeetingGrid({
 }
 
 function MeetingControls({
+  canEndMeeting,
+  copiedInviteLink,
   customBackgroundName,
   customBackgroundUrl,
   isHandRaised,
+  onCopyInviteLink,
   onCustomBackgroundChange,
+  onEndMeeting,
+  onOpenChat,
   onToggleHand,
   setVideoEffect,
   videoEffect,
 }: {
+  canEndMeeting: boolean;
+  copiedInviteLink: boolean;
   customBackgroundName: string | null;
   customBackgroundUrl: string | null;
   isHandRaised: boolean;
+  onCopyInviteLink: () => void;
   onCustomBackgroundChange: (file: File | null) => void;
+  onEndMeeting: () => void | Promise<void>;
+  onOpenChat: () => void;
   onToggleHand: () => Promise<void> | void;
   setVideoEffect: (effect: VideoEffectMode) => void;
   videoEffect: VideoEffectMode;
@@ -1138,6 +1265,8 @@ function MeetingControls({
   } = useLocalParticipant();
   const [isEffectsOpen, setIsEffectsOpen] = useState(false);
   const [effectStatus, setEffectStatus] = useState<string | null>(null);
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [isLeaveMenuOpen, setIsLeaveMenuOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1177,15 +1306,15 @@ function MeetingControls({
         <div className="um-effects-panel">
           <div className="mb-3 flex items-start justify-between gap-4">
             <div>
-              <p className="font-mono text-xs uppercase text-[#F97316]">
+              <p className="font-mono text-xs uppercase text-[#4FC3F7]">
                 Efeitos
               </p>
-              <p className="mt-1 text-sm font-semibold text-[#11110F]">
+              <p className="mt-1 text-sm font-semibold text-white">
                 {videoEffectLabel(videoEffect)}
               </p>
             </div>
             <button
-              className="rounded-lg border border-[#E7E7E2] bg-white px-3 py-2 text-xs font-bold text-[#11110F] transition hover:border-[#F97316] hover:bg-[#FFF3EA]"
+              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white transition hover:border-[#4FC3F7] hover:bg-[#4FC3F7]/10"
               type="button"
               onClick={() => setIsEffectsOpen(false)}
             >
@@ -1237,15 +1366,6 @@ function MeetingControls({
           <ScreenShareIcon />
         </button>
         <button
-          className={`um-control-button ${videoEffect !== "none" ? "is-on" : ""}`}
-          type="button"
-          aria-label="Abrir efeitos de video"
-          title="Efeitos de video"
-          onClick={() => setIsEffectsOpen((isOpen) => !isOpen)}
-        >
-          <EffectsIcon />
-        </button>
-        <button
           className={`um-control-button ${isHandRaised ? "is-on" : ""}`}
           type="button"
           aria-label={isHandRaised ? "Baixar mao" : "Levantar mao"}
@@ -1255,14 +1375,81 @@ function MeetingControls({
           <HandRaisedIcon />
         </button>
         <button
-          className="um-control-button is-leave"
+          className="um-control-button"
           type="button"
-          aria-label="Sair da reuniao"
-          title="Sair da reuniao"
-          onClick={() => room.disconnect()}
+          aria-label="Abrir chat"
+          title="Chat"
+          onClick={onOpenChat}
         >
-          <LeaveIcon />
+          <ChatIcon />
         </button>
+        <div className="um-control-menu-wrap">
+          <button
+            className={`um-control-button ${isMoreOpen ? "is-on" : ""}`}
+            type="button"
+            aria-label="Mais opcoes"
+            title="Mais opcoes"
+            onClick={() => setIsMoreOpen((isOpen) => !isOpen)}
+          >
+            <MoreIcon />
+          </button>
+          {isMoreOpen ? (
+            <div className="um-control-dropdown">
+              <button
+                type="button"
+                onClick={() => {
+                  onCopyInviteLink();
+                  setIsMoreOpen(false);
+                }}
+              >
+                <LinkIcon />
+                {copiedInviteLink ? "Convite copiado" : "Copiar convite"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEffectsOpen((isOpen) => !isOpen);
+                  setIsMoreOpen(false);
+                }}
+              >
+                <EffectsIcon />
+                Efeitos de video
+              </button>
+            </div>
+          ) : null}
+        </div>
+        <div className="um-control-menu-wrap">
+          <button
+            className="um-control-button is-leave"
+            type="button"
+            aria-label="Sair ou encerrar reuniao"
+            title="Sair ou encerrar"
+            onClick={() => setIsLeaveMenuOpen((isOpen) => !isOpen)}
+          >
+            <LeaveIcon />
+          </button>
+          {isLeaveMenuOpen ? (
+            <div className="um-control-dropdown is-leave-menu">
+              <button type="button" onClick={() => room.disconnect()}>
+                <LeaveIcon />
+                Sair
+              </button>
+              {canEndMeeting ? (
+                <button
+                  className="is-danger"
+                  type="button"
+                  onClick={() => {
+                    setIsLeaveMenuOpen(false);
+                    void onEndMeeting();
+                  }}
+                >
+                  <LeaveIcon />
+                  Encerrar
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -1388,7 +1575,7 @@ function MeetingChatPanel({ participantName }: { participantName: string }) {
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
         {messages.length === 0 ? (
-          <p className="text-sm leading-6 text-[#73736B]">
+          <p className="text-sm leading-6 text-[#B8C7D9]">
             Use o chat para mensagens escritas durante a reuniao. A transcricao
             continua sendo processada em segundo plano pelo Coevo.
           </p>
@@ -1398,23 +1585,23 @@ function MeetingChatPanel({ participantName }: { participantName: string }) {
           <article
             className={`rounded-lg border px-4 py-3 ${
               message.isLocal
-                ? "border-[#FDBA74] bg-[#FFF3EA]"
-                : "border-[#E7E7E2] bg-white"
+                ? "border-[#4FC3F7]/45 bg-[#4FC3F7]/10"
+                : "border-white/10 bg-white/5"
             }`}
             key={message.id}
           >
             <div className="mb-1 flex items-center justify-between gap-3">
-              <p className="truncate text-sm font-semibold text-[#11110F]">
+              <p className="truncate text-sm font-semibold text-white">
                 {message.sender}
               </p>
-              <time className="shrink-0 text-xs text-[#73736B]">
+              <time className="shrink-0 text-xs text-[#B8C7D9]">
                 {new Date(message.createdAt).toLocaleTimeString("pt-BR", {
                   hour: "2-digit",
                   minute: "2-digit",
                 })}
               </time>
             </div>
-            <p className="whitespace-pre-wrap text-sm leading-6 text-[#383832]">
+            <p className="whitespace-pre-wrap text-sm leading-6 text-[#EAF6FF]">
               {message.content}
             </p>
           </article>
@@ -1422,7 +1609,7 @@ function MeetingChatPanel({ participantName }: { participantName: string }) {
       </div>
 
       <form
-        className="border-t border-[#E7E7E2] bg-white p-4"
+        className="border-t border-white/10 bg-[#05070B] p-4"
         onSubmit={sendMessage}
       >
         {sendError ? (
@@ -1432,22 +1619,35 @@ function MeetingChatPanel({ participantName }: { participantName: string }) {
         ) : null}
         <label className="block">
           <span className="sr-only">Mensagem</span>
-          <textarea
-            className="h-24 w-full resize-none rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm text-[#11110F] outline-none transition placeholder:text-[#73736B] focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/15"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder="Escreva uma mensagem..."
-          />
+          <div className="um-chat-compose">
+            <textarea
+              className="h-24 w-full resize-none bg-transparent px-4 py-3 text-sm text-white outline-none placeholder:text-[#7D8CA3]"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder="Escreva uma mensagem..."
+            />
+            <div className="um-chat-compose-footer">
+              <button
+                className="um-chat-icon-button"
+                type="button"
+                aria-label="Adicionar arquivo"
+                title="Adicionar arquivo"
+                disabled
+              >
+                <PlusIcon />
+              </button>
+              <button
+                className="um-chat-icon-button is-send"
+                disabled={!draft.trim()}
+                type="submit"
+                aria-label="Enviar mensagem"
+                title="Enviar mensagem"
+              >
+                <SendIcon />
+              </button>
+            </div>
+          </div>
         </label>
-        <div className="mt-3 flex justify-end">
-          <button
-            className="rounded-lg bg-[#11110F] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#F97316] disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={!draft.trim()}
-            type="submit"
-          >
-            Enviar
-          </button>
-        </div>
       </form>
     </div>
   );
@@ -1474,20 +1674,20 @@ function MeetingSidePanel({
 }) {
   return (
     <aside
-      className={`fixed inset-y-0 right-0 z-40 flex h-full w-full max-w-[360px] min-h-0 flex-col overflow-hidden border-l border-[#E7E7E2] bg-[#FCFCFB] text-[#11110F] shadow-[0_24px_90px_rgba(17,17,15,0.18)] transition-transform duration-200 lg:static lg:z-auto lg:w-auto lg:max-w-none lg:translate-x-0 lg:shadow-none ${
+      className={`um-meeting-side-panel fixed inset-y-0 right-0 z-40 flex h-full w-full max-w-[360px] min-h-0 flex-col overflow-hidden border-l border-white/10 bg-[#070A10] text-white shadow-[0_24px_90px_rgba(0,0,0,0.45)] transition-transform duration-200 lg:static lg:z-auto lg:w-auto lg:max-w-none lg:translate-x-0 lg:shadow-none ${
         isMobileOpen ? "translate-x-0" : "translate-x-full"
       } ${isDesktopVisible ? "lg:flex" : "lg:hidden"}`}
     >
-      <div className="border-b border-[#E7E7E2] bg-white px-5 py-4">
+      <div className="border-b border-white/10 bg-[#070A10] px-5 py-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-[#F97316]">
+            <p className="text-xs font-medium uppercase tracking-wide text-[#4FC3F7]">
               Conversa
             </p>
             <h2 className="mt-1 text-lg font-semibold">Chat da reuniao</h2>
           </div>
           <button
-            className="grid h-10 w-10 place-items-center rounded-lg border border-[#E7E7E2] bg-white text-[#11110F] transition hover:border-[#F97316] hover:bg-[#FFF3EA] lg:hidden"
+            className="grid h-10 w-10 place-items-center rounded-lg border border-white/10 bg-white/5 text-white transition hover:border-[#4FC3F7] hover:bg-[#4FC3F7]/10 lg:hidden"
             type="button"
             aria-label="Fechar painel"
             title="Fechar painel"
@@ -1498,12 +1698,12 @@ function MeetingSidePanel({
         </div>
       </div>
 
-      <div className="flex border-b border-[#E7E7E2] bg-white">
+      <div className="flex border-b border-white/10 bg-[#070A10]">
         <button
           className={`border-b-2 px-5 py-3 text-sm font-medium ${
             sidePanelTab === "chat"
-              ? "border-[#F97316] text-[#11110F]"
-              : "border-transparent text-[#73736B] hover:text-[#11110F]"
+              ? "border-[#4FC3F7] text-white"
+              : "border-transparent text-[#B8C7D9] hover:text-white"
           }`}
           type="button"
           onClick={() => setSidePanelTab("chat")}
@@ -1514,8 +1714,8 @@ function MeetingSidePanel({
           <button
             className={`border-b-2 px-5 py-3 text-sm font-medium ${
               sidePanelTab === "sales"
-                ? "border-[#F97316] text-[#11110F]"
-                : "border-transparent text-[#73736B] hover:text-[#11110F]"
+                ? "border-[#4FC3F7] text-white"
+                : "border-transparent text-[#B8C7D9] hover:text-white"
             }`}
             type="button"
             onClick={() => setSidePanelTab("sales")}
@@ -1532,28 +1732,28 @@ function MeetingSidePanel({
       {sidePanelTab === "sales" && canViewSalesPanel ? (
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
           {recommendations.length === 0 ? (
-            <p className="text-sm leading-6 text-[#73736B]">
+            <p className="text-sm leading-6 text-[#B8C7D9]">
               Cards privados aparecerao aqui quando houver objecao, risco ou
               oportunidade.
             </p>
           ) : (
             recommendations.map((card) => (
               <article
-                className="rounded-md border border-[#FDBA74] bg-[#FFF3EA] px-4 py-3"
+                className="rounded-md border border-[#4FC3F7]/35 bg-[#4FC3F7]/10 px-4 py-3"
                 key={card.id}
               >
                 <div className="mb-2 flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-[#11110F]">
+                  <p className="text-sm font-semibold text-white">
                     {card.title}
                   </p>
-                  <span className="shrink-0 rounded-sm bg-[#F97316] px-2 py-1 text-xs font-medium text-white">
+                  <span className="shrink-0 rounded-sm bg-[#4FC3F7] px-2 py-1 text-xs font-medium text-[#05070B]">
                     {card.kind}
                   </span>
                 </div>
-                <p className="text-sm leading-6 text-[#383832]">
+                <p className="text-sm leading-6 text-[#EAF6FF]">
                   {card.recommendation}
                 </p>
-                <p className="mt-3 border-l-2 border-[#F97316]/60 pl-3 text-xs leading-5 text-[#73736B]">
+                <p className="mt-3 border-l-2 border-[#4FC3F7]/60 pl-3 text-xs leading-5 text-[#B8C7D9]">
                   {card.evidence}
                 </p>
               </article>
@@ -1696,27 +1896,27 @@ function JoinRequestsHostPanel({
   }
 
   return (
-    <div className="absolute left-1/2 top-4 z-30 w-[min(92vw,520px)] -translate-x-1/2 rounded-xl border border-[#FDBA74] bg-white/95 p-3 shadow-[0_24px_90px_rgba(17,17,15,0.16)] backdrop-blur-xl">
-      <p className="px-1 font-mono text-xs uppercase text-[#F97316]">
+    <div className="absolute left-1/2 top-4 z-30 w-[min(92vw,520px)] -translate-x-1/2 rounded-xl border border-[#4FC3F7]/35 bg-[#070A10]/95 p-3 text-white shadow-[0_0_44px_rgba(79,195,247,0.18)] backdrop-blur-xl">
+      <p className="px-1 font-mono text-xs uppercase text-[#4FC3F7]">
         Sala de espera
       </p>
       <div className="mt-2 space-y-2">
         {requests.map((request) => (
           <div
-            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-3 py-2"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2"
             key={request.id}
           >
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold text-[#11110F]">
+              <p className="truncate text-sm font-bold text-white">
                 {request.name}
               </p>
-              <p className="truncate text-xs text-[#73736B]">
+              <p className="truncate text-xs text-[#B8C7D9]">
                 {request.email}
               </p>
             </div>
             <div className="flex gap-2">
               <button
-                className="rounded-lg border border-[#E7E7E2] bg-white px-3 py-2 text-xs font-bold text-[#11110F] transition hover:border-red-300 hover:bg-red-50 disabled:opacity-60"
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white transition hover:border-red-300 hover:bg-red-500/10 disabled:opacity-60"
                 type="button"
                 disabled={busyRequestId === request.id}
                 onClick={() => decideRequest(request.id, "denied")}
@@ -1724,7 +1924,7 @@ function JoinRequestsHostPanel({
                 Recusar
               </button>
               <button
-                className="rounded-lg bg-[#11110F] px-3 py-2 text-xs font-bold text-white transition hover:-translate-y-0.5 disabled:opacity-60"
+                className="rounded-lg bg-[#4FC3F7] px-3 py-2 text-xs font-bold text-[#05070B] transition hover:-translate-y-0.5 hover:shadow-[0_0_24px_rgba(79,195,247,0.35)] disabled:opacity-60"
                 type="button"
                 disabled={busyRequestId === request.id}
                 onClick={() => decideRequest(request.id, "approved")}
@@ -2205,6 +2405,12 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
     router.push("/coevo-meet?ended=true");
   }
 
+  function openChatPanel() {
+    setSidePanelTab("chat");
+    setIsDesktopSidePanelVisible(true);
+    setIsMobileSidePanelOpen(true);
+  }
+
   if (step === "room" && connection) {
     return (
         <LiveKitRoom
@@ -2213,7 +2419,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
           token={connection.token}
           serverUrl={connection.url}
           data-lk-theme="default"
-          className={`um-room-shell h-screen overflow-hidden bg-white text-[#11110F] [height:100dvh] ${
+          className={`um-room-shell h-screen overflow-hidden bg-[#05070B] text-white [height:100dvh] ${
             isDesktopSidePanelVisible ? "" : "is-panel-hidden"
           }`}
           onDisconnected={leaveMeeting}
@@ -2225,91 +2431,20 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
           />
           <section className="relative h-full min-h-0 overflow-hidden">
             <JoinRequestsHostPanel connection={connection} meetingId={meetingId} />
-            <button
-              className="absolute left-4 top-4 z-20 grid h-11 w-11 place-items-center rounded-lg border border-[#E7E7E2] bg-white/90 text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-[#F97316] hover:bg-[#FFF3EA]"
-              type="button"
-              aria-label="Sair da reuniao"
-              title="Sair da reuniao"
-              onClick={leaveMeeting}
-            >
-              <LeaveIcon />
-            </button>
-            {canViewSalesPanel ? (
-              <div className="absolute left-16 top-4 z-20 flex flex-wrap items-center gap-2">
-                <button
-                  className="rounded-lg border border-[#FDBA74] bg-white/90 px-3 py-3 text-xs font-bold text-[#F97316] shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:bg-[#FFF3EA]"
-                  type="button"
-                  aria-label="Copiar convite"
-                  title="Copiar convite"
-                  onClick={copyInviteLink}
-                >
-                  {copiedInviteLink ? "Copiado" : "Convite"}
-                </button>
-                <span
-                  className={`rounded-lg border px-3 py-3 text-xs font-bold shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur ${
-                    recordingStatus === "active"
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                      : recordingStatus === "starting"
-                        ? "border-[#FDBA74] bg-[#FFF3EA] text-[#F97316]"
-                        : recordingStatus === "failed"
-                          ? "border-red-200 bg-red-50 text-red-700"
-                          : "border-[#E7E7E2] bg-white/90 text-[#73736B]"
-                  }`}
-                >
-                  {recordingStatus === "active"
-                    ? "Gravando"
-                    : recordingStatus === "starting"
-                      ? "Iniciando gravacao"
-                      : recordingStatus === "failed"
-                        ? "Gravacao indisponivel"
-                        : "Gravacao"}
-                </span>
-                <button
-                  className="rounded-lg border border-red-200 bg-white/90 px-3 py-3 text-xs font-bold text-red-700 shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:bg-red-50"
-                  type="button"
-                  aria-label="Encerrar reuniao"
-                  title="Encerrar reuniao para todos"
-                  onClick={endMeetingAndLeave}
-                >
-                  Encerrar
-                </button>
-              </div>
-            ) : null}
-            <button
-              className="absolute right-4 top-4 z-20 grid h-11 w-11 place-items-center rounded-lg border border-[#E7E7E2] bg-white/90 text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-[#F97316] hover:bg-[#FFF3EA] lg:hidden"
-              type="button"
-              aria-label="Abrir chat"
-              title="Abrir chat"
-              onClick={() => setIsMobileSidePanelOpen(true)}
-            >
-              <ChatIcon />
-            </button>
-            <button
-              className="absolute right-4 top-4 z-20 hidden h-11 w-11 items-center justify-center rounded-lg border border-[#E7E7E2] bg-white/90 text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-[#F97316] hover:bg-[#FFF3EA] lg:flex"
-              type="button"
-              aria-label={
-                isDesktopSidePanelVisible ? "Ocultar painel" : "Mostrar painel"
-              }
-              title={
-                isDesktopSidePanelVisible ? "Ocultar painel" : "Mostrar painel"
-              }
-              onClick={() =>
-                setIsDesktopSidePanelVisible((isVisible) => !isVisible)
-              }
-            >
-              <span
-                className={`um-panel-toggle-icon ${
-                  isDesktopSidePanelVisible ? "is-open" : "is-closed"
-                }`}
-                aria-hidden="true"
-              />
-            </button>
             <MeetingGrid
+              canViewSalesPanel={canViewSalesPanel}
+              copiedInviteLink={copiedInviteLink}
               customBackgroundName={customBackgroundName}
               customBackgroundUrl={customBackgroundUrl}
+              isDesktopSidePanelVisible={isDesktopSidePanelVisible}
               meetingId={meetingId}
+              onCopyInviteLink={copyInviteLink}
               onCustomBackgroundChange={handleCustomBackgroundChange}
+              onEndMeeting={endMeetingAndLeave}
+              onOpenMobileSidePanel={openChatPanel}
+              recordingStatus={recordingStatus}
               setVideoEffect={setVideoEffect}
+              setIsDesktopSidePanelVisible={setIsDesktopSidePanelVisible}
               videoEffect={videoEffect}
             />
           </section>
