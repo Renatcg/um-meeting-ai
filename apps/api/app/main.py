@@ -43,6 +43,7 @@ from app.database import (
     get_app_user_by_email,
     get_app_user_by_id,
     get_google_calendar_connection,
+    get_meeting_join_request_by_email,
     get_meeting_participant_by_identity,
     has_host_or_commercial_joined,
     init_database,
@@ -60,6 +61,7 @@ from app.database import (
     list_conversation_sessions,
     list_meeting_recordings,
     list_meeting_agent_actions,
+    list_meeting_join_requests,
     list_recent_meetings,
     list_pending_meeting_emails,
     list_meeting_participants,
@@ -71,7 +73,9 @@ from app.database import (
     mark_pending_meeting_email,
     mark_meeting_ended,
     register_meeting_participant,
+    update_meeting_join_request_status,
     update_trial_request,
+    upsert_meeting_join_request,
     upsert_agent_profile,
 )
 from app.email_service import send_meeting_action_email, send_trial_confirmation_email
@@ -98,6 +102,8 @@ from app.models import (
     MeetingEmailActionResponse,
     MeetingInterventionCheckRequest,
     MeetingInterventionCheckResponse,
+    MeetingJoinRequest,
+    MeetingJoinRequestDecision,
     MeetingMemoryItem,
     MeetingMemorySearchRequest,
     MeetingMemorySearchResponse,
@@ -959,6 +965,38 @@ async def create_livekit_token(
             detail="Aguarde o Host ou Comercial entrar para liberar a sala.",
         )
 
+    if payload.role not in ("host", "commercial"):
+        join_request = await get_meeting_join_request_by_email(
+            settings=settings,
+            meeting_id=meeting.id,
+            email=str(payload.email),
+        )
+        if join_request is not None and join_request.status == "denied":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Sua entrada nesta reuniao foi recusada pelo Host.",
+            )
+
+        if join_request is None or join_request.status != "approved":
+            join_request = await upsert_meeting_join_request(
+                settings=settings,
+                meeting_id=meeting.id,
+                name=payload.name,
+                email=str(payload.email),
+                role=payload.role,
+            )
+
+            return LiveKitTokenResponse(
+                token="",
+                url=settings.livekit_url,
+                room=meeting.id,
+                identity="",
+                role=payload.role,
+                participant_access_token="",
+                awaiting_approval=True,
+                join_request_id=join_request.id,
+            )
+
     identity = f"{payload.email}:{uuid4().hex[:8]}"
     participant_access_token = create_participant_access_token(
         settings=settings,
@@ -1006,6 +1044,73 @@ async def create_livekit_token(
         copilot_dispatch_requested=copilot_dispatch_requested,
         copilot_dispatch_error=copilot_dispatch_error,
     )
+
+
+@app.get(
+    "/meetings/{meeting_id}/join-requests",
+    response_model=list[MeetingJoinRequest],
+)
+async def get_join_requests(
+    meeting_id: str,
+    status_filter: str | None = None,
+    claims: ParticipantClaims = Depends(get_participant_claims),
+) -> list[MeetingJoinRequest]:
+    require_sales_panel_access(claims, meeting_id)
+    if status_filter and status_filter not in {"pending", "approved", "denied"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Status de solicitacao invalido.",
+        )
+    return list(
+        await list_meeting_join_requests(
+            settings=settings,
+            meeting_id=meeting_id,
+            status=status_filter,
+        )
+    )
+
+
+@app.get(
+    "/meetings/{meeting_id}/join-requests/{request_id}",
+    response_model=MeetingJoinRequest,
+)
+async def get_join_request_status(
+    meeting_id: str,
+    request_id: int,
+) -> MeetingJoinRequest:
+    requests = await list_meeting_join_requests(settings=settings, meeting_id=meeting_id)
+    for join_request in requests:
+        if join_request.id == request_id:
+            return join_request
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Solicitacao de entrada nao encontrada.",
+    )
+
+
+@app.patch(
+    "/meetings/{meeting_id}/join-requests/{request_id}",
+    response_model=MeetingJoinRequest,
+)
+async def decide_join_request(
+    meeting_id: str,
+    request_id: int,
+    payload: MeetingJoinRequestDecision,
+    claims: ParticipantClaims = Depends(get_participant_claims),
+) -> MeetingJoinRequest:
+    require_sales_panel_access(claims, meeting_id)
+    join_request = await update_meeting_join_request_status(
+        settings=settings,
+        meeting_id=meeting_id,
+        request_id=request_id,
+        status=payload.status,
+    )
+    if join_request is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Solicitacao de entrada nao encontrada.",
+        )
+    return join_request
 
 
 def dedupe_emails(values: list[str]) -> list[str]:

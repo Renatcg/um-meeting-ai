@@ -12,6 +12,7 @@ from app.models import (
     KnowledgeDocument,
     KnowledgeSearchResult,
     Meeting,
+    MeetingJoinRequest,
     MeetingMemoryItem,
     MeetingMemorySearchResult,
     MeetingParticipant,
@@ -196,6 +197,31 @@ ON meeting_participants (meeting_id, joined_at, id);
 CREATE_MEETING_PARTICIPANTS_IDENTITY_INDEX_SQL = """
 CREATE INDEX IF NOT EXISTS idx_meeting_participants_identity
 ON meeting_participants (meeting_id, identity);
+"""
+
+CREATE_MEETING_JOIN_REQUESTS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS meeting_join_requests (
+    id BIGSERIAL PRIMARY KEY,
+    meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('host', 'commercial', 'client', 'observer')),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (
+        status IN ('pending', 'approved', 'denied')
+    ),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
+
+CREATE_MEETING_JOIN_REQUESTS_STATUS_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_meeting_join_requests_status
+ON meeting_join_requests (meeting_id, status, created_at, id);
+"""
+
+CREATE_MEETING_JOIN_REQUESTS_EMAIL_INDEX_SQL = """
+CREATE UNIQUE INDEX IF NOT EXISTS idx_meeting_join_requests_email
+ON meeting_join_requests (meeting_id, lower(email));
 """
 
 CREATE_AGENT_PROFILE_TABLE_SQL = """
@@ -451,6 +477,9 @@ async def init_database(settings: Settings) -> None:
         await conn.execute(ALTER_MEETING_PARTICIPANTS_IDENTITY_SQL)
         await conn.execute(CREATE_MEETING_PARTICIPANTS_INDEX_SQL)
         await conn.execute(CREATE_MEETING_PARTICIPANTS_IDENTITY_INDEX_SQL)
+        await conn.execute(CREATE_MEETING_JOIN_REQUESTS_TABLE_SQL)
+        await conn.execute(CREATE_MEETING_JOIN_REQUESTS_STATUS_INDEX_SQL)
+        await conn.execute(CREATE_MEETING_JOIN_REQUESTS_EMAIL_INDEX_SQL)
         await conn.execute(CREATE_AGENT_PROFILE_TABLE_SQL)
         await conn.execute(CREATE_APP_USERS_TABLE_SQL)
         await conn.execute(CREATE_APP_USERS_EMAIL_INDEX_SQL)
@@ -1950,6 +1979,118 @@ async def has_host_or_commercial_joined(
             row = await cur.fetchone()
 
     return bool(row and row["has_joined"])
+
+
+async def upsert_meeting_join_request(
+    *,
+    settings: Settings,
+    meeting_id: str,
+    name: str,
+    email: str,
+    role: str,
+) -> MeetingJoinRequest:
+    query = """
+    INSERT INTO meeting_join_requests (meeting_id, name, email, role)
+    VALUES (%s, %s, lower(%s), %s)
+    ON CONFLICT (meeting_id, lower(email))
+    DO UPDATE SET
+        name = EXCLUDED.name,
+        role = EXCLUDED.role,
+        status = CASE
+            WHEN meeting_join_requests.status = 'denied' THEN 'pending'
+            ELSE meeting_join_requests.status
+        END,
+        updated_at = now()
+    RETURNING id, meeting_id, name, email, role, status, created_at, updated_at;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (meeting_id, name, email, role))
+            row = await cur.fetchone()
+
+    if row is None:
+        raise RuntimeError("Join request upsert did not return a row.")
+    return MeetingJoinRequest.model_validate(row)
+
+
+async def get_meeting_join_request_by_email(
+    *,
+    settings: Settings,
+    meeting_id: str,
+    email: str,
+) -> MeetingJoinRequest | None:
+    query = """
+    SELECT id, meeting_id, name, email, role, status, created_at, updated_at
+    FROM meeting_join_requests
+    WHERE meeting_id = %s AND lower(email) = lower(%s)
+    LIMIT 1;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (meeting_id, email))
+            row = await cur.fetchone()
+
+    return MeetingJoinRequest.model_validate(row) if row else None
+
+
+async def list_meeting_join_requests(
+    *,
+    settings: Settings,
+    meeting_id: str,
+    status: str | None = None,
+) -> Sequence[MeetingJoinRequest]:
+    status_filter = "AND status = %s" if status else ""
+    query = f"""
+    SELECT id, meeting_id, name, email, role, status, created_at, updated_at
+    FROM meeting_join_requests
+    WHERE meeting_id = %s
+    {status_filter}
+    ORDER BY created_at ASC, id ASC;
+    """
+    params: tuple[object, ...] = (meeting_id, status) if status else (meeting_id,)
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, params)
+            rows = await cur.fetchall()
+
+    return [MeetingJoinRequest.model_validate(row) for row in rows]
+
+
+async def update_meeting_join_request_status(
+    *,
+    settings: Settings,
+    meeting_id: str,
+    request_id: int,
+    status: str,
+) -> MeetingJoinRequest | None:
+    query = """
+    UPDATE meeting_join_requests
+    SET status = %s, updated_at = now()
+    WHERE meeting_id = %s AND id = %s
+    RETURNING id, meeting_id, name, email, role, status, created_at, updated_at;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (status, meeting_id, request_id))
+            row = await cur.fetchone()
+
+    return MeetingJoinRequest.model_validate(row) if row else None
 
 
 async def get_meeting_participant_by_identity(

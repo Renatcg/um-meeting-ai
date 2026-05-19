@@ -5,6 +5,7 @@ import {
   type Dispatch,
   FormEvent,
   type SetStateAction,
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -38,6 +39,19 @@ type TokenResponse = {
   room: string;
   role: ParticipantRole;
   participant_access_token: string;
+  awaiting_approval?: boolean;
+  join_request_id?: number | null;
+};
+
+type MeetingJoinRequest = {
+  id: number;
+  meeting_id: string;
+  name: string;
+  email: string;
+  role: ParticipantRole;
+  status: "pending" | "approved" | "denied";
+  created_at: string;
+  updated_at: string;
 };
 
 type SalesRecommendation = {
@@ -1554,9 +1568,11 @@ function MeetingSidePanel({
 function RecordingStarter({
   connection,
   meetingId,
+  onStatusChange,
 }: {
   connection: TokenResponse;
   meetingId: string;
+  onStatusChange: (status: "idle" | "starting" | "active" | "failed") => void;
 }) {
   const room = useRoomContext();
   const hasRequestedRecording = useRef(false);
@@ -1572,14 +1588,19 @@ function RecordingStarter({
       }
 
       hasRequestedRecording.current = true;
+      onStatusChange("starting");
       void fetch(`${apiUrl}/meetings/${meetingId}/recording/start`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${connection.participant_access_token}`,
         },
-      }).catch(() => {
-        // Recording is best-effort; the meeting should keep running if Egress is unavailable.
-      });
+      })
+        .then((response) => {
+          onStatusChange(response.ok ? "active" : "failed");
+        })
+        .catch(() => {
+          onStatusChange("failed");
+        });
     }
 
     if (room.state === "connected") {
@@ -1590,9 +1611,132 @@ function RecordingStarter({
     return () => {
       room.off(RoomEvent.Connected, requestRecording);
     };
-  }, [connection, meetingId, room]);
+  }, [connection, meetingId, onStatusChange, room]);
 
   return null;
+}
+
+function JoinRequestsHostPanel({
+  connection,
+  meetingId,
+}: {
+  connection: TokenResponse;
+  meetingId: string;
+}) {
+  const [requests, setRequests] = useState<MeetingJoinRequest[]>([]);
+  const [busyRequestId, setBusyRequestId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (connection.role !== "host" && connection.role !== "commercial") {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadRequests() {
+      try {
+        const response = await fetch(
+          `${apiUrl}/meetings/${meetingId}/join-requests?status_filter=pending`,
+          {
+            headers: {
+              Authorization: `Bearer ${connection.participant_access_token}`,
+            },
+          },
+        );
+
+        if (!response.ok) {
+          return;
+        }
+
+        const nextRequests = (await response.json()) as MeetingJoinRequest[];
+        if (!cancelled) {
+          setRequests(nextRequests);
+        }
+      } catch {
+        // Admission polling should not disturb the meeting.
+      }
+    }
+
+    loadRequests();
+    const interval = window.setInterval(loadRequests, 2500);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [connection, meetingId]);
+
+  async function decideRequest(requestId: number, status: "approved" | "denied") {
+    setBusyRequestId(requestId);
+    try {
+      const response = await fetch(
+        `${apiUrl}/meetings/${meetingId}/join-requests/${requestId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${connection.participant_access_token}`,
+          },
+          body: JSON.stringify({ status }),
+        },
+      );
+
+      if (response.ok) {
+        setRequests((current) =>
+          current.filter((request) => request.id !== requestId),
+        );
+      }
+    } finally {
+      setBusyRequestId(null);
+    }
+  }
+
+  if (requests.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="absolute left-1/2 top-4 z-30 w-[min(92vw,520px)] -translate-x-1/2 rounded-xl border border-[#FDBA74] bg-white/95 p-3 shadow-[0_24px_90px_rgba(17,17,15,0.16)] backdrop-blur-xl">
+      <p className="px-1 font-mono text-xs uppercase text-[#F97316]">
+        Sala de espera
+      </p>
+      <div className="mt-2 space-y-2">
+        {requests.map((request) => (
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-3 py-2"
+            key={request.id}
+          >
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold text-[#11110F]">
+                {request.name}
+              </p>
+              <p className="truncate text-xs text-[#73736B]">
+                {request.email}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                className="rounded-lg border border-[#E7E7E2] bg-white px-3 py-2 text-xs font-bold text-[#11110F] transition hover:border-red-300 hover:bg-red-50 disabled:opacity-60"
+                type="button"
+                disabled={busyRequestId === request.id}
+                onClick={() => decideRequest(request.id, "denied")}
+              >
+                Recusar
+              </button>
+              <button
+                className="rounded-lg bg-[#11110F] px-3 py-2 text-xs font-bold text-white transition hover:-translate-y-0.5 disabled:opacity-60"
+                type="button"
+                disabled={busyRequestId === request.id}
+                onClick={() => decideRequest(request.id, "approved")}
+              >
+                Permitir
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function MeetingClient({ meetingId }: { meetingId: string }) {
@@ -1613,6 +1757,13 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
   const [isMobileSidePanelOpen, setIsMobileSidePanelOpen] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [waitingJoinRequestId, setWaitingJoinRequestId] = useState<number | null>(
+    null,
+  );
+  const [waitingMessage, setWaitingMessage] = useState<string | null>(null);
+  const [recordingStatus, setRecordingStatus] = useState<
+    "idle" | "starting" | "active" | "failed"
+  >("idle");
   const [isHostCreator, setIsHostCreator] = useState<boolean | null>(null);
   const [meetingTitle, setMeetingTitle] = useState("");
   const [inviteLink, setInviteLink] = useState("");
@@ -1791,6 +1942,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
   async function joinMeeting(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setWaitingMessage(null);
 
     if (!entryContextReady) {
       setError("Aguarde um instante enquanto preparamos a sala.");
@@ -1828,6 +1980,12 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
       }
 
       const tokenResponse = (await response.json()) as TokenResponse;
+      if (tokenResponse.awaiting_approval && tokenResponse.join_request_id) {
+        setWaitingJoinRequestId(tokenResponse.join_request_id);
+        setWaitingMessage("Aguardando o Host permitir sua entrada.");
+        return;
+      }
+
       previewStreamRef.current?.getTracks().forEach((track) => track.stop());
       previewStreamRef.current = null;
       setConnection(tokenResponse);
@@ -1838,6 +1996,82 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
       setIsJoining(false);
     }
   }
+
+  const requestRoomTokenAfterApproval = useCallback(async () => {
+    const response = await fetch(`${apiUrl}/meetings/${meetingId}/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: participant.name,
+        email: participant.email,
+        role: inferredRole,
+        lgpd_accepted: acceptedLgpd,
+      }),
+    });
+
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as {
+        detail?: string;
+      } | null;
+      throw new Error(body?.detail ?? "Nao foi possivel entrar na reuniao.");
+    }
+
+    const tokenResponse = (await response.json()) as TokenResponse;
+    if (tokenResponse.awaiting_approval) {
+      return;
+    }
+
+    previewStreamRef.current?.getTracks().forEach((track) => track.stop());
+    previewStreamRef.current = null;
+    setConnection(tokenResponse);
+    setWaitingJoinRequestId(null);
+    setWaitingMessage(null);
+    setStep("room");
+  }, [acceptedLgpd, inferredRole, meetingId, participant.email, participant.name]);
+
+  useEffect(() => {
+    if (!waitingJoinRequestId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function pollApproval() {
+      try {
+        const response = await fetch(
+          `${apiUrl}/meetings/${meetingId}/join-requests/${waitingJoinRequestId}`,
+        );
+
+        if (!response.ok) {
+          return;
+        }
+
+        const joinRequest = (await response.json()) as MeetingJoinRequest;
+        if (cancelled) {
+          return;
+        }
+
+        if (joinRequest.status === "approved") {
+          setWaitingMessage("Entrada aprovada. Conectando...");
+          await requestRoomTokenAfterApproval();
+        } else if (joinRequest.status === "denied") {
+          setWaitingJoinRequestId(null);
+          setWaitingMessage(null);
+          setError("Sua entrada foi recusada pelo Host.");
+        }
+      } catch {
+        // Keep waiting; the next polling cycle can recover.
+      }
+    }
+
+    pollApproval();
+    const interval = window.setInterval(pollApproval, 2500);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [meetingId, requestRoomTokenAfterApproval, waitingJoinRequestId]);
 
   async function uploadKnowledgeText(filename: string, content: string) {
     const trimmedContent = content.trim();
@@ -1929,7 +2163,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
     router.push("/");
   }
 
-  function endMeetingIfGatekeeper(currentConnection = connection) {
+  async function endMeeting(currentConnection = connection) {
     if (
       !currentConnection ||
       (currentConnection.role !== "host" && currentConnection.role !== "commercial")
@@ -1937,39 +2171,39 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
       return;
     }
 
-    void fetch(`${apiUrl}/meetings/${meetingId}/end`, {
+    await fetch(`${apiUrl}/meetings/${meetingId}/end`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${currentConnection.participant_access_token}`,
       },
-      keepalive: true,
-    }).catch(() => {
-      // Leaving the room should not be blocked if the expiration ping fails.
     });
   }
 
   function leaveMeeting() {
-    endMeetingIfGatekeeper();
     setConnection(null);
     setStep("lobby");
     router.push("/coevo-meet?ended=true");
   }
 
-  useEffect(() => {
-    if (step !== "room" || !connection) {
+  async function endMeetingAndLeave() {
+    const shouldEnd = window.confirm(
+      "Encerrar a reuniao para todos os participantes?",
+    );
+    if (!shouldEnd) {
       return;
     }
 
-    function handlePageHide() {
-      endMeetingIfGatekeeper(connection);
+    try {
+      await endMeeting();
+    } catch {
+      setError("Nao foi possivel encerrar a reuniao agora.");
+      return;
     }
 
-    window.addEventListener("pagehide", handlePageHide);
-
-    return () => {
-      window.removeEventListener("pagehide", handlePageHide);
-    };
-  }, [connection, meetingId, step]);
+    setConnection(null);
+    setStep("lobby");
+    router.push("/coevo-meet?ended=true");
+  }
 
   if (step === "room" && connection) {
     return (
@@ -1984,8 +2218,13 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
           }`}
           onDisconnected={leaveMeeting}
         >
-          <RecordingStarter connection={connection} meetingId={meetingId} />
+          <RecordingStarter
+            connection={connection}
+            meetingId={meetingId}
+            onStatusChange={setRecordingStatus}
+          />
           <section className="relative h-full min-h-0 overflow-hidden">
+            <JoinRequestsHostPanel connection={connection} meetingId={meetingId} />
             <button
               className="absolute left-4 top-4 z-20 grid h-11 w-11 place-items-center rounded-lg border border-[#E7E7E2] bg-white/90 text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-[#F97316] hover:bg-[#FFF3EA]"
               type="button"
@@ -1995,6 +2234,47 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
             >
               <LeaveIcon />
             </button>
+            {canViewSalesPanel ? (
+              <div className="absolute left-16 top-4 z-20 flex flex-wrap items-center gap-2">
+                <button
+                  className="rounded-lg border border-[#FDBA74] bg-white/90 px-3 py-3 text-xs font-bold text-[#F97316] shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:bg-[#FFF3EA]"
+                  type="button"
+                  aria-label="Copiar convite"
+                  title="Copiar convite"
+                  onClick={copyInviteLink}
+                >
+                  {copiedInviteLink ? "Copiado" : "Convite"}
+                </button>
+                <span
+                  className={`rounded-lg border px-3 py-3 text-xs font-bold shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur ${
+                    recordingStatus === "active"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : recordingStatus === "starting"
+                        ? "border-[#FDBA74] bg-[#FFF3EA] text-[#F97316]"
+                        : recordingStatus === "failed"
+                          ? "border-red-200 bg-red-50 text-red-700"
+                          : "border-[#E7E7E2] bg-white/90 text-[#73736B]"
+                  }`}
+                >
+                  {recordingStatus === "active"
+                    ? "Gravando"
+                    : recordingStatus === "starting"
+                      ? "Iniciando gravacao"
+                      : recordingStatus === "failed"
+                        ? "Gravacao indisponivel"
+                        : "Gravacao"}
+                </span>
+                <button
+                  className="rounded-lg border border-red-200 bg-white/90 px-3 py-3 text-xs font-bold text-red-700 shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:bg-red-50"
+                  type="button"
+                  aria-label="Encerrar reuniao"
+                  title="Encerrar reuniao para todos"
+                  onClick={endMeetingAndLeave}
+                >
+                  Encerrar
+                </button>
+              </div>
+            ) : null}
             <button
               className="absolute right-4 top-4 z-20 grid h-11 w-11 place-items-center rounded-lg border border-[#E7E7E2] bg-white/90 text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] backdrop-blur transition duration-200 hover:-translate-y-0.5 hover:border-[#F97316] hover:bg-[#FFF3EA] lg:hidden"
               type="button"
@@ -2329,13 +2609,37 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
           </p>
         ) : null}
 
+        {waitingMessage ? (
+          <div className="mt-4 rounded-lg border border-[#FDBA74] bg-[#FFF3EA] px-4 py-3">
+            <p className="font-mono text-xs uppercase text-[#F97316]">
+              Sala de espera
+            </p>
+            <p className="mt-1 text-sm font-semibold text-[#11110F]">
+              {waitingMessage}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-[#73736B]">
+              Mantenha esta tela aberta. Assim que o Host liberar, voce entra
+              automaticamente.
+            </p>
+          </div>
+        ) : null}
+
         <div className="mt-6 flex justify-end">
           <button
             className="rounded-lg bg-[#11110F] px-6 py-3 font-bold text-white shadow-[0_20px_70px_rgba(249,115,22,0.22)] transition hover:translate-y-[-1px] disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={isJoining || !acceptedLgpd || !entryContextReady}
+            disabled={
+              isJoining ||
+              Boolean(waitingJoinRequestId) ||
+              !acceptedLgpd ||
+              !entryContextReady
+            }
             type="submit"
           >
-            {isJoining ? "Entrando..." : "Entrar na sala"}
+            {waitingJoinRequestId
+              ? "Aguardando permissao..."
+              : isJoining
+                ? "Entrando..."
+                : "Entrar na sala"}
           </button>
         </div>
       </form>

@@ -5,6 +5,7 @@ from uuid import uuid4
 from pydantic import BaseModel, EmailStr, Field
 
 ParticipantRole = Literal["host", "commercial", "client", "observer"]
+JoinRequestStatus = Literal["pending", "approved", "denied"]
 RecommendationKind = Literal["objection", "risk", "opportunity"]
 RecommendationSeverity = Literal["low", "medium", "high"]
 AgentGender = Literal["masculine", "feminine", "neutral"]
@@ -158,6 +159,23 @@ class LiveKitTokenResponse(BaseModel):
     participant_access_token: str
     copilot_dispatch_requested: bool = False
     copilot_dispatch_error: str | None = None
+    awaiting_approval: bool = False
+    join_request_id: int | None = None
+
+
+class MeetingJoinRequest(BaseModel):
+    id: int
+    meeting_id: str
+    name: str
+    email: EmailStr
+    role: ParticipantRole
+    status: JoinRequestStatus
+    created_at: datetime
+    updated_at: datetime
+
+
+class MeetingJoinRequestDecision(BaseModel):
+    status: Literal["approved", "denied"]
 
 
 class TranscriptSegmentCreate(BaseModel):
