@@ -402,24 +402,6 @@ function ChatIcon() {
   );
 }
 
-function MoreIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      className="um-control-icon"
-      fill="none"
-      viewBox="0 0 24 24"
-    >
-      <path
-        d="M6.4 12h.1M12 12h.1M17.6 12h.1"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeWidth="2.8"
-      />
-    </svg>
-  );
-}
-
 function LinkIcon() {
   return (
     <svg
@@ -914,6 +896,7 @@ function MeetingGrid({
   onCopyInviteLink,
   onCustomBackgroundChange,
   onEndMeeting,
+  onLeaveMeeting,
   onOpenMobileSidePanel,
   recordingStatus,
   setVideoEffect,
@@ -929,6 +912,7 @@ function MeetingGrid({
   onCopyInviteLink: () => void;
   onCustomBackgroundChange: (file: File | null) => void;
   onEndMeeting: () => void | Promise<void>;
+  onLeaveMeeting: () => void;
   onOpenMobileSidePanel: () => void;
   recordingStatus: "idle" | "starting" | "active" | "failed";
   setVideoEffect: (effect: VideoEffectMode) => void;
@@ -1198,22 +1182,32 @@ function MeetingGrid({
 
       <footer className="um-meeting-footer grid min-h-24 shrink-0 grid-cols-1 items-center gap-4 px-4 py-4 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:px-6">
         <div className="hidden min-w-0 md:block">
-          <p className="truncate font-mono text-sm text-[#B8C7D9]">
+          <p className="flex min-w-0 items-center gap-2 truncate font-mono text-sm text-[#B8C7D9]">
             {recordingStatus === "active" ? (
               <span className="um-rec-dot" aria-label="Gravando" />
             ) : null}
-            {clock || "--:--"} | {elapsedTime} | {meetingId}
+            <span className="truncate">
+              {clock || "--:--"} | {elapsedTime} | {meetingId}
+            </span>
+            <button
+              className="um-copy-link-button"
+              type="button"
+              aria-label="Copiar link da reuniao"
+              title={copiedInviteLink ? "Link copiado" : "Copiar link da reuniao"}
+              onClick={onCopyInviteLink}
+            >
+              <LinkIcon />
+            </button>
           </p>
         </div>
 
         <MeetingControls
           canEndMeeting={canViewSalesPanel}
-          copiedInviteLink={copiedInviteLink}
           customBackgroundName={customBackgroundName}
           customBackgroundUrl={customBackgroundUrl}
-          onCopyInviteLink={onCopyInviteLink}
           onCustomBackgroundChange={onCustomBackgroundChange}
           onEndMeeting={onEndMeeting}
+          onLeaveMeeting={onLeaveMeeting}
           onOpenChat={onOpenMobileSidePanel}
           setVideoEffect={setVideoEffect}
           isHandRaised={Boolean(raisedHands[room.localParticipant.identity]?.raised)}
@@ -1231,26 +1225,24 @@ function MeetingGrid({
 
 function MeetingControls({
   canEndMeeting,
-  copiedInviteLink,
   customBackgroundName,
   customBackgroundUrl,
   isHandRaised,
-  onCopyInviteLink,
   onCustomBackgroundChange,
   onEndMeeting,
+  onLeaveMeeting,
   onOpenChat,
   onToggleHand,
   setVideoEffect,
   videoEffect,
 }: {
   canEndMeeting: boolean;
-  copiedInviteLink: boolean;
   customBackgroundName: string | null;
   customBackgroundUrl: string | null;
   isHandRaised: boolean;
-  onCopyInviteLink: () => void;
   onCustomBackgroundChange: (file: File | null) => void;
   onEndMeeting: () => void | Promise<void>;
+  onLeaveMeeting: () => void;
   onOpenChat: () => void;
   onToggleHand: () => Promise<void> | void;
   setVideoEffect: (effect: VideoEffectMode) => void;
@@ -1265,7 +1257,6 @@ function MeetingControls({
   } = useLocalParticipant();
   const [isEffectsOpen, setIsEffectsOpen] = useState(false);
   const [effectStatus, setEffectStatus] = useState<string | null>(null);
-  const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [isLeaveMenuOpen, setIsLeaveMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -1366,6 +1357,15 @@ function MeetingControls({
           <ScreenShareIcon />
         </button>
         <button
+          className={`um-control-button ${videoEffect !== "none" ? "is-on" : ""}`}
+          type="button"
+          aria-label="Abrir efeitos de video"
+          title="Efeitos de video"
+          onClick={() => setIsEffectsOpen((isOpen) => !isOpen)}
+        >
+          <EffectsIcon />
+        </button>
+        <button
           className={`um-control-button ${isHandRaised ? "is-on" : ""}`}
           type="button"
           aria-label={isHandRaised ? "Baixar mao" : "Levantar mao"}
@@ -1385,41 +1385,6 @@ function MeetingControls({
         </button>
         <div className="um-control-menu-wrap">
           <button
-            className={`um-control-button ${isMoreOpen ? "is-on" : ""}`}
-            type="button"
-            aria-label="Mais opcoes"
-            title="Mais opcoes"
-            onClick={() => setIsMoreOpen((isOpen) => !isOpen)}
-          >
-            <MoreIcon />
-          </button>
-          {isMoreOpen ? (
-            <div className="um-control-dropdown">
-              <button
-                type="button"
-                onClick={() => {
-                  onCopyInviteLink();
-                  setIsMoreOpen(false);
-                }}
-              >
-                <LinkIcon />
-                {copiedInviteLink ? "Convite copiado" : "Copiar convite"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsEffectsOpen((isOpen) => !isOpen);
-                  setIsMoreOpen(false);
-                }}
-              >
-                <EffectsIcon />
-                Efeitos de video
-              </button>
-            </div>
-          ) : null}
-        </div>
-        <div className="um-control-menu-wrap">
-          <button
             className="um-control-button is-leave"
             type="button"
             aria-label="Sair ou encerrar reuniao"
@@ -1430,7 +1395,14 @@ function MeetingControls({
           </button>
           {isLeaveMenuOpen ? (
             <div className="um-control-dropdown is-leave-menu">
-              <button type="button" onClick={() => room.disconnect()}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsLeaveMenuOpen(false);
+                  room.disconnect();
+                  onLeaveMeeting();
+                }}
+              >
                 <LeaveIcon />
                 Sair
               </button>
@@ -2441,6 +2413,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
               onCopyInviteLink={copyInviteLink}
               onCustomBackgroundChange={handleCustomBackgroundChange}
               onEndMeeting={endMeetingAndLeave}
+              onLeaveMeeting={leaveMeeting}
               onOpenMobileSidePanel={openChatPanel}
               recordingStatus={recordingStatus}
               setVideoEffect={setVideoEffect}

@@ -272,6 +272,35 @@
   animation: coevo-rec-pulse 1.45s ease-out infinite;
 }
 
+.lk-room-container.um-room-shell .um-copy-link-button {
+  display: inline-grid;
+  width: 1.85rem;
+  height: 1.85rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(79, 195, 247, 0.28);
+  border-radius: 999px;
+  background: rgba(79, 195, 247, 0.1);
+  color: var(--room-blue);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.lk-room-container.um-room-shell .um-copy-link-button:hover {
+  transform: translateY(-1px);
+  border-color: var(--room-blue);
+  background: rgba(79, 195, 247, 0.16);
+  box-shadow: 0 0 20px rgba(79, 195, 247, 0.24);
+}
+
+.lk-room-container.um-room-shell .um-copy-link-button .um-control-icon {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
 @keyframes coevo-rec-pulse {
   0% {
     box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.72);
