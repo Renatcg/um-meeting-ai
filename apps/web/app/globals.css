@@ -612,7 +612,7 @@ select {
 
 .um-meeting-footer {
   position: relative;
-  z-index: 8;
+  z-index: 60;
   overflow: visible;
 }
 
@@ -754,6 +754,37 @@ select {
   overflow: hidden;
   border-radius: 0.75rem;
   background: #11110f;
+}
+
+.um-screen-share-tile.is-local-share {
+  display: grid;
+  place-items: center;
+  gap: 1rem;
+  padding: 1.5rem;
+  text-align: center;
+  color: #ffffff;
+}
+
+.um-screen-share-tile.is-local-share .um-control-icon {
+  width: clamp(3rem, 8vw, 5rem);
+  height: clamp(3rem, 8vw, 5rem);
+  color: #4fc3f7;
+  filter: drop-shadow(0 0 18px rgba(79, 195, 247, 0.28));
+}
+
+.um-screen-share-tile.is-local-share p {
+  margin: 0;
+  font-size: clamp(1rem, 1.4vw, 1.3rem);
+  font-weight: 800;
+}
+
+.um-screen-share-tile.is-local-share span {
+  display: block;
+  max-width: 28rem;
+  margin-top: 0.45rem;
+  color: #b8c7d9;
+  font-size: 0.875rem;
+  line-height: 1.5;
 }
 
 .um-screen-share-tile .lk-participant-tile {
@@ -1266,7 +1297,7 @@ select {
   display: flex;
   min-width: 0;
   justify-content: center;
-  overflow-x: auto;
+  overflow: visible;
   align-items: center;
   gap: 0.75rem;
   padding: 0.125rem;

@@ -385,30 +385,6 @@ function LeaveIcon() {
   );
 }
 
-function ChatIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      className="um-control-icon"
-      fill="none"
-      viewBox="0 0 24 24"
-    >
-      <path
-        d="M5.5 6.2A2.2 2.2 0 0 1 7.7 4h8.6a2.2 2.2 0 0 1 2.2 2.2v6.5a2.2 2.2 0 0 1-2.2 2.2h-4.7L7.2 19v-4.1A2.2 2.2 0 0 1 5.5 12.7V6.2Z"
-        stroke="currentColor"
-        strokeLinejoin="round"
-        strokeWidth="1.9"
-      />
-      <path
-        d="M8.7 8.1h6.6M8.7 11.1h4.4"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeWidth="1.9"
-      />
-    </svg>
-  );
-}
-
 function LinkIcon() {
   return (
     <svg
@@ -695,6 +671,9 @@ function AgentPresence() {
 function MeetingParticipantTile(props: MeetingParticipantTileProps) {
   const participant = props.agentParticipant ?? props.trackRef?.participant;
   const isAgent = isAgentParticipant(participant?.name, participant?.identity);
+  const isLocalScreenShare =
+    props.trackRef?.source === Track.Source.ScreenShare &&
+    Boolean(props.trackRef?.participant.isLocal);
   const tileRef = useRef<HTMLDivElement | null>(null);
   const handRaised = Boolean(props.handRaised?.raised);
   const { agentParticipant: _agentParticipant, handRaised: _handRaised, ...tileProps } =
@@ -718,6 +697,21 @@ function MeetingParticipantTile(props: MeetingParticipantTileProps) {
               <HandRaisedIcon />
             </span>
           ) : null}
+        </div>
+      );
+    }
+
+    if (isLocalScreenShare) {
+      return (
+        <div className="um-screen-share-tile is-local-share">
+          <ScreenShareIcon />
+          <div>
+            <p>Voce esta compartilhando a tela</p>
+            <span>
+              Para evitar espelhamento infinito, sua propria apresentacao fica
+              oculta aqui.
+            </span>
+          </div>
         </div>
       );
     }
@@ -814,18 +808,16 @@ function PreviewTrackPublisher({
       hasPublishedRef.current = true;
       const publisher = room.localParticipant as unknown as LocalParticipantWithPublish;
 
-      const tracks = previewStream.getTracks();
+      const tracks = previewStream.getVideoTracks();
       const results = await Promise.allSettled(
         tracks.map((track) =>
           publisher.publishTrack(track, {
-            source:
-              track.kind === "audio"
-                ? Track.Source.Microphone
-                : Track.Source.Camera,
+            source: Track.Source.Camera,
           }),
         ),
       );
       if (results.some((result) => result.status === "fulfilled")) {
+        previewStream.getAudioTracks().forEach((track) => track.stop());
         onPublished();
       } else {
         hasPublishedRef.current = false;
@@ -983,7 +975,6 @@ function MeetingGrid({
   onCustomBackgroundChange,
   onEndMeeting,
   onLeaveMeeting,
-  onOpenMobileSidePanel,
   participantName,
   previewStream,
   recordingStatus,
@@ -1001,7 +992,6 @@ function MeetingGrid({
   onCustomBackgroundChange: (file: File | null) => void;
   onEndMeeting: () => void | Promise<void>;
   onLeaveMeeting: () => void;
-  onOpenMobileSidePanel: () => void;
   participantName: string;
   previewStream: MediaStream | null;
   recordingStatus: "idle" | "starting" | "active" | "failed";
@@ -1313,7 +1303,6 @@ function MeetingGrid({
           onEndMeeting={onEndMeeting}
           onEffectTransitionChange={setIsVideoEffectTransitioning}
           onLeaveMeeting={onLeaveMeeting}
-          onOpenChat={onOpenMobileSidePanel}
           setVideoEffect={setVideoEffect}
           isHandRaised={Boolean(raisedHands[room.localParticipant.identity]?.raised)}
           onToggleHand={toggleLocalHand}
@@ -1337,7 +1326,6 @@ function MeetingControls({
   onEndMeeting,
   onEffectTransitionChange,
   onLeaveMeeting,
-  onOpenChat,
   onToggleHand,
   setVideoEffect,
   videoEffect,
@@ -1350,12 +1338,10 @@ function MeetingControls({
   onEndMeeting: () => void | Promise<void>;
   onEffectTransitionChange: (isTransitioning: boolean) => void;
   onLeaveMeeting: () => void;
-  onOpenChat: () => void;
   onToggleHand: () => Promise<void> | void;
   setVideoEffect: (effect: VideoEffectMode) => void;
   videoEffect: VideoEffectMode;
 }) {
-  const room = useRoomContext();
   const {
     isMicrophoneEnabled,
     isCameraEnabled,
@@ -1499,15 +1485,6 @@ function MeetingControls({
         >
           <HandRaisedIcon />
         </button>
-        <button
-          className="um-control-button"
-          type="button"
-          aria-label="Abrir chat"
-          title="Chat"
-          onClick={onOpenChat}
-        >
-          <ChatIcon />
-        </button>
         <div className="um-control-menu-wrap">
           <button
             className="um-control-button is-leave"
@@ -1524,7 +1501,6 @@ function MeetingControls({
                 type="button"
                 onClick={() => {
                   setIsLeaveMenuOpen(false);
-                  room.disconnect();
                   onLeaveMeeting();
                 }}
               >
@@ -2523,16 +2499,10 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
     router.push("/coevo-meet?ended=true");
   }
 
-  function openChatPanel() {
-    setSidePanelTab("chat");
-    setIsDesktopSidePanelVisible(true);
-    setIsMobileSidePanelOpen(true);
-  }
-
   if (step === "room" && connection) {
     return (
         <LiveKitRoom
-          audio={!previewStream || previewStream.getAudioTracks().length === 0}
+          audio
           video={!previewStream || previewStream.getVideoTracks().length === 0}
           token={connection.token}
           serverUrl={connection.url}
@@ -2564,7 +2534,6 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
               onCustomBackgroundChange={handleCustomBackgroundChange}
               onEndMeeting={endMeetingAndLeave}
               onLeaveMeeting={leaveMeeting}
-              onOpenMobileSidePanel={openChatPanel}
               participantName={participant.name}
               previewStream={previewStream}
               recordingStatus={recordingStatus}
