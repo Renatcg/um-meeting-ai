@@ -71,6 +71,43 @@
   color: #ffffff;
 }
 
+.lk-room-container.um-room-shell .um-local-preview-tile {
+  overflow: hidden;
+}
+
+.lk-room-container.um-room-shell .um-local-preview-tile video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.lk-room-container.um-room-shell .um-video-effect-mask {
+  position: absolute;
+  inset: 1rem 1.5rem 7rem;
+  z-index: 20;
+  pointer-events: none;
+  border-radius: 0.875rem;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(79, 195, 247, 0.16), transparent 42%),
+    rgba(5, 7, 11, 0.42);
+  opacity: 0;
+  animation: coevo-video-effect-mask 240ms ease-out;
+  backdrop-filter: blur(8px);
+}
+
+@keyframes coevo-video-effect-mask {
+  0% {
+    opacity: 0;
+  }
+  24% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 .lk-room-container.um-room-shell .um-side-panel-toggle {
   position: absolute;
   top: 50%;

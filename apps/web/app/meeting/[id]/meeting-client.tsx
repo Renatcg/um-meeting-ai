@@ -132,6 +132,13 @@ type LocalVideoTrackWithProcessor = {
   stopProcessor?: () => Promise<void> | void;
 };
 
+type LocalParticipantWithPublish = {
+  publishTrack: (
+    track: MediaStreamTrack,
+    options?: { source?: Track.Source },
+  ) => Promise<unknown> | unknown;
+};
+
 type TrackProcessorsModule = {
   BackgroundBlur?: (blurRadius?: number) => unknown;
   BackgroundProcessor?: (options: {
@@ -759,6 +766,85 @@ function MeetingParticipantTile(props: MeetingParticipantTileProps) {
   );
 }
 
+function LocalPreviewTile({
+  participantName,
+  stream,
+}: {
+  participantName: string;
+  stream: MediaStream;
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream]);
+
+  return (
+    <div className="um-participant-tile-wrap um-local-preview-tile">
+      <video ref={videoRef} autoPlay muted playsInline />
+      <span className="lk-participant-name">
+        {participantName || "Voce"}
+      </span>
+    </div>
+  );
+}
+
+function PreviewTrackPublisher({
+  onPublished,
+  previewStream,
+}: {
+  onPublished: () => void;
+  previewStream: MediaStream | null;
+}) {
+  const room = useRoomContext();
+  const hasPublishedRef = useRef(false);
+
+  useEffect(() => {
+    if (!previewStream || hasPublishedRef.current) {
+      return;
+    }
+
+    async function publishPreviewTracks() {
+      if (!previewStream || hasPublishedRef.current) {
+        return;
+      }
+
+      hasPublishedRef.current = true;
+      const publisher = room.localParticipant as unknown as LocalParticipantWithPublish;
+
+      const tracks = previewStream.getTracks();
+      const results = await Promise.allSettled(
+        tracks.map((track) =>
+          publisher.publishTrack(track, {
+            source:
+              track.kind === "audio"
+                ? Track.Source.Microphone
+                : Track.Source.Camera,
+          }),
+        ),
+      );
+      if (results.some((result) => result.status === "fulfilled")) {
+        onPublished();
+      } else {
+        hasPublishedRef.current = false;
+      }
+    }
+
+    if (room.state === "connected") {
+      void publishPreviewTracks();
+    }
+
+    room.on(RoomEvent.Connected, publishPreviewTracks);
+    return () => {
+      room.off(RoomEvent.Connected, publishPreviewTracks);
+    };
+  }, [onPublished, previewStream, room]);
+
+  return null;
+}
+
 function trackKey(trackRef: MeetingParticipantTileProps["trackRef"], fallback: string) {
   return `${trackRef?.participant?.identity ?? fallback}-${trackRef?.source ?? fallback}`;
 }
@@ -898,6 +984,8 @@ function MeetingGrid({
   onEndMeeting,
   onLeaveMeeting,
   onOpenMobileSidePanel,
+  participantName,
+  previewStream,
   recordingStatus,
   setVideoEffect,
   setIsDesktopSidePanelVisible,
@@ -914,6 +1002,8 @@ function MeetingGrid({
   onEndMeeting: () => void | Promise<void>;
   onLeaveMeeting: () => void;
   onOpenMobileSidePanel: () => void;
+  participantName: string;
+  previewStream: MediaStream | null;
   recordingStatus: "idle" | "starting" | "active" | "failed";
   setVideoEffect: (effect: VideoEffectMode) => void;
   setIsDesktopSidePanelVisible: Dispatch<SetStateAction<boolean>>;
@@ -925,6 +1015,8 @@ function MeetingGrid({
   const [desktopPage, setDesktopPage] = useState(0);
   const [mobilePage, setMobilePage] = useState(0);
   const [raisedHands, setRaisedHands] = useState<Record<string, RaisedHandState>>({});
+  const [isVideoEffectTransitioning, setIsVideoEffectTransitioning] =
+    useState(false);
   const participants = useParticipants();
   const tracks = useTracks(
     [
@@ -978,6 +1070,7 @@ function MeetingGrid({
     mobilePage * pageSize,
     mobilePage * pageSize + pageSize,
   );
+  const shouldShowLocalPreview = Boolean(previewStream) && !localCameraTrack;
 
   useEffect(() => {
     function updateClock() {
@@ -1138,9 +1231,14 @@ function MeetingGrid({
         <div className="absolute left-4 top-4 z-10 rounded-full border border-[#4FC3F7]/25 bg-[#070A10]/88 px-3 py-2 font-mono text-xs font-semibold text-white shadow-[0_0_34px_rgba(79,195,247,0.14)] backdrop-blur-xl sm:left-6">
           {elapsedTime}
         </div>
-        <div
-          className={`um-meeting-grid um-desktop-grid h-full min-h-0 ${desktopGridDensity}`}
-        >
+        {isVideoEffectTransitioning ? <div className="um-video-effect-mask" /> : null}
+        <div className={`um-meeting-grid um-desktop-grid h-full min-h-0 ${desktopGridDensity}`}>
+          {shouldShowLocalPreview && previewStream ? (
+            <LocalPreviewTile
+              participantName={participantName}
+              stream={previewStream}
+            />
+          ) : null}
           {visibleDesktopTiles.map((tile) => renderMeetingTile(tile, raisedHands))}
         </div>
         <TilePagination
@@ -1152,8 +1250,14 @@ function MeetingGrid({
         />
 
         <div className="um-mobile-video-stage">
-          {mobileTiles.length > 0 ? (
+          {mobileTiles.length > 0 || shouldShowLocalPreview ? (
             <div className="um-meeting-grid um-mobile-grid h-full min-h-0">
+              {shouldShowLocalPreview && previewStream ? (
+                <LocalPreviewTile
+                  participantName={participantName}
+                  stream={previewStream}
+                />
+              ) : null}
               {visibleMobileTiles.map((tile) => renderMeetingTile(tile, raisedHands))}
             </div>
           ) : (
@@ -1207,6 +1311,7 @@ function MeetingGrid({
           customBackgroundUrl={customBackgroundUrl}
           onCustomBackgroundChange={onCustomBackgroundChange}
           onEndMeeting={onEndMeeting}
+          onEffectTransitionChange={setIsVideoEffectTransitioning}
           onLeaveMeeting={onLeaveMeeting}
           onOpenChat={onOpenMobileSidePanel}
           setVideoEffect={setVideoEffect}
@@ -1230,6 +1335,7 @@ function MeetingControls({
   isHandRaised,
   onCustomBackgroundChange,
   onEndMeeting,
+  onEffectTransitionChange,
   onLeaveMeeting,
   onOpenChat,
   onToggleHand,
@@ -1242,6 +1348,7 @@ function MeetingControls({
   isHandRaised: boolean;
   onCustomBackgroundChange: (file: File | null) => void;
   onEndMeeting: () => void | Promise<void>;
+  onEffectTransitionChange: (isTransitioning: boolean) => void;
   onLeaveMeeting: () => void;
   onOpenChat: () => void;
   onToggleHand: () => Promise<void> | void;
@@ -1261,6 +1368,7 @@ function MeetingControls({
 
   useEffect(() => {
     let cancelled = false;
+    let transitionTimer: number | undefined;
 
     async function applySelectedEffect() {
       if (!isCameraEnabled && videoEffect === "none") {
@@ -1268,6 +1376,7 @@ function MeetingControls({
       }
 
       setEffectStatus(null);
+      onEffectTransitionChange(true);
 
       try {
         await applyVideoEffectToLocalCamera({
@@ -1281,6 +1390,12 @@ function MeetingControls({
             err instanceof Error ? err.message : "Nao foi possivel aplicar o efeito.",
           );
         }
+      } finally {
+        transitionTimer = window.setTimeout(() => {
+          if (!cancelled) {
+            onEffectTransitionChange(false);
+          }
+        }, 220);
       }
     }
 
@@ -1288,8 +1403,18 @@ function MeetingControls({
 
     return () => {
       cancelled = true;
+      if (transitionTimer) {
+        window.clearTimeout(transitionTimer);
+      }
+      onEffectTransitionChange(false);
     };
-  }, [customBackgroundUrl, isCameraEnabled, localParticipant, videoEffect]);
+  }, [
+    customBackgroundUrl,
+    isCameraEnabled,
+    localParticipant,
+    onEffectTransitionChange,
+    videoEffect,
+  ]);
 
   return (
     <div className="um-controls-shell">
@@ -1941,6 +2066,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
   const [inviteLink, setInviteLink] = useState("");
   const [copiedInviteLink, setCopiedInviteLink] = useState(false);
   const [cameraError, setCameraError] = useState(false);
+  const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
   const [videoEffect, setVideoEffect] = useState<VideoEffectMode>("none");
   const [customBackgroundUrl, setCustomBackgroundUrl] = useState<string | null>(
     null,
@@ -1950,6 +2076,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
   );
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
   const previewStreamRef = useRef<MediaStream | null>(null);
+  const preservePreviewStreamRef = useRef(false);
   const knowledgeDocumentsRef = useRef<HTMLInputElement | null>(null);
   const knowledgeMediaRef = useRef<HTMLInputElement | null>(null);
   const knowledgeLinkRef = useRef<HTMLTextAreaElement | null>(null);
@@ -2032,10 +2159,18 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
 
     async function startPreview() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: false,
-        });
+        let stream: MediaStream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: true,
+          });
+        } catch {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false,
+          });
+        }
 
         if (!active) {
           stream.getTracks().forEach((track) => track.stop());
@@ -2043,6 +2178,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
         }
 
         previewStreamRef.current = stream;
+        setPreviewStream(stream);
         if (previewVideoRef.current) {
           previewVideoRef.current.srcObject = stream;
         }
@@ -2057,8 +2193,14 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
 
     return () => {
       active = false;
+      if (preservePreviewStreamRef.current) {
+        preservePreviewStreamRef.current = false;
+        return;
+      }
+
       previewStreamRef.current?.getTracks().forEach((track) => track.stop());
       previewStreamRef.current = null;
+      setPreviewStream(null);
     };
   }, [step]);
 
@@ -2158,8 +2300,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
         return;
       }
 
-      previewStreamRef.current?.getTracks().forEach((track) => track.stop());
-      previewStreamRef.current = null;
+      preservePreviewStreamRef.current = true;
       setConnection(tokenResponse);
       setStep("room");
     } catch (err) {
@@ -2193,8 +2334,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
       return;
     }
 
-    previewStreamRef.current?.getTracks().forEach((track) => track.stop());
-    previewStreamRef.current = null;
+    preservePreviewStreamRef.current = true;
     setConnection(tokenResponse);
     setWaitingJoinRequestId(null);
     setWaitingMessage(null);
@@ -2328,6 +2468,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
   function stopPreview() {
     previewStreamRef.current?.getTracks().forEach((track) => track.stop());
     previewStreamRef.current = null;
+    setPreviewStream(null);
   }
 
   function goBackHome() {
@@ -2352,6 +2493,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
   }
 
   function leaveMeeting() {
+    stopPreview();
     setConnection(null);
     setStep("lobby");
     router.push("/coevo-meet?ended=true");
@@ -2386,8 +2528,8 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
   if (step === "room" && connection) {
     return (
         <LiveKitRoom
-          audio
-          video
+          audio={!previewStream || previewStream.getAudioTracks().length === 0}
+          video={!previewStream || previewStream.getVideoTracks().length === 0}
           token={connection.token}
           serverUrl={connection.url}
           data-lk-theme="default"
@@ -2400,6 +2542,10 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
             connection={connection}
             meetingId={meetingId}
             onStatusChange={setRecordingStatus}
+          />
+          <PreviewTrackPublisher
+            previewStream={previewStream}
+            onPublished={() => setPreviewStream(null)}
           />
           <section className="relative h-full min-h-0 overflow-hidden">
             <JoinRequestsHostPanel connection={connection} meetingId={meetingId} />
@@ -2415,6 +2561,8 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
               onEndMeeting={endMeetingAndLeave}
               onLeaveMeeting={leaveMeeting}
               onOpenMobileSidePanel={openChatPanel}
+              participantName={participant.name}
+              previewStream={previewStream}
               recordingStatus={recordingStatus}
               setVideoEffect={setVideoEffect}
               setIsDesktopSidePanelVisible={setIsDesktopSidePanelVisible}
