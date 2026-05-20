@@ -79,10 +79,12 @@ current_agent_profile: contextvars.ContextVar[dict] = contextvars.ContextVar(
 )
 pending_email_actions: dict[tuple[str, str], dict] = {}
 pending_calendar_actions: dict[tuple[str, str], dict] = {}
+calendar_flow_states: dict[str, dict] = {}
 pending_interventions: dict[str, dict] = {}
 last_intervention_check_by_meeting: dict[str, float] = {}
 AGENT_INTERVENTION_TOPIC = "coevo-agent-intervention"
 INTERVENTION_CHECK_INTERVAL_SECONDS = 45.0
+CALENDAR_FLOW_TIMEOUT_SECONDS = 120.0
 
 
 def normalize_text(value: str) -> str:
@@ -142,6 +144,20 @@ def contains_action_confirmation(value: str) -> bool:
     return any(term in normalized for term in confirmation_terms)
 
 
+def contains_action_cancel(value: str) -> bool:
+    normalized = normalize_text(value)
+    cancel_terms = (
+        "cancela",
+        "cancelar",
+        "nao",
+        "nao agenda",
+        "nao agende",
+        "deixa quieto",
+        "desiste",
+    )
+    return any(term in normalized for term in cancel_terms)
+
+
 def has_pending_meeting_action(meeting_id: str) -> bool:
     return any(key[0] == meeting_id for key in pending_calendar_actions) or any(
         key[0] == meeting_id for key in pending_email_actions
@@ -150,6 +166,53 @@ def has_pending_meeting_action(meeting_id: str) -> bool:
 
 def has_pending_calendar_action(meeting_id: str) -> bool:
     return any(key[0] == meeting_id for key in pending_calendar_actions)
+
+
+def get_calendar_flow_state(meeting_id: str) -> dict | None:
+    state = calendar_flow_states.get(meeting_id)
+    if not state:
+        return None
+
+    updated_at = float(state.get("updated_at", 0))
+    if time.monotonic() - updated_at > CALENDAR_FLOW_TIMEOUT_SECONDS:
+        calendar_flow_states.pop(meeting_id, None)
+        return None
+
+    return state
+
+
+def set_calendar_flow_state(
+    meeting_id: str,
+    *,
+    mode: str,
+    speaker_identity: str,
+    speaker_name: str,
+) -> None:
+    calendar_flow_states[meeting_id] = {
+        "mode": mode,
+        "speaker_identity": speaker_identity,
+        "speaker_name": speaker_name,
+        "updated_at": time.monotonic(),
+    }
+    pending_interventions.pop(meeting_id, None)
+
+
+def clear_calendar_flow_state(meeting_id: str) -> None:
+    calendar_flow_states.pop(meeting_id, None)
+
+
+async def clear_pending_intervention_if_any(
+    *,
+    ctx: agents.JobContext,
+    meeting_id: str,
+) -> None:
+    pending = pending_interventions.pop(meeting_id, None)
+    if pending:
+        await clear_agent_intervention_hand(
+            ctx=ctx,
+            meeting_id=meeting_id,
+            subject=pending.get("subject", ""),
+        )
 
 
 def contains_intervention_authorization(value: str) -> bool:
@@ -572,6 +635,12 @@ async def prepare_calendar_event(
         "attendee_scope": normalized_scope,
         "attendees": attendees or [],
     }
+    set_calendar_flow_state(
+        meeting_id,
+        mode="ready_to_confirm",
+        speaker_identity=speaker_identity,
+        speaker_name=current_speaker_name.get(),
+    )
     logger.info(
         "calendar event prepared",
         extra={
@@ -633,6 +702,7 @@ async def send_confirmed_calendar_event() -> str:
 
     if action_key:
         pending_calendar_actions.pop(action_key, None)
+    clear_calendar_flow_state(meeting_id)
     return (
         "SCHEDULED: Reuniao criada no Google Agenda com sucesso para "
         f"{payload.get('attendee_count', 0)} convidados."
@@ -649,8 +719,10 @@ async def cancel_pending_calendar_event() -> str:
     )
     if action_key:
         pending_calendar_actions.pop(action_key, None)
+        clear_calendar_flow_state(current_meeting_id.get())
         return "CANCELLED: Evento de agenda pendente cancelado."
 
+    clear_calendar_flow_state(current_meeting_id.get())
     return "NO_PENDING_CALENDAR_EVENT: Nao ha evento pendente para cancelar."
 
 
@@ -905,6 +977,9 @@ async def maybe_raise_agent_hand(
     speaker_name: str,
     transcript: str,
 ) -> None:
+    if has_pending_meeting_action(meeting_id) or get_calendar_flow_state(meeting_id):
+        return
+
     now = time.monotonic()
     if now - last_intervention_check_by_meeting.get(meeting_id, 0.0) < INTERVENTION_CHECK_INTERVAL_SECONDS:
         return
@@ -1018,10 +1093,64 @@ async def jarvis(ctx: agents.JobContext):
             return
 
         is_active_follow_up = now <= active_until
-        is_calendar_flow = contains_calendar_request(transcript) or (
+        calendar_state = get_calendar_flow_state(meeting_id)
+        is_calendar_request = contains_calendar_request(transcript)
+        is_calendar_flow = is_calendar_request or bool(calendar_state) or (
             has_pending_calendar_action(meeting_id)
-            and contains_action_confirmation(transcript)
+            and (
+                contains_action_confirmation(transcript)
+                or contains_action_cancel(transcript)
+            )
         )
+
+        if is_calendar_flow and (was_called or is_active_follow_up or calendar_state):
+            active_until = now + 45.0
+            if meeting_id in pending_interventions:
+                asyncio.create_task(
+                    clear_pending_intervention_if_any(ctx=ctx, meeting_id=meeting_id)
+                )
+
+            if (
+                is_calendar_request
+                and not calendar_state
+                and not has_pending_calendar_action(meeting_id)
+            ):
+                set_calendar_flow_state(
+                    meeting_id,
+                    mode="collecting_details",
+                    speaker_identity=event.speaker_id or "unknown-speaker",
+                    speaker_name=speaker_name,
+                )
+                session.generate_reply(
+                    user_input=transcript,
+                    instructions=(
+                        "Voce e Coevo e entrou em modo agenda. Nao use nenhuma "
+                        "ferramenta nesta resposta. Responda imediatamente e em "
+                        "uma frase curta: diga que vai ajudar a agendar e peca "
+                        "apenas os dados essenciais que ainda faltam: titulo, "
+                        "data, horario, duracao e convidados. Nao levante a mao."
+                    ),
+                )
+                return
+
+            session.generate_reply(
+                user_input=transcript,
+                instructions=(
+                    "Voce e Coevo e esta em um fluxo exclusivo de Google Agenda. "
+                    "Responda rapido. Nao use search_knowledge_base, "
+                    "search_meeting_memory, search_web_for_host nem levante a mao. "
+                    "Se o Host cancelar, use cancel_pending_calendar_event. "
+                    "Se houver um evento de agenda pendente e a fala confirmar o "
+                    "envio, use send_confirmed_calendar_event imediatamente. "
+                    "Se ainda nao houver evento pendente e titulo, data, horario, "
+                    "duracao e convidados estiverem claros, use "
+                    "prepare_calendar_event. Se faltar qualquer informacao "
+                    "essencial, nao use ferramenta: pergunte apenas o dado "
+                    "faltante em uma frase. Nunca fique em silencio depois de "
+                    "um pedido de agenda."
+                ),
+            )
+            return
 
         pending_intervention_context = ""
         if contains_intervention_authorization(transcript):
@@ -1063,26 +1192,6 @@ async def jarvis(ctx: agents.JobContext):
                     "pedido atual. Se o pedido for generico, desenvolva esse "
                     "ponto pendente com objetividade. "
                 )
-
-        if (was_called or is_active_follow_up) and is_calendar_flow:
-            active_until = now + 30.0
-            session.generate_reply(
-                user_input=transcript,
-                instructions=(
-                    "Voce e Coevo e esta em um fluxo exclusivo de Google Agenda. "
-                    "Responda rapido. Nao use search_knowledge_base, "
-                    "search_meeting_memory, search_web_for_host nem levante a mao. "
-                    "Se houver um evento de agenda pendente e a fala confirmar o "
-                    "envio, use send_confirmed_calendar_event imediatamente. "
-                    "Se o Host cancelar, use cancel_pending_calendar_event. "
-                    "Se for um novo pedido de agendamento e titulo, data, horario "
-                    "e convidados estiverem claros, use prepare_calendar_event. "
-                    "Se faltar qualquer informacao essencial, nao use ferramenta: "
-                    "pergunte apenas o dado faltante em uma frase. "
-                    "Nunca fique em silencio depois de um pedido de agenda."
-                ),
-            )
-            return
 
         if not was_called and not is_active_follow_up:
             if has_pending_meeting_action(meeting_id) or contains_calendar_request(transcript):
