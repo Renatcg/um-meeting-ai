@@ -109,6 +109,49 @@ def contains_silence_command(value: str) -> bool:
     )
 
 
+def contains_calendar_request(value: str) -> bool:
+    normalized = normalize_text(value)
+    calendar_terms = (
+        "agenda",
+        "agende",
+        "agendar",
+        "marque",
+        "marcar",
+        "crie uma reuniao",
+        "criar uma reuniao",
+        "google agenda",
+        "calendar",
+    )
+    return any(term in normalized for term in calendar_terms)
+
+
+def contains_action_confirmation(value: str) -> bool:
+    normalized = normalize_text(value)
+    confirmation_terms = (
+        "sim",
+        "confirmo",
+        "pode",
+        "pode agendar",
+        "pode marcar",
+        "agende",
+        "marca",
+        "marque",
+        "ta confirmado",
+        "esta confirmado",
+    )
+    return any(term in normalized for term in confirmation_terms)
+
+
+def has_pending_meeting_action(meeting_id: str) -> bool:
+    return any(key[0] == meeting_id for key in pending_calendar_actions) or any(
+        key[0] == meeting_id for key in pending_email_actions
+    )
+
+
+def has_pending_calendar_action(meeting_id: str) -> bool:
+    return any(key[0] == meeting_id for key in pending_calendar_actions)
+
+
 def contains_intervention_authorization(value: str) -> bool:
     normalized = normalize_text(value)
     if not contains_wake_word(value):
@@ -529,10 +572,20 @@ async def prepare_calendar_event(
         "attendee_scope": normalized_scope,
         "attendees": attendees or [],
     }
+    logger.info(
+        "calendar event prepared",
+        extra={
+            "meeting_id": meeting_id,
+            "speaker_identity": speaker_identity,
+            "title": title,
+            "start_time": start_time,
+        },
+    )
     return (
         "PENDING_CONFIRMATION: Evento de agenda preparado, mas ainda nao criado. "
-        "Confirme em voz alta o titulo, data, horario, duracao e convidados. "
-        "Pergunte: 'Posso agendar?'. So crie depois do Host confirmar por voz."
+        "Responda imediatamente em voz alta com uma frase curta, confirme titulo, "
+        "data, horario, duracao e convidados, e pergunte: 'Posso agendar?'. "
+        "So crie depois do Host confirmar por voz."
     )
 
 
@@ -551,6 +604,16 @@ async def send_confirmed_calendar_event() -> str:
     action_key, pending = get_pending_calendar_action(meeting_id, speaker_identity)
     if not pending:
         return "NO_PENDING_CALENDAR_EVENT: Nao ha evento pendente para confirmar."
+
+    logger.info(
+        "calendar event confirmation requested",
+        extra={
+            "meeting_id": meeting_id,
+            "speaker_identity": speaker_identity,
+            "title": pending.get("title"),
+            "start_time": pending.get("start_time"),
+        },
+    )
 
     headers = {"Content-Type": "application/json"}
     if AGENT_API_KEY:
@@ -955,6 +1018,10 @@ async def jarvis(ctx: agents.JobContext):
             return
 
         is_active_follow_up = now <= active_until
+        is_calendar_flow = contains_calendar_request(transcript) or (
+            has_pending_calendar_action(meeting_id)
+            and contains_action_confirmation(transcript)
+        )
 
         pending_intervention_context = ""
         if contains_intervention_authorization(transcript):
@@ -997,7 +1064,29 @@ async def jarvis(ctx: agents.JobContext):
                     "ponto pendente com objetividade. "
                 )
 
+        if (was_called or is_active_follow_up) and is_calendar_flow:
+            active_until = now + 30.0
+            session.generate_reply(
+                user_input=transcript,
+                instructions=(
+                    "Voce e Coevo e esta em um fluxo exclusivo de Google Agenda. "
+                    "Responda rapido. Nao use search_knowledge_base, "
+                    "search_meeting_memory, search_web_for_host nem levante a mao. "
+                    "Se houver um evento de agenda pendente e a fala confirmar o "
+                    "envio, use send_confirmed_calendar_event imediatamente. "
+                    "Se o Host cancelar, use cancel_pending_calendar_event. "
+                    "Se for um novo pedido de agendamento e titulo, data, horario "
+                    "e convidados estiverem claros, use prepare_calendar_event. "
+                    "Se faltar qualquer informacao essencial, nao use ferramenta: "
+                    "pergunte apenas o dado faltante em uma frase. "
+                    "Nunca fique em silencio depois de um pedido de agenda."
+                ),
+            )
+            return
+
         if not was_called and not is_active_follow_up:
+            if has_pending_meeting_action(meeting_id) or contains_calendar_request(transcript):
+                return
             asyncio.create_task(
                 maybe_raise_agent_hand(
                     ctx=ctx,
