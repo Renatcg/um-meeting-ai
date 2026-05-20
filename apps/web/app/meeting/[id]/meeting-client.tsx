@@ -817,7 +817,6 @@ function PreviewTrackPublisher({
         ),
       );
       if (results.some((result) => result.status === "fulfilled")) {
-        previewStream.getAudioTracks().forEach((track) => track.stop());
         onPublished();
       } else {
         hasPublishedRef.current = false;
@@ -2136,21 +2135,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
     async function startPreview() {
       try {
         let stream: MediaStream;
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true,
-            },
-          });
-        } catch {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: false,
-          });
-        }
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
 
         if (!active) {
           stream.getTracks().forEach((track) => track.stop());
