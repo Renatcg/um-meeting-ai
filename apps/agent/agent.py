@@ -190,6 +190,54 @@ async def search_knowledge_base(query: str) -> str:
     return "\n\n---\n\n".join(formatted_results)
 
 
+@function_tool(
+    description=(
+        "Busca nas memorias persistentes de reunioes passadas. Use quando o Host "
+        "perguntar sobre decisoes, promessas, proximos passos, riscos, objecoes, "
+        "participantes, clientes, datas, valores ou algo dito em reunioes anteriores."
+    )
+)
+async def search_meeting_memory(query: str) -> str:
+    headers = {"Content-Type": "application/json"}
+    if AGENT_API_KEY:
+        headers["X-Agent-API-Key"] = AGENT_API_KEY
+
+    async with aiohttp.ClientSession() as http:
+        async with http.post(
+            f"{API_URL}/agent/memory/search",
+            headers=headers,
+            json={"query": query, "top_k": 6},
+            timeout=aiohttp.ClientTimeout(total=12),
+        ) as response:
+            if response.status >= 400:
+                body = await response.text()
+                raise RuntimeError(
+                    f"Meeting memory search failed with status {response.status}: {body}"
+                )
+            payload = await response.json()
+
+    results = payload.get("results", [])
+    if not results:
+        return (
+            "NO_MEMORY_MATCH: Nao encontrei memoria suficiente de reunioes "
+            "passadas para responder com seguranca."
+        )
+
+    formatted_results = []
+    for result in results:
+        meeting_title = result.get("meeting_title") or result.get("meeting_id")
+        formatted_results.append(
+            "\n".join(
+                [
+                    f"Reuniao: {meeting_title}",
+                    f"Tipo: {result.get('memory_type')}",
+                    f"Conteudo: {result.get('content')}",
+                ]
+            )
+        )
+    return "\n\n---\n\n".join(formatted_results)
+
+
 def voice_email_actions_enabled() -> tuple[bool, str]:
     profile = current_agent_profile.get() or {}
     enabled_actions = profile.get("enabled_actions") or ["send_email"]
@@ -210,8 +258,16 @@ def voice_email_actions_enabled() -> tuple[bool, str]:
 
 def voice_calendar_actions_enabled() -> tuple[bool, str]:
     profile = current_agent_profile.get() or {}
-    enabled_actions = profile.get("enabled_actions") or ["send_email"]
-    enabled_integrations = profile.get("enabled_integrations") or ["resend_email"]
+    enabled_actions = profile.get("enabled_actions") or [
+        "send_email",
+        "schedule_meeting",
+        "web_search",
+    ]
+    enabled_integrations = profile.get("enabled_integrations") or [
+        "resend_email",
+        "google_calendar",
+        "web_search",
+    ]
     allowed_roles = profile.get("voice_command_roles") or ["host"]
 
     if "schedule_meeting" not in enabled_actions:
@@ -228,8 +284,16 @@ def voice_calendar_actions_enabled() -> tuple[bool, str]:
 
 def voice_web_search_enabled() -> tuple[bool, str]:
     profile = current_agent_profile.get() or {}
-    enabled_actions = profile.get("enabled_actions") or []
-    enabled_integrations = profile.get("enabled_integrations") or []
+    enabled_actions = profile.get("enabled_actions") or [
+        "send_email",
+        "schedule_meeting",
+        "web_search",
+    ]
+    enabled_integrations = profile.get("enabled_integrations") or [
+        "resend_email",
+        "google_calendar",
+        "web_search",
+    ]
     allowed_roles = profile.get("voice_command_roles") or ["host"]
 
     if "web_search" not in enabled_actions:
@@ -640,6 +704,7 @@ class JarvisAgent(Agent):
             instructions=instructions,
             tools=[
                 search_knowledge_base,
+                search_meeting_memory,
                 prepare_meeting_email,
                 send_confirmed_meeting_email,
                 defer_meeting_email_until_end,
@@ -964,6 +1029,10 @@ async def jarvis(ctx: agents.JobContext):
                 "consulte a ferramenta search_knowledge_base antes de responder. "
                 "Se a ferramenta retornar NO_MATCH, diga que nao encontrou "
                 "informacao suficiente. "
+                "Se a pergunta depender de historico, decisoes, pendencias, "
+                "promessas, riscos ou algo dito em reunioes passadas, use "
+                "search_meeting_memory antes de responder. Se retornar "
+                "NO_MEMORY_MATCH, diga que nao encontrou memoria suficiente. "
                 "Se o Host pedir para consultar a internet, pesquisar na web, "
                 "buscar noticias ou verificar informacao atual, use "
                 "search_web_for_host antes de responder. Cite fontes de forma "

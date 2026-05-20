@@ -430,6 +430,23 @@ async def respond_with_agent(payload: AgentRespondRequest) -> AgentRespondRespon
     return await respond_with_agent_memory(settings=settings, payload=payload)
 
 
+@app.post(
+    "/agent/memory/search",
+    response_model=MeetingMemorySearchResponse,
+    dependencies=[Depends(verify_agent_api_key)],
+)
+async def search_agent_memory(
+    payload: MeetingMemorySearchRequest,
+) -> MeetingMemorySearchResponse:
+    return await search_meeting_memory(
+        settings=settings,
+        payload=payload,
+        requester_email=None,
+        requester_role="host",
+        organization_id="default",
+    )
+
+
 @app.get("/integrations/google-calendar", response_model=GoogleCalendarStatus)
 async def get_google_calendar_status() -> GoogleCalendarStatus:
     configured = google_calendar_configured(settings)
