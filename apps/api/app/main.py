@@ -190,6 +190,8 @@ def verify_agent_api_key(
 def log_background_task_failure(task: asyncio.Task) -> None:
     try:
         task.result()
+    except asyncio.CancelledError:
+        return
     except Exception:
         logger.exception("background task failed")
 
@@ -245,6 +247,80 @@ async def finalize_meeting_if_no_humans(meeting_id: str) -> None:
     except Exception:
         logger.exception("failed to finalize meeting after last human participant left")
 
+    await delete_livekit_room_if_exists(meeting_id)
+
+
+async def delete_livekit_room_if_exists(meeting_id: str) -> None:
+    livekit_api = api.LiveKitAPI(
+        settings.livekit_url,
+        settings.livekit_api_key,
+        settings.livekit_api_secret,
+    )
+    try:
+        await livekit_api.room.delete_room(api.DeleteRoomRequest(room=meeting_id))
+    except Exception:
+        logger.exception(
+            "failed to delete stale livekit room",
+            extra={"meeting_id": meeting_id},
+        )
+    finally:
+        await livekit_api.aclose()
+
+
+async def cleanup_livekit_rooms_without_humans() -> None:
+    livekit_api = api.LiveKitAPI(
+        settings.livekit_url,
+        settings.livekit_api_key,
+        settings.livekit_api_secret,
+    )
+    try:
+        rooms_response = await livekit_api.room.list_rooms(api.ListRoomsRequest())
+        rooms = list(getattr(rooms_response, "rooms", []) or [])
+    except Exception:
+        logger.exception("failed to list livekit rooms during cleanup")
+        return
+    finally:
+        await livekit_api.aclose()
+
+    for room in rooms:
+        meeting_id = getattr(room, "name", "") or ""
+        if not meeting_id:
+            continue
+
+        try:
+            humans = await list_livekit_human_participants(meeting_id)
+        except Exception:
+            logger.exception(
+                "failed to inspect livekit room during cleanup",
+                extra={"meeting_id": meeting_id},
+            )
+            continue
+
+        if humans:
+            continue
+
+        logger.warning(
+            "cleanup found livekit room without human participants",
+            extra={"meeting_id": meeting_id},
+        )
+        try:
+            await finalize_meeting(meeting_id)
+        except Exception:
+            logger.exception(
+                "failed to finalize stale livekit room",
+                extra={"meeting_id": meeting_id},
+            )
+            continue
+
+        await delete_livekit_room_if_exists(meeting_id)
+
+
+async def stale_meeting_cleanup_loop() -> None:
+    interval = max(int(settings.meeting_cleanup_interval_seconds), 60)
+    while True:
+        await asyncio.sleep(interval)
+        await cleanup_livekit_rooms_without_humans()
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
@@ -252,7 +328,21 @@ async def lifespan(_: FastAPI):
         await init_database(settings)
     except Exception:
         logger.exception("database initialization failed")
-    yield
+
+    cleanup_task = None
+    if settings.meeting_cleanup_enabled:
+        cleanup_task = asyncio.create_task(stale_meeting_cleanup_loop())
+        cleanup_task.add_done_callback(log_background_task_failure)
+
+    try:
+        yield
+    finally:
+        if cleanup_task:
+            cleanup_task.cancel()
+            try:
+                await cleanup_task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(title="UM Meeting AI API", version="0.1.0", lifespan=lifespan)

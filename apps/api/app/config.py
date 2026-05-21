@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     recording_s3_force_path_style: bool = True
     recording_public_base_url: str | None = None
     recording_object_prefix: str = "recordings"
+    meeting_cleanup_enabled: bool = True
+    meeting_cleanup_interval_seconds: int = 300
     evo_api_enabled: bool = False
     evo_api_base_url: str | None = None
     evo_api_key: str | None = None

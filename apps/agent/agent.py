@@ -2,6 +2,7 @@ import asyncio
 import contextvars
 import json
 import logging
+import math
 import os
 import re
 import time
@@ -11,7 +12,7 @@ import aiohttp
 from dotenv import load_dotenv
 from openai.types.beta.realtime.session import InputAudioTranscription, TurnDetection
 
-from livekit import agents
+from livekit import agents, rtc
 from livekit.agents import (
     Agent,
     AgentServer,
@@ -85,6 +86,14 @@ last_intervention_check_by_meeting: dict[str, float] = {}
 AGENT_INTERVENTION_TOPIC = "coevo-agent-intervention"
 INTERVENTION_CHECK_INTERVAL_SECONDS = 45.0
 CALENDAR_FLOW_TIMEOUT_SECONDS = 120.0
+AGENT_ORB_VIDEO_ENABLED = os.getenv("AGENT_ORB_VIDEO_ENABLED", "true").lower() in {
+    "1",
+    "true",
+    "yes",
+}
+AGENT_ORB_VIDEO_WIDTH = int(os.getenv("AGENT_ORB_VIDEO_WIDTH", "360"))
+AGENT_ORB_VIDEO_HEIGHT = int(os.getenv("AGENT_ORB_VIDEO_HEIGHT", "240"))
+AGENT_ORB_VIDEO_FPS = float(os.getenv("AGENT_ORB_VIDEO_FPS", "8"))
 
 
 def normalize_text(value: str) -> str:
@@ -241,6 +250,144 @@ def is_meaningful_transcript(value: str) -> bool:
         return False
 
     return len(words) >= MIN_TRANSCRIPT_WORDS
+
+
+def render_agent_orb_frame(
+    *,
+    width: int,
+    height: int,
+    elapsed_seconds: float,
+    speaking: bool,
+) -> bytes:
+    data = bytearray(width * height * 4)
+    cx = width / 2
+    cy = height / 2
+    scale = min(width, height)
+    pulse = (math.sin(elapsed_seconds * (7.5 if speaking else 3.2)) + 1) / 2
+    core_radius = scale * (0.145 + (0.018 if speaking else 0.008) * pulse)
+    inner_ring = scale * (0.21 + 0.018 * pulse)
+    outer_ring = scale * (0.31 + (0.06 if speaking else 0.03) * pulse)
+
+    for y in range(height):
+        for x in range(width):
+            index = (y * width + x) * 4
+            r, g, b = 7, 8, 7
+
+            if x % 32 == 0 or y % 32 == 0:
+                r, g, b = 16, 18, 17
+
+            distance = math.hypot(x - cx, y - cy)
+            vignette = min(distance / (scale * 0.72), 1.0)
+            glow = max(0.0, 1.0 - distance / (outer_ring * 1.95))
+            ring_strength = max(0.0, 1.0 - abs(distance - inner_ring) / 2.2)
+            outer_strength = max(0.0, 1.0 - abs(distance - outer_ring) / 2.0)
+
+            if glow:
+                glow_power = glow * (0.45 if speaking else 0.26)
+                r += int(246 * glow_power)
+                g += int(142 * glow_power)
+                b += int(56 * glow_power)
+
+            if ring_strength:
+                r = min(255, r + int(255 * ring_strength))
+                g = min(255, g + int(218 * ring_strength))
+                b = min(255, b + int(178 * ring_strength))
+
+            if outer_strength:
+                r = min(255, r + int(235 * outer_strength * 0.7))
+                g = min(255, g + int(130 * outer_strength * 0.7))
+                b = min(255, b + int(40 * outer_strength * 0.7))
+
+            if distance <= core_radius:
+                r, g, b = 9, 10, 10
+
+            r = int(r * (1.0 - vignette * 0.35))
+            g = int(g * (1.0 - vignette * 0.35))
+            b = int(b * (1.0 - vignette * 0.35))
+
+            data[index] = max(0, min(255, r))
+            data[index + 1] = max(0, min(255, g))
+            data[index + 2] = max(0, min(255, b))
+            data[index + 3] = 255
+
+    bar_height = int(scale * (0.085 + (0.035 if speaking else 0.018) * pulse))
+    bar_width = max(4, int(scale * 0.025))
+    bar_gap = max(5, int(scale * 0.032))
+    bar_y0 = int(cy - bar_height / 2)
+    bar_y1 = int(cy + bar_height / 2)
+    first_x = int(cx - bar_width * 1.5 - bar_gap)
+    for bar in range(3):
+        x0 = first_x + bar * (bar_width + bar_gap)
+        x1 = x0 + bar_width
+        for y in range(bar_y0, bar_y1):
+            if y < 0 or y >= height:
+                continue
+            for x in range(x0, x1):
+                if x < 0 or x >= width:
+                    continue
+                index = (y * width + x) * 4
+                data[index] = 255
+                data[index + 1] = 190
+                data[index + 2] = 112
+                data[index + 3] = 255
+
+    return bytes(data)
+
+
+async def publish_agent_orb_video(
+    ctx: agents.JobContext,
+    state: dict[str, bool],
+) -> None:
+    if not AGENT_ORB_VIDEO_ENABLED:
+        return
+
+    width = max(240, AGENT_ORB_VIDEO_WIDTH)
+    height = max(160, AGENT_ORB_VIDEO_HEIGHT)
+    fps = min(max(AGENT_ORB_VIDEO_FPS, 2.0), 15.0)
+    source = rtc.VideoSource(width, height)
+    track = rtc.LocalVideoTrack.create_video_track("coevo_orb", source)
+    publication = None
+
+    try:
+        publisher = getattr(ctx.room, "local_participant", None)
+        if publisher is None:
+            return
+
+        publication = await publisher.publish_track(
+            track,
+            rtc.TrackPublishOptions(source=rtc.TrackSource.SOURCE_CAMERA),
+        )
+        logger.info(
+            "published coevo orb video track",
+            extra={"track_sid": getattr(publication, "sid", None)},
+        )
+
+        started_at = time.monotonic()
+        while True:
+            frame = rtc.VideoFrame(
+                width,
+                height,
+                rtc.VideoBufferType.RGBA,
+                render_agent_orb_frame(
+                    width=width,
+                    height=height,
+                    elapsed_seconds=time.monotonic() - started_at,
+                    speaking=bool(state.get("speaking")),
+                ),
+            )
+            source.capture_frame(frame)
+            await asyncio.sleep(1 / fps)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.exception("failed to publish coevo orb video track")
+    finally:
+        if publication is not None:
+            try:
+                await ctx.room.local_participant.unpublish_track(publication.sid)
+            except Exception:
+                logger.warning("failed to unpublish coevo orb video track", exc_info=True)
+        await source.aclose()
 
 
 @function_tool(
@@ -907,8 +1054,10 @@ async def save_transcript_segment(
 def log_task_failure(task: asyncio.Task[None]) -> None:
     try:
         task.result()
+    except asyncio.CancelledError:
+        return
     except Exception:
-        logger.warning("failed to save transcript segment", exc_info=True)
+        logger.warning("background task failed", exc_info=True)
 
 
 async def publish_agent_intervention(
@@ -1028,6 +1177,9 @@ async def jarvis(ctx: agents.JobContext):
     current_agent_profile.set(profile)
     profile_instructions = build_profile_instructions(profile)
     profile_voice = profile.get("voice") or OPENAI_REALTIME_VOICE
+    orb_state = {"speaking": False}
+    orb_task = asyncio.create_task(publish_agent_orb_video(ctx, orb_state))
+    orb_task.add_done_callback(log_task_failure)
 
     session = AgentSession(
         llm=openai.realtime.RealtimeModel(
@@ -1259,6 +1411,8 @@ async def jarvis(ctx: agents.JobContext):
     @session.on("agent_state_changed")
     def on_agent_state_changed(event) -> None:
         nonlocal active_until
+        new_state = str(getattr(event, "new_state", "") or "").lower()
+        orb_state["speaking"] = new_state == "speaking"
 
         if (
             getattr(event, "old_state", None) == "speaking"
@@ -1267,15 +1421,22 @@ async def jarvis(ctx: agents.JobContext):
         ):
             active_until = time.monotonic() + POST_REPLY_ACTIVE_SECONDS
 
-    await session.start(
-        room=ctx.room,
-        agent=JarvisAgent(profile_instructions),
-        room_options=room_io.RoomOptions(
-            audio_input=room_io.AudioInputOptions(),
-            audio_output=room_io.AudioOutputOptions(),
-            text_output=room_io.TextOutputOptions(sync_transcription=True),
-        ),
-    )
+    try:
+        await session.start(
+            room=ctx.room,
+            agent=JarvisAgent(profile_instructions),
+            room_options=room_io.RoomOptions(
+                audio_input=room_io.AudioInputOptions(),
+                audio_output=room_io.AudioOutputOptions(),
+                text_output=room_io.TextOutputOptions(sync_transcription=True),
+            ),
+        )
+    finally:
+        orb_task.cancel()
+        try:
+            await orb_task
+        except asyncio.CancelledError:
+            pass
 
 
 if __name__ == "__main__":
