@@ -173,6 +173,19 @@ LIVEKIT_WEBHOOK_EGRESS_ENDED = "egress_ended"
 LIVEKIT_WEBHOOK_EGRESS_UPDATED = "egress_updated"
 
 
+def verify_agent_api_key(
+    x_agent_api_key: str | None = Header(default=None),
+) -> None:
+    if not settings.agent_api_key:
+        return
+
+    if x_agent_api_key != settings.agent_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid agent API key.",
+        )
+
+
 def log_background_task_failure(task: asyncio.Task) -> None:
     try:
         task.result()
@@ -560,19 +573,6 @@ async def search_meeting_knowledge_base(
 async def create_meeting(payload: CreateMeetingRequest) -> Meeting:
     meeting = meeting_store.create(payload.title)
     return await insert_meeting(settings=settings, meeting=meeting)
-
-
-def verify_agent_api_key(
-    x_agent_api_key: str | None = Header(default=None),
-) -> None:
-    if not settings.agent_api_key:
-        return
-
-    if x_agent_api_key != settings.agent_api_key:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid agent API key.",
-        )
 
 
 @app.get(
