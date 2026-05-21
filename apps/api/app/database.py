@@ -1032,6 +1032,45 @@ async def list_meeting_recordings(
     return [MeetingRecording.model_validate(row) for row in rows]
 
 
+async def list_recent_recordings(
+    *,
+    settings: Settings,
+    limit: int = 50,
+) -> Sequence[MeetingRecording]:
+    query = """
+    SELECT
+        id,
+        meeting_id,
+        egress_id,
+        status,
+        storage_provider,
+        bucket,
+        object_key,
+        file_type,
+        started_at,
+        ended_at,
+        duration_seconds,
+        size_bytes,
+        location,
+        error,
+        created_at,
+        updated_at
+    FROM meeting_recordings
+    ORDER BY created_at DESC, id DESC
+    LIMIT %s;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (limit,))
+            rows = await cur.fetchall()
+
+    return [MeetingRecording.model_validate(row) for row in rows]
+
+
 async def get_active_meeting_recording(
     *,
     settings: Settings,
@@ -1136,10 +1175,10 @@ async def update_meeting_recording(
             )
             row = await cur.fetchone()
 
-            if row and location:
+            if row and row["location"]:
                 await cur.execute(
                     "UPDATE meetings SET recording_url = %s WHERE id = %s;",
-                    (location, row["meeting_id"]),
+                    (row["location"], row["meeting_id"]),
                 )
 
     return MeetingRecording.model_validate(row) if row else None

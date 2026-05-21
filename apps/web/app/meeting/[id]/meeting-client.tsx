@@ -43,6 +43,13 @@ type TokenResponse = {
   join_request_id?: number | null;
 };
 
+type RecordingStartResponse = {
+  started: boolean;
+  configured: boolean;
+  recording?: unknown;
+  detail?: string | null;
+};
+
 type MeetingJoinRequest = {
   id: number;
   meeting_id: string;
@@ -1867,8 +1874,14 @@ function RecordingStarter({
           Authorization: `Bearer ${connection.participant_access_token}`,
         },
       })
-        .then((response) => {
-          onStatusChange(response.ok ? "active" : "failed");
+        .then(async (response) => {
+          if (!response.ok) {
+            onStatusChange("failed");
+            return;
+          }
+
+          const payload = (await response.json()) as RecordingStartResponse;
+          onStatusChange(payload.started || payload.recording ? "active" : "failed");
         })
         .catch(() => {
           onStatusChange("failed");

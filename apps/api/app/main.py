@@ -110,6 +110,7 @@ from app.models import (
     MeetingProcessingJob,
     MeetingRecentSummary,
     MeetingRecording,
+    RecordingHealthResponse,
     MeetingWebSearchRequest,
     MeetingWebSearchResponse,
     RecordingStartResponse,
@@ -140,6 +141,7 @@ from app.processing_service import (
     run_meeting_processing_job,
 )
 from app.recording_service import (
+    recording_health,
     save_egress_info,
     start_meeting_recording,
     stop_active_meeting_recording,
@@ -595,10 +597,25 @@ async def get_meeting(meeting_id: str) -> Meeting:
 
 
 async def finalize_meeting(meeting_id: str) -> Meeting:
+    stopped_recording = None
     try:
-        await stop_active_meeting_recording(settings=settings, meeting_id=meeting_id)
+        stopped_recording = await stop_active_meeting_recording(
+            settings=settings,
+            meeting_id=meeting_id,
+        )
     except Exception:
         logger.exception("failed to stop active recording during meeting finalization")
+
+    if stopped_recording and not stopped_recording.location:
+        logger.error(
+            "meeting finalized but recording has no saved location",
+            extra={
+                "meeting_id": meeting_id,
+                "egress_id": stopped_recording.egress_id,
+                "status": stopped_recording.status,
+                "error": stopped_recording.error,
+            },
+        )
 
     meeting = await mark_meeting_ended(settings=settings, meeting_id=meeting_id)
     await send_deferred_meeting_emails(meeting_id)
@@ -676,6 +693,23 @@ async def get_meeting_recordings(
             detail="Participant token does not belong to this meeting.",
         )
     return list(await list_meeting_recordings(settings=settings, meeting_id=meeting_id))
+
+
+@app.get(
+    "/recordings/health",
+    response_model=RecordingHealthResponse,
+    dependencies=[Depends(verify_agent_api_key)],
+)
+async def get_recording_health(
+    response: Response,
+    limit: int = 50,
+) -> RecordingHealthResponse:
+    safe_limit = min(max(limit, 1), 200)
+    health = await recording_health(settings=settings, limit=safe_limit)
+    if not health.healthy:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        logger.error("recording health check failed", extra=health.model_dump())
+    return health
 
 
 @app.post("/livekit/webhook")

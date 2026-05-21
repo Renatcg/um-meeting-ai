@@ -1,3 +1,5 @@
+import asyncio
+import logging
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -8,10 +10,14 @@ from app.config import Settings
 from app.database import (
     get_active_meeting_recording,
     insert_meeting_recording,
+    list_recent_recordings,
     list_meeting_recordings,
     update_meeting_recording,
 )
-from app.models import MeetingRecording, RecordingStartResponse
+from app.models import MeetingRecording, RecordingHealthResponse, RecordingStartResponse
+
+
+logger = logging.getLogger(__name__)
 
 
 ACTIVE_STATUSES = {
@@ -20,6 +26,8 @@ ACTIVE_STATUSES = {
     "STARTING",
     "ACTIVE",
 }
+FAILED_STATUS_MARKERS = ("FAILED", "ABORTED", "LIMIT_REACHED")
+TERMINAL_STATUS_MARKERS = ("COMPLETE", "COMPLETED", "END", "ENDED", "FAILED")
 
 
 def _recording_configured(settings: Settings) -> bool:
@@ -29,6 +37,20 @@ def _recording_configured(settings: Settings) -> bool:
         and settings.recording_s3_access_key_id
         and settings.recording_s3_secret_access_key
     )
+
+
+def recording_configured(settings: Settings) -> bool:
+    return _recording_configured(settings)
+
+
+def _is_failed_status(status_value: str) -> bool:
+    normalized = status_value.upper()
+    return any(marker in normalized for marker in FAILED_STATUS_MARKERS)
+
+
+def _is_terminal_status(status_value: str) -> bool:
+    normalized = status_value.upper()
+    return any(marker in normalized for marker in TERMINAL_STATUS_MARKERS)
 
 
 def _status_name(status_value: int | str) -> str:
@@ -173,7 +195,74 @@ async def stop_active_meeting_recording(
     finally:
         await livekit_api.aclose()
 
-    return await save_egress_info(settings=settings, info=info)
+    saved = await save_egress_info(settings=settings, info=info)
+    return await reconcile_recording(
+        settings=settings,
+        egress_id=recording.egress_id,
+        current=saved,
+    )
+
+
+async def fetch_egress_info(
+    *,
+    settings: Settings,
+    egress_id: str,
+) -> api.EgressInfo | None:
+    livekit_api = api.LiveKitAPI(
+        settings.livekit_url,
+        settings.livekit_api_key,
+        settings.livekit_api_secret,
+    )
+    try:
+        response = await livekit_api.egress.list_egress(
+            api.ListEgressRequest(egress_id=egress_id)
+        )
+    finally:
+        await livekit_api.aclose()
+
+    items = list(getattr(response, "items", []) or [])
+    return items[0] if items else None
+
+
+async def reconcile_recording(
+    *,
+    settings: Settings,
+    egress_id: str,
+    current: MeetingRecording | None = None,
+    attempts: int = 6,
+    delay_seconds: float = 2.0,
+) -> MeetingRecording | None:
+    recording = current
+    for attempt in range(max(attempts, 1)):
+        if (
+            recording
+            and recording.location
+            and recording.size_bytes
+            and _is_terminal_status(recording.status)
+        ):
+            return recording
+
+        if attempt:
+            await asyncio.sleep(delay_seconds)
+
+        info = await fetch_egress_info(settings=settings, egress_id=egress_id)
+        if not info:
+            continue
+
+        recording = await save_egress_info(settings=settings, info=info)
+
+    if recording and (not recording.location or _is_failed_status(recording.status)):
+        logger.error(
+            "recording reconciliation ended without a usable recording",
+            extra={
+                "meeting_id": recording.meeting_id,
+                "egress_id": recording.egress_id,
+                "status": recording.status,
+                "location": recording.location,
+                "error": recording.error,
+            },
+        )
+    return recording
 
 
 async def save_egress_info(
@@ -200,6 +289,53 @@ async def save_egress_info(
         size_bytes=size,
         location=location,
         error=info.error or None,
+    )
+
+
+async def recording_health(
+    *,
+    settings: Settings,
+    limit: int = 50,
+) -> RecordingHealthResponse:
+    configured = settings.recordings_enabled and _recording_configured(settings)
+    alerts: list[str] = []
+    if not settings.recordings_enabled:
+        alerts.append("Recording is disabled.")
+    elif not _recording_configured(settings):
+        alerts.append("Recording storage is not fully configured.")
+
+    recordings = list(await list_recent_recordings(settings=settings, limit=limit))
+    active = [item for item in recordings if item.status in ACTIVE_STATUSES]
+    failed = [
+        item
+        for item in recordings
+        if _is_failed_status(item.status) or bool(item.error)
+    ]
+    missing_location = [
+        item
+        for item in recordings
+        if _is_terminal_status(item.status)
+        and not _is_failed_status(item.status)
+        and not item.location
+    ]
+
+    if active:
+        alerts.append(f"{len(active)} recording(s) still active or starting.")
+    if failed:
+        alerts.append(f"{len(failed)} recording(s) failed recently.")
+    if missing_location:
+        alerts.append(
+            f"{len(missing_location)} completed recording(s) are missing storage location."
+        )
+
+    healthy = configured and not failed and not missing_location
+    return RecordingHealthResponse(
+        healthy=healthy,
+        configured=bool(configured),
+        active_count=len(active),
+        failed_count=len(failed),
+        missing_location_count=len(missing_location),
+        alerts=alerts,
     )
 
 

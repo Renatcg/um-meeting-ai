@@ -143,6 +143,15 @@ class RecordingStartResponse(BaseModel):
     detail: str | None = None
 
 
+class RecordingHealthResponse(BaseModel):
+    healthy: bool
+    configured: bool
+    active_count: int = 0
+    failed_count: int = 0
+    missing_location_count: int = 0
+    alerts: list[str] = Field(default_factory=list)
+
+
 class CreateTokenRequest(BaseModel):
     name: str = Field(min_length=2, max_length=80)
     email: EmailStr
