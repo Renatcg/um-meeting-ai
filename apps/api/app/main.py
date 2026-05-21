@@ -171,6 +171,7 @@ logger = logging.getLogger(__name__)
 LIVEKIT_WEBHOOK_ROOM_FINISHED = "room_finished"
 LIVEKIT_WEBHOOK_EGRESS_ENDED = "egress_ended"
 LIVEKIT_WEBHOOK_EGRESS_UPDATED = "egress_updated"
+LIVEKIT_WEBHOOK_PARTICIPANT_LEFT = "participant_left"
 
 
 def verify_agent_api_key(
@@ -191,6 +192,58 @@ def log_background_task_failure(task: asyncio.Task) -> None:
         task.result()
     except Exception:
         logger.exception("background task failed")
+
+
+def is_livekit_agent_participant(identity: str | None, name: str | None) -> bool:
+    normalized_identity = (identity or "").strip().lower()
+    normalized_name = (name or "").strip().lower()
+    if normalized_identity.startswith("agent-"):
+        return True
+    return normalized_name in {"coevo", "jarvis", "um copilot", "copilot"}
+
+
+async def list_livekit_human_participants(meeting_id: str) -> list[api.ParticipantInfo]:
+    livekit_api = api.LiveKitAPI(
+        settings.livekit_url,
+        settings.livekit_api_key,
+        settings.livekit_api_secret,
+    )
+    try:
+        response = await livekit_api.room.list_participants(
+            api.ListParticipantsRequest(room=meeting_id)
+        )
+    finally:
+        await livekit_api.aclose()
+
+    return [
+        participant
+        for participant in response.participants
+        if not is_livekit_agent_participant(
+            getattr(participant, "identity", None),
+            getattr(participant, "name", None),
+        )
+    ]
+
+
+async def finalize_meeting_if_no_humans(meeting_id: str) -> None:
+    await asyncio.sleep(1)
+    try:
+        humans = await list_livekit_human_participants(meeting_id)
+    except Exception:
+        logger.exception("failed to inspect livekit participants after participant left")
+        return
+
+    if humans:
+        return
+
+    logger.info(
+        "finalizing meeting because no human participants remain",
+        extra={"meeting_id": meeting_id},
+    )
+    try:
+        await finalize_meeting(meeting_id)
+    except Exception:
+        logger.exception("failed to finalize meeting after last human participant left")
 
 
 @asynccontextmanager
@@ -736,6 +789,9 @@ async def livekit_webhook(request: Request) -> dict[str, str]:
             await finalize_meeting(meeting_id)
         except Exception:
             logger.exception("failed to finalize meeting from livekit webhook")
+    elif event_name == LIVEKIT_WEBHOOK_PARTICIPANT_LEFT and meeting_id:
+        task = asyncio.create_task(finalize_meeting_if_no_humans(meeting_id))
+        task.add_done_callback(log_background_task_failure)
     elif event_name in {LIVEKIT_WEBHOOK_EGRESS_ENDED, LIVEKIT_WEBHOOK_EGRESS_UPDATED}:
         egress_info = getattr(event, "egress_info", None) or getattr(event, "egress", None)
         if egress_info:
@@ -1541,6 +1597,11 @@ async def send_deferred_meeting_emails(meeting_id: str) -> None:
         settings=settings,
         meeting_id=meeting_id,
     )
+    if pending_emails:
+        logger.info(
+            "sending deferred meeting emails",
+            extra={"meeting_id": meeting_id, "count": len(pending_emails)},
+        )
     for pending_email in pending_emails:
         pending_email_id = int(pending_email["id"])
         try:
@@ -1569,6 +1630,10 @@ async def send_deferred_meeting_emails(meeting_id: str) -> None:
                 result=response.model_dump(mode="json"),
             )
         except Exception as exc:
+            logger.exception(
+                "deferred meeting email failed",
+                extra={"meeting_id": meeting_id, "pending_email_id": pending_email_id},
+            )
             await mark_pending_meeting_email(
                 settings=settings,
                 pending_email_id=pending_email_id,
