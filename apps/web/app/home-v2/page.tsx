@@ -202,7 +202,7 @@ export default function HomeV2Page() {
           <button className={navClass("knowledge")} onClick={() => selectSection("knowledge")} type="button">
             Conhecimento
           </button>
-          <button className={navClass("dev")} onClick={() => selectSection("dev")} type="button">
+          <button className={navClass("dev")} onClick={() => router.push("/dev-console")} type="button">
             Dev Console
           </button>
         </nav>
@@ -268,7 +268,11 @@ export default function HomeV2Page() {
                   : "font-medium text-white/58 hover:bg-white/7 hover:text-white"
               }`}
               key={section}
-              onClick={() => selectSection(section as Section)}
+              onClick={() =>
+                section === "dev"
+                  ? router.push("/dev-console")
+                  : selectSection(section as Section)
+              }
               type="button"
             >
               <span className="flex h-8 w-8 items-center justify-center rounded-md border border-white/14 font-mono text-xs">
@@ -460,7 +464,7 @@ export default function HomeV2Page() {
               </div>
               <button
                 className="mt-5 w-full rounded-lg border border-white/14 bg-white/[0.035] px-5 py-3 text-sm font-bold text-white transition hover:border-white/34 hover:bg-white/10"
-                onClick={() => selectSection("dev")}
+                onClick={() => router.push("/dev-console")}
                 type="button"
               >
                 Ver conceito
