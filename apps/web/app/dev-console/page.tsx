@@ -76,50 +76,52 @@ export default function DevConsolePage() {
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_78%_18%,rgba(255,255,255,0.09),transparent_30%),radial-gradient(circle_at_18%_28%,rgba(255,255,255,0.045),transparent_24%),linear-gradient(135deg,rgba(5,7,12,0.96),#05070C_58%,#03050A)]" />
 
       <section className="relative z-10 grid h-screen grid-cols-1 overflow-hidden xl:grid-cols-[280px_minmax(0,1fr)_340px]">
-        <aside className="hidden h-screen overflow-hidden border-r border-white/10 bg-[#080B10]/84 p-4 backdrop-blur-xl xl:flex xl:flex-col">
-          <button
-            className="flex items-center gap-3 border-b border-white/10 pb-4 text-left"
-            onClick={() => router.push("/home-v2")}
-            type="button"
-          >
-            <span className="grid h-10 w-10 place-items-center rounded-lg bg-white font-display text-lg font-bold text-[#05070C]">
-              C
-            </span>
-            <span>
-              <span className="block font-display text-base font-semibold">Coevo Labs</span>
-              <span className="block font-mono text-[11px] uppercase tracking-[0.18em] text-white/44">
-                Dev Console
+        <aside className="hidden h-screen overflow-hidden border-r border-white/10 bg-[#080B10]/84 p-3 backdrop-blur-xl xl:grid xl:grid-rows-[210px_132px_minmax(0,1fr)_152px] xl:gap-3">
+          <section className="min-h-0 overflow-y-auto rounded-xl border border-white/10 bg-white/[0.025] p-3">
+            <button
+              className="flex w-full items-center gap-3 border-b border-white/10 pb-3 text-left"
+              onClick={() => router.push("/home-v2")}
+              type="button"
+            >
+              <span className="grid h-9 w-9 place-items-center rounded-lg bg-white font-display text-base font-bold text-[#05070C]">
+                C
               </span>
-            </span>
-          </button>
-
-          <nav className="mt-4 space-y-1.5">
-            {["Novo chat", "Pesquisar", "Projetos", "Automacoes"].map((item, index) => (
-              <button
-                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs font-bold transition ${
-                  index === 0
-                    ? "border border-white/18 bg-white/10 text-white"
-                    : "text-white/52 hover:bg-white/[0.06] hover:text-white"
-                }`}
-                key={item}
-                type="button"
-              >
-                <span className="grid h-7 w-7 place-items-center rounded-md border border-white/12 font-mono text-[11px]">
-                  {item[0]}
+              <span>
+                <span className="block font-display text-sm font-semibold">Coevo Labs</span>
+                <span className="block font-mono text-[10px] uppercase tracking-[0.16em] text-white/44">
+                  Dev Console
                 </span>
-                {item}
-              </button>
-            ))}
-          </nav>
+              </span>
+            </button>
 
-          <section className="mt-5">
-            <p className="px-2 font-mono text-xs uppercase tracking-[0.18em] text-white/34">
+            <nav className="mt-3 space-y-1">
+              {["Novo chat", "Pesquisar", "Projetos", "Automacoes"].map((item, index) => (
+                <button
+                  className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[11px] font-bold transition ${
+                    index === 0
+                      ? "border border-white/18 bg-white/10 text-white"
+                      : "text-white/52 hover:bg-white/[0.06] hover:text-white"
+                  }`}
+                  key={item}
+                  type="button"
+                >
+                  <span className="grid h-6 w-6 place-items-center rounded-md border border-white/12 font-mono text-[10px]">
+                    {item[0]}
+                  </span>
+                  {item}
+                </button>
+              ))}
+            </nav>
+          </section>
+
+          <section className="min-h-0 overflow-hidden rounded-xl border border-white/10 bg-white/[0.025] p-3">
+            <p className="px-1 font-mono text-[11px] uppercase tracking-[0.18em] text-white/34">
               Chats
             </p>
-            <div className="mt-2 space-y-1.5">
+            <div className="mt-2 max-h-[92px] space-y-1 overflow-y-auto pr-1">
               {["LP Coevo Labs", "Agente LiveKit", "API Railway"].map((chat, index) => (
                 <button
-                  className={`w-full rounded-lg border p-2.5 text-left transition ${
+                  className={`flex w-full items-center justify-between gap-3 rounded-lg border px-2.5 py-1.5 text-left transition ${
                     index === 0
                       ? "border-white/18 bg-white/10"
                       : "border-white/8 bg-white/[0.025] hover:border-white/16"
@@ -127,8 +129,8 @@ export default function DevConsolePage() {
                   key={chat}
                   type="button"
                 >
-                  <span className="block text-xs font-bold">{chat}</span>
-                  <span className="mt-1 block font-mono text-[11px] uppercase text-white/34">
+                  <span className="min-w-0 truncate text-[11px] font-bold">{chat}</span>
+                  <span className="shrink-0 font-mono text-[10px] uppercase text-white/34">
                     {index === 0 ? "agora" : `${index + 1} d`}
                   </span>
                 </button>
@@ -136,14 +138,14 @@ export default function DevConsolePage() {
             </div>
           </section>
 
-          <section className="mt-5">
-            <p className="px-2 font-mono text-xs uppercase tracking-[0.18em] text-white/34">
+          <section className="min-h-0 overflow-hidden rounded-xl border border-white/10 bg-white/[0.025] p-3">
+            <p className="px-1 font-mono text-[11px] uppercase tracking-[0.18em] text-white/34">
               Pontos de restauracao
             </p>
-            <div className="mt-2 rounded-xl border border-white/10 bg-white/[0.035] p-1.5">
+            <div className="mt-2 h-[calc(100%-24px)] overflow-y-auto rounded-lg border border-white/10 bg-white/[0.035] p-1.5">
               {restorePoints.map(([title, detail], index) => (
                 <button
-                  className="flex w-full items-start gap-3 rounded-lg px-3 py-2 text-left transition hover:bg-white/[0.055]"
+                  className="flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left transition hover:bg-white/[0.055]"
                   key={title}
                   type="button"
                 >
@@ -153,37 +155,37 @@ export default function DevConsolePage() {
                     }`}
                   />
                   <span>
-                    <span className="block text-xs font-bold">{title}</span>
-                    <span className="mt-1 block text-xs text-white/42">{detail}</span>
+                    <span className="block text-[11px] font-bold">{title}</span>
+                    <span className="mt-0.5 block text-[11px] text-white/42">{detail}</span>
                   </span>
                 </button>
               ))}
             </div>
           </section>
 
-          <section className="mt-auto rounded-xl border border-white/10 bg-white/[0.035] p-3">
+          <section className="min-h-0 overflow-y-auto rounded-xl border border-white/10 bg-white/[0.035] p-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="font-mono text-xs uppercase tracking-[0.16em] text-white/34">
+                <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-white/34">
                   Preview local
                 </p>
-                <p className="mt-1 text-xs font-bold">/coevo-labs</p>
+                <p className="text-[11px] font-bold">/coevo-labs</p>
               </div>
-              <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-white/62">
+              <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-bold text-white/62">
                 rodando
               </span>
             </div>
             <button
-              className="mt-3 h-24 w-full overflow-hidden rounded-lg border border-white/10 bg-[#03050A] p-3 text-left"
+              className="mt-2 h-20 w-full overflow-hidden rounded-lg border border-white/10 bg-[#03050A] p-2.5 text-left"
               onClick={() => setActiveTab("preview")}
               type="button"
             >
               <span className="block h-2 w-24 rounded-full bg-white/76" />
-              <span className="mt-4 block h-5 w-36 rounded-md bg-white/18" />
-              <span className="mt-4 grid grid-cols-3 gap-2">
-                <span className="h-5 rounded-md bg-white/10" />
-                <span className="h-5 rounded-md bg-white/10" />
-                <span className="h-5 rounded-md bg-white/10" />
+              <span className="mt-3 block h-4 w-32 rounded-md bg-white/18" />
+              <span className="mt-3 grid grid-cols-3 gap-1.5">
+                <span className="h-4 rounded-md bg-white/10" />
+                <span className="h-4 rounded-md bg-white/10" />
+                <span className="h-4 rounded-md bg-white/10" />
               </span>
             </button>
           </section>
