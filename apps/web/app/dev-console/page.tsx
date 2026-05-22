@@ -1,52 +1,144 @@
 "use client";
 
-import { useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type CenterTab = "conversation" | "terminal" | "preview" | "diff" | "page";
-type FilePreview = "code" | "image";
+type FileKind = "code" | "image" | "upload";
+type MessageTone = "user" | "agent";
 
-const restorePoints = [
-  ["Estado inicial", "antes dos ajustes"],
-  ["Hero responsiva", "2 arquivos alterados"],
-  ["Segunda dobra", "build passou"],
-  ["Pre-commit", "pronto para PR"],
+type RestorePoint = {
+  id: string;
+  title: string;
+  detail: string;
+};
+
+type ConsoleFile = {
+  id: string;
+  group: string;
+  name: string;
+  kind: FileKind;
+  status?: string;
+};
+
+type ChatMessage = {
+  id: number;
+  author: "Voce" | "Coevo Dev";
+  tone: MessageTone;
+  text: string;
+};
+
+type ChatSession = {
+  id: string;
+  title: string;
+  age: string;
+  messages: ChatMessage[];
+};
+
+const initialRestorePoints: RestorePoint[] = [
+  { id: "initial", title: "Estado inicial", detail: "antes dos ajustes" },
+  { id: "hero", title: "Hero responsiva", detail: "2 arquivos alterados" },
+  { id: "how", title: "Segunda dobra", detail: "build passou" },
+  { id: "precommit", title: "Pre-commit", detail: "pronto para PR" },
 ];
 
-const fileGroups = [
+const initialFiles: ConsoleFile[] = [
   {
-    title: "Sistema",
-    files: ["apps/web/app/coevo-labs/page.tsx", "apps/web/public/brand/logo.png"],
+    id: "labs-page",
+    group: "Sistema",
+    name: "apps/web/app/coevo-labs/page.tsx",
+    kind: "code",
   },
   {
-    title: "Uploads",
-    files: ["referencia-antigravity.png", "coevo-labs-logo.png"],
+    id: "brand-logo",
+    group: "Sistema",
+    name: "apps/web/public/brand/logo.png",
+    kind: "image",
   },
   {
-    title: "Midias geradas",
-    files: ["dev-console-v3.png", "home-v2-preview.png"],
+    id: "antigravity",
+    group: "Uploads",
+    name: "referencia-antigravity.png",
+    kind: "upload",
   },
   {
-    title: "Alterados",
-    files: ["page.tsx"],
+    id: "coevo-logo-upload",
+    group: "Uploads",
+    name: "coevo-labs-logo.png",
+    kind: "upload",
+  },
+  {
+    id: "dev-console-image",
+    group: "Midias geradas",
+    name: "dev-console-v3.png",
+    kind: "image",
+  },
+  {
+    id: "home-preview",
+    group: "Midias geradas",
+    name: "home-v2-preview.png",
+    kind: "image",
+  },
+  {
+    id: "changed-page",
+    group: "Alterados",
+    name: "page.tsx",
+    kind: "code",
+    status: "M",
   },
 ];
 
-const chatMessages = [
+const initialChats: ChatSession[] = [
   {
-    author: "Voce",
-    tone: "user",
-    text: "Melhore a segunda dobra da Coevo Labs, mas crie um ponto antes.",
+    id: "labs",
+    title: "LP Coevo Labs",
+    age: "agora",
+    messages: [
+      {
+        id: 1,
+        author: "Voce",
+        tone: "user",
+        text: "Melhore a segunda dobra da Coevo Labs, mas crie um ponto antes.",
+      },
+      {
+        id: 2,
+        author: "Coevo Dev",
+        tone: "agent",
+        text: "Ponto de restauracao criado: Estado inicial. Vou ajustar espacamentos, preservar a identidade visual e validar o build antes do PR.",
+      },
+      {
+        id: 3,
+        author: "Coevo Dev",
+        tone: "agent",
+        text: "Clique em page.tsx ou no Preview Local para abrir em uma aba central. Se estiver bom, posso criar o commit e abrir o PR.",
+      },
+    ],
   },
   {
-    author: "Coevo Dev",
-    tone: "agent",
-    text: "Ponto de restauracao criado: Estado inicial. Vou ajustar espacamentos, preservar a identidade visual e validar o build antes do PR.",
+    id: "livekit",
+    title: "Agente LiveKit",
+    age: "2 d",
+    messages: [
+      {
+        id: 4,
+        author: "Coevo Dev",
+        tone: "agent",
+        text: "Contexto do agente LiveKit carregado. Posso revisar sala, audio, acoes e memoria de reunioes.",
+      },
+    ],
   },
   {
-    author: "Coevo Dev",
-    tone: "agent",
-    text: "Clique em page.tsx ou no Preview Local para abrir em uma aba central. Se estiver bom, posso criar o commit e abrir o PR.",
+    id: "api",
+    title: "API Railway",
+    age: "3 d",
+    messages: [
+      {
+        id: 5,
+        author: "Coevo Dev",
+        tone: "agent",
+        text: "API Railway pronta para analise. Posso abrir endpoints, jobs e integracoes antes de propor mudancas.",
+      },
+    ],
   },
 ];
 
@@ -61,7 +153,123 @@ function tabClass(active: boolean) {
 export default function DevConsolePage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<CenterTab>("conversation");
-  const [selectedPreview, setSelectedPreview] = useState<FilePreview>("code");
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>(initialChats);
+  const [activeChatId, setActiveChatId] = useState(initialChats[0].id);
+  const [restorePoints, setRestorePoints] = useState(initialRestorePoints);
+  const [activeRestoreId, setActiveRestoreId] = useState("precommit");
+  const [selectedFileId, setSelectedFileId] = useState("changed-page");
+  const [messageDraft, setMessageDraft] = useState("");
+  const [terminalLines, setTerminalLines] = useState([
+    "coevo-dev ~/um-meeting-ai main > iniciar tarefa /coevo-labs",
+    "[ok] contexto lido",
+    "[ok] apps/web/app/coevo-labs/page.tsx alterado",
+    "[ok] preview local atualizado",
+    "[...] aguardando revisao do diff",
+  ]);
+
+  const activeChat =
+    chatSessions.find((chat) => chat.id === activeChatId) ?? chatSessions[0];
+  const selectedFile =
+    initialFiles.find((file) => file.id === selectedFileId) ?? initialFiles[0];
+  const fileGroups = useMemo(() => {
+    return initialFiles.reduce<Record<string, ConsoleFile[]>>((groups, file) => {
+      groups[file.group] = [...(groups[file.group] ?? []), file];
+      return groups;
+    }, {});
+  }, []);
+
+  function appendTerminal(line: string) {
+    setTerminalLines((current) => [...current, line]);
+  }
+
+  function startNewChat() {
+    const nextChat: ChatSession = {
+      id: `chat-${Date.now()}`,
+      title: "Nova tarefa",
+      age: "agora",
+      messages: [
+        {
+          id: Date.now(),
+          author: "Coevo Dev",
+          tone: "agent",
+          text: "Novo chat criado. Descreva a mudanca que voce quer planejar ou executar.",
+        },
+      ],
+    };
+
+    setChatSessions((current) => [nextChat, ...current]);
+    setActiveChatId(nextChat.id);
+    setActiveTab("conversation");
+    appendTerminal("coevo-dev ~/um-meeting-ai main > novo chat criado");
+  }
+
+  function sendMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const text = messageDraft.trim();
+    if (!text) {
+      return;
+    }
+
+    const userMessage: ChatMessage = {
+      id: Date.now(),
+      author: "Voce",
+      tone: "user",
+      text,
+    };
+    const agentMessage: ChatMessage = {
+      id: Date.now() + 1,
+      author: "Coevo Dev",
+      tone: "agent",
+      text: "Entendi. Registrei sua solicitacao neste chat e atualizei o terminal com a proxima acao sugerida.",
+    };
+
+    setChatSessions((current) =>
+      current.map((chat) =>
+        chat.id === activeChatId
+          ? {
+              ...chat,
+              age: "agora",
+              messages: [...chat.messages, userMessage, agentMessage],
+            }
+          : chat,
+      ),
+    );
+    setMessageDraft("");
+    appendTerminal(`coevo-dev ~/um-meeting-ai main > ${text}`);
+    appendTerminal("[...] proxima acao preparada pelo Coevo Dev");
+  }
+
+  function selectFile(file: ConsoleFile) {
+    setSelectedFileId(file.id);
+    setActiveTab(file.kind === "code" ? "page" : "preview");
+  }
+
+  function runAction(action: "diff" | "build" | "commit" | "pr") {
+    const actionLabels = {
+      diff: "diff aberto para revisao",
+      build: "build iniciado no sandbox",
+      commit: "ponto de commit criado",
+      pr: "preparando abertura de PR",
+    };
+
+    appendTerminal(`coevo-dev ~/um-meeting-ai main > ${actionLabels[action]}`);
+
+    if (action === "diff") {
+      setActiveTab("diff");
+    }
+    if (action === "build") {
+      setActiveTab("terminal");
+    }
+    if (action === "commit") {
+      const nextPoint: RestorePoint = {
+        id: `commit-${Date.now()}`,
+        title: "Commit local",
+        detail: "checkpoint criado agora",
+      };
+      setRestorePoints((current) => [...current, nextPoint]);
+      setActiveRestoreId(nextPoint.id);
+    }
+  }
 
   return (
     <main className="h-screen overflow-hidden bg-[#05070C] text-white">
@@ -103,6 +311,7 @@ export default function DevConsolePage() {
                       : "text-white/52 hover:bg-white/[0.06] hover:text-white"
                   }`}
                   key={item}
+                  onClick={index === 0 ? startNewChat : undefined}
                   type="button"
                 >
                   <span className="grid h-6 w-6 place-items-center rounded-md border border-white/12 font-mono text-[10px]">
@@ -119,19 +328,23 @@ export default function DevConsolePage() {
               Chats
             </p>
             <div className="mt-2 max-h-[92px] space-y-1 overflow-y-auto pr-1">
-              {["LP Coevo Labs", "Agente LiveKit", "API Railway"].map((chat, index) => (
+              {chatSessions.map((chat) => (
                 <button
                   className={`flex w-full items-center justify-between gap-3 rounded-lg border px-2.5 py-1.5 text-left transition ${
-                    index === 0
+                    activeChatId === chat.id
                       ? "border-white/18 bg-white/10"
                       : "border-white/8 bg-white/[0.025] hover:border-white/16"
                   }`}
-                  key={chat}
+                  key={chat.id}
+                  onClick={() => {
+                    setActiveChatId(chat.id);
+                    setActiveTab("conversation");
+                  }}
                   type="button"
                 >
-                  <span className="min-w-0 truncate text-[11px] font-bold">{chat}</span>
+                  <span className="min-w-0 truncate text-[11px] font-bold">{chat.title}</span>
                   <span className="shrink-0 font-mono text-[10px] uppercase text-white/34">
-                    {index === 0 ? "agora" : `${index + 1} d`}
+                    {chat.age}
                   </span>
                 </button>
               ))}
@@ -143,20 +356,30 @@ export default function DevConsolePage() {
               Pontos de restauracao
             </p>
             <div className="mt-2 h-[calc(100%-24px)] overflow-y-auto rounded-lg border border-white/10 bg-white/[0.035] p-1.5">
-              {restorePoints.map(([title, detail], index) => (
+              {restorePoints.map((point, index) => (
                 <button
-                  className="flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left transition hover:bg-white/[0.055]"
-                  key={title}
+                  className={`flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left transition hover:bg-white/[0.055] ${
+                    activeRestoreId === point.id ? "bg-white/10" : ""
+                  }`}
+                  key={point.id}
+                  onClick={() => {
+                    setActiveRestoreId(point.id);
+                    appendTerminal(`coevo-dev ~/um-meeting-ai main > checkpoint ${point.title}`);
+                  }}
                   type="button"
                 >
                   <span
                     className={`mt-1 h-2.5 w-2.5 rounded-full ${
-                      index === restorePoints.length - 1 ? "bg-white" : "bg-white/42"
+                      activeRestoreId === point.id || index === restorePoints.length - 1
+                        ? "bg-white"
+                        : "bg-white/42"
                     }`}
                   />
                   <span>
-                    <span className="block text-[11px] font-bold">{title}</span>
-                    <span className="mt-0.5 block text-[11px] text-white/42">{detail}</span>
+                    <span className="block text-[11px] font-bold">{point.title}</span>
+                    <span className="mt-0.5 block text-[11px] text-white/42">
+                      {point.detail}
+                    </span>
                   </span>
                 </button>
               ))}
@@ -239,7 +462,7 @@ export default function DevConsolePage() {
           <div className="min-h-0 flex-1 overflow-hidden p-4 md:p-5">
             {activeTab === "conversation" ? (
               <div className="mx-auto max-w-5xl space-y-3">
-                {chatMessages.map((message) => (
+                {activeChat.messages.map((message) => (
                   <article
                     className={`max-w-3xl ${message.tone === "user" ? "ml-auto" : ""}`}
                     key={`${message.author}-${message.text}`}
@@ -260,27 +483,14 @@ export default function DevConsolePage() {
                 ))}
 
                 <pre className="overflow-x-auto rounded-xl border border-white/10 bg-[#03050A] p-4 font-mono text-xs leading-6 text-white/72 shadow-[0_28px_90px_rgba(0,0,0,0.32)]">
-{`coevo-dev ~/um-meeting-ai main > iniciar tarefa /coevo-labs
-✓ contexto lido
-✓ apps/web/app/coevo-labs/page.tsx alterado
-✓ preview local atualizado
-• aguardando revisao do diff`}
+{terminalLines.slice(-5).join("\n")}
                 </pre>
               </div>
             ) : null}
 
             {activeTab === "terminal" ? (
               <pre className="h-full overflow-x-auto rounded-xl border border-white/10 bg-[#03050A] p-5 font-mono text-xs leading-7 text-white/72">
-{`coevo-dev ~/um-meeting-ai main > status
-sandbox pronto
-node 20.11.1
-pnpm 9.1.2
-branch main
-
-coevo-dev ~/um-meeting-ai main > diff --resumo
-M apps/web/app/coevo-labs/page.tsx
-1 arquivo alterado
-build aguardando confirmacao`}
+{terminalLines.join("\n")}
               </pre>
             ) : null}
 
@@ -328,7 +538,7 @@ build aguardando confirmacao`}
   return (
     <main className="coevo-labs-page">
       <section className="coevo-how-section">
-        <h2>Da ideia à solução</h2>
+        <h2>Da ideia a solucao</h2>
       </section>
     </main>
   );
@@ -337,18 +547,20 @@ build aguardando confirmacao`}
             ) : null}
           </div>
 
-          <form className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto_auto] gap-2 border-t border-white/10 bg-[#05070C]/84 p-3 backdrop-blur-xl">
-            <button className="h-10 w-10 rounded-lg border border-white/12 bg-white/[0.035] text-lg text-white/62" type="button">
+          <form className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto_auto] gap-2 border-t border-white/10 bg-[#05070C]/84 p-3 backdrop-blur-xl" onSubmit={sendMessage}>
+            <button className="h-10 w-10 rounded-lg border border-white/12 bg-white/[0.035] text-lg text-white/62" onClick={startNewChat} type="button">
               +
             </button>
             <input
               className="min-w-0 rounded-lg border border-white/12 bg-white/[0.045] px-4 text-xs text-white outline-none placeholder:text-white/34 focus:border-white/34"
-              placeholder="Converse com o Coevo Dev ou peça uma alteracao..."
+              placeholder="Converse com o Coevo Dev ou peca uma alteracao..."
+              value={messageDraft}
+              onChange={(event) => setMessageDraft(event.target.value)}
             />
             <button className="h-10 w-10 rounded-lg border border-white/12 bg-white/[0.035] text-[11px] text-white/62" type="button">
               mic
             </button>
-            <button className="h-10 rounded-lg bg-white px-4 text-xs font-bold text-[#05070C]" type="button">
+            <button className="h-10 rounded-lg bg-white px-4 text-xs font-bold text-[#05070C]" type="submit">
               Enviar
             </button>
           </form>
@@ -363,26 +575,26 @@ build aguardando confirmacao`}
               </span>
             </div>
             <div className="max-h-full overflow-y-auto p-3">
-              {fileGroups.map((group) => (
-                <div className="mb-4" key={group.title}>
+              {Object.entries(fileGroups).map(([group, files]) => (
+                <div className="mb-4" key={group}>
                   <p className="font-mono text-xs uppercase tracking-[0.16em] text-white/34">
-                    {group.title}
+                    {group}
                   </p>
                   <div className="mt-2 space-y-1">
-                    {group.files.map((file) => (
+                    {files.map((file) => (
                       <button
                         className={`flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-xs transition hover:bg-white/[0.055] ${
-                          file === "page.tsx" ? "bg-white/10 text-white" : "text-white/58"
+                          file.id === selectedFileId ? "bg-white/10 text-white" : "text-white/58"
                         }`}
-                        key={file}
-                        onClick={() => setSelectedPreview(file.endsWith(".png") ? "image" : "code")}
+                        key={file.id}
+                        onClick={() => selectFile(file)}
                         type="button"
                       >
-                        <span className="text-white/34">▧</span>
-                        <span className="min-w-0 flex-1 truncate">{file}</span>
-                        {file === "page.tsx" ? (
+                        <span className="text-white/34">[]</span>
+                        <span className="min-w-0 flex-1 truncate">{file.name}</span>
+                        {file.status ? (
                           <span className="rounded-full bg-white/12 px-2 py-0.5 font-mono text-[10px] text-white/64">
-                            M
+                            {file.status}
                           </span>
                         ) : null}
                       </button>
@@ -398,13 +610,13 @@ build aguardando confirmacao`}
               <h2 className="font-display text-base font-semibold">Preview do arquivo</h2>
               <button
                 className="rounded-lg border border-white/12 bg-white/[0.035] px-3 py-1.5 text-xs font-bold text-white/62 transition hover:text-white"
-                onClick={() => setActiveTab(selectedPreview === "code" ? "page" : "preview")}
+                onClick={() => setActiveTab(selectedFile.kind === "code" ? "page" : "preview")}
                 type="button"
               >
                 Expandir
               </button>
             </div>
-            {selectedPreview === "code" ? (
+            {selectedFile.kind === "code" ? (
               <pre className="h-full overflow-hidden bg-[#03050A] p-4 font-mono text-[11px] leading-5 text-white/70">
 {`export default function Page() {
   return (
@@ -416,22 +628,27 @@ build aguardando confirmacao`}
               </pre>
             ) : (
               <div className="grid h-full place-items-center bg-[#03050A] p-4">
-                <div className="aspect-video w-full rounded-lg border border-white/10 bg-white/[0.08]" />
+                <div className="w-full">
+                  <div className="aspect-video w-full rounded-lg border border-white/10 bg-white/[0.08]" />
+                  <p className="mt-3 truncate text-center font-mono text-[11px] text-white/42">
+                    {selectedFile.name}
+                  </p>
+                </div>
               </div>
             )}
           </section>
 
           <section className="grid grid-cols-2 gap-3">
-            <button className="rounded-lg border border-white/12 bg-white/[0.035] px-3 py-2.5 text-xs font-bold text-white/70" type="button">
+            <button className="rounded-lg border border-white/12 bg-white/[0.035] px-3 py-2.5 text-xs font-bold text-white/70" onClick={() => runAction("diff")} type="button">
               Ver diff
             </button>
-            <button className="rounded-lg border border-white/12 bg-white/[0.035] px-3 py-2.5 text-xs font-bold text-white/70" type="button">
+            <button className="rounded-lg border border-white/12 bg-white/[0.035] px-3 py-2.5 text-xs font-bold text-white/70" onClick={() => runAction("build")} type="button">
               Rodar build
             </button>
-            <button className="rounded-lg border border-white/36 bg-white/[0.035] px-3 py-2.5 text-xs font-bold text-white" type="button">
+            <button className="rounded-lg border border-white/36 bg-white/[0.035] px-3 py-2.5 text-xs font-bold text-white" onClick={() => runAction("commit")} type="button">
               Criar commit
             </button>
-            <button className="rounded-lg bg-white px-3 py-2.5 text-xs font-bold text-[#05070C]" type="button">
+            <button className="rounded-lg bg-white px-3 py-2.5 text-xs font-bold text-[#05070C]" onClick={() => runAction("pr")} type="button">
               Abrir PR
             </button>
           </section>
