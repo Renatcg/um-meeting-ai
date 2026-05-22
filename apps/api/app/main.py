@@ -34,6 +34,12 @@ from app.calendar_service import (
 )
 from app.copilot import dispatch_copilot
 from app.conversation_service import respond_with_agent_memory
+from app.dev_console_service import (
+    add_dev_console_message,
+    create_dev_console_chat,
+    get_dev_console_state,
+    run_dev_console_action,
+)
 from app.database import (
     count_app_users,
     get_conversation_session,
@@ -89,6 +95,10 @@ from app.models import (
     ConversationSession,
     CreateMeetingRequest,
     CreateTokenRequest,
+    DevConsoleActionRequest,
+    DevConsoleActionResponse,
+    DevConsoleMessageRequest,
+    DevConsoleState,
     KnowledgeSearchRequest,
     KnowledgeSearchResponse,
     KnowledgeUploadResponse,
@@ -586,6 +596,38 @@ async def read_conversation_messages(session_id: str) -> list[ConversationMessag
 @app.post("/agent/respond", response_model=AgentRespondResponse)
 async def respond_with_agent(payload: AgentRespondRequest) -> AgentRespondResponse:
     return await respond_with_agent_memory(settings=settings, payload=payload)
+
+
+@app.get("/dev-console/state", response_model=DevConsoleState)
+async def read_dev_console_state() -> DevConsoleState:
+    return get_dev_console_state()
+
+
+@app.post("/dev-console/chats", response_model=DevConsoleState)
+async def create_dev_console_session() -> DevConsoleState:
+    return create_dev_console_chat()
+
+
+@app.post("/dev-console/chats/{chat_id}/messages", response_model=DevConsoleState)
+async def create_dev_console_message(
+    chat_id: str,
+    payload: DevConsoleMessageRequest,
+) -> DevConsoleState:
+    return add_dev_console_message(chat_id=chat_id, message=payload.message)
+
+
+@app.post("/dev-console/actions", response_model=DevConsoleActionResponse)
+async def create_dev_console_action(
+    payload: DevConsoleActionRequest,
+) -> DevConsoleActionResponse:
+    state, active_restore_point_id = run_dev_console_action(
+        action=payload.action,
+        restore_point_id=payload.restore_point_id,
+    )
+    return DevConsoleActionResponse(
+        state=state,
+        active_restore_point_id=active_restore_point_id,
+    )
 
 
 @app.post(

@@ -1,7 +1,9 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+
+const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 type CenterTab = "conversation" | "terminal" | "preview" | "diff" | "page";
 type FileKind = "code" | "image" | "upload";
@@ -33,6 +35,13 @@ type ChatSession = {
   title: string;
   age: string;
   messages: ChatMessage[];
+};
+
+type DevConsoleState = {
+  chats: ChatSession[];
+  restore_points: RestorePoint[];
+  files: ConsoleFile[];
+  terminal_lines: string[];
 };
 
 const initialRestorePoints: RestorePoint[] = [
@@ -156,9 +165,11 @@ export default function DevConsolePage() {
   const [chatSessions, setChatSessions] = useState<ChatSession[]>(initialChats);
   const [activeChatId, setActiveChatId] = useState(initialChats[0].id);
   const [restorePoints, setRestorePoints] = useState(initialRestorePoints);
+  const [files, setFiles] = useState<ConsoleFile[]>(initialFiles);
   const [activeRestoreId, setActiveRestoreId] = useState("precommit");
   const [selectedFileId, setSelectedFileId] = useState("changed-page");
   const [messageDraft, setMessageDraft] = useState("");
+  const [connectionStatus, setConnectionStatus] = useState("Conectando API...");
   const [terminalLines, setTerminalLines] = useState([
     "coevo-dev ~/um-meeting-ai main > iniciar tarefa /coevo-labs",
     "[ok] contexto lido",
@@ -170,19 +181,67 @@ export default function DevConsolePage() {
   const activeChat =
     chatSessions.find((chat) => chat.id === activeChatId) ?? chatSessions[0];
   const selectedFile =
-    initialFiles.find((file) => file.id === selectedFileId) ?? initialFiles[0];
+    files.find((file) => file.id === selectedFileId) ?? files[0] ?? initialFiles[0];
   const fileGroups = useMemo(() => {
-    return initialFiles.reduce<Record<string, ConsoleFile[]>>((groups, file) => {
+    return files.reduce<Record<string, ConsoleFile[]>>((groups, file) => {
       groups[file.group] = [...(groups[file.group] ?? []), file];
       return groups;
     }, {});
+  }, [files]);
+
+  useEffect(() => {
+    async function loadState() {
+      try {
+        const response = await fetch(`${apiUrl}/dev-console/state`);
+        if (!response.ok) {
+          throw new Error("API indisponivel");
+        }
+        syncState((await response.json()) as DevConsoleState);
+        setConnectionStatus("API conectada");
+      } catch {
+        setConnectionStatus("Modo local: API indisponivel");
+      }
+    }
+
+    void loadState();
   }, []);
+
+  function syncState(state: DevConsoleState) {
+    setChatSessions(state.chats);
+    setRestorePoints(state.restore_points);
+    setFiles(state.files);
+    setTerminalLines(state.terminal_lines);
+
+    if (!state.chats.some((chat) => chat.id === activeChatId)) {
+      setActiveChatId(state.chats[0]?.id ?? "labs");
+    }
+    if (!state.files.some((file) => file.id === selectedFileId)) {
+      setSelectedFileId(state.files[0]?.id ?? "changed-page");
+    }
+  }
 
   function appendTerminal(line: string) {
     setTerminalLines((current) => [...current, line]);
   }
 
-  function startNewChat() {
+  async function startNewChat() {
+    try {
+      const response = await fetch(`${apiUrl}/dev-console/chats`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        throw new Error("API indisponivel");
+      }
+      const state = (await response.json()) as DevConsoleState;
+      syncState(state);
+      setActiveChatId(state.chats[0]?.id ?? activeChatId);
+      setActiveTab("conversation");
+      setConnectionStatus("API conectada");
+      return;
+    } catch {
+      setConnectionStatus("Modo local: API indisponivel");
+    }
+
     const nextChat: ChatSession = {
       id: `chat-${Date.now()}`,
       title: "Nova tarefa",
@@ -203,11 +262,31 @@ export default function DevConsolePage() {
     appendTerminal("coevo-dev ~/um-meeting-ai main > novo chat criado");
   }
 
-  function sendMessage(event: FormEvent<HTMLFormElement>) {
+  async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = messageDraft.trim();
     if (!text) {
       return;
+    }
+
+    try {
+      const response = await fetch(
+        `${apiUrl}/dev-console/chats/${activeChatId}/messages`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: text }),
+        },
+      );
+      if (!response.ok) {
+        throw new Error("API indisponivel");
+      }
+      syncState((await response.json()) as DevConsoleState);
+      setMessageDraft("");
+      setConnectionStatus("API conectada");
+      return;
+    } catch {
+      setConnectionStatus("Modo local: API indisponivel");
     }
 
     const userMessage: ChatMessage = {
@@ -244,12 +323,48 @@ export default function DevConsolePage() {
     setActiveTab(file.kind === "code" ? "page" : "preview");
   }
 
-  function runAction(action: "diff" | "build" | "commit" | "pr") {
+  async function runAction(
+    action: "diff" | "build" | "commit" | "pr" | "restore",
+    restorePointId?: string,
+  ) {
+    try {
+      const response = await fetch(`${apiUrl}/dev-console/actions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          restore_point_id: restorePointId ?? null,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error("API indisponivel");
+      }
+      const result = (await response.json()) as {
+        state: DevConsoleState;
+        active_restore_point_id?: string | null;
+      };
+      syncState(result.state);
+      if (result.active_restore_point_id) {
+        setActiveRestoreId(result.active_restore_point_id);
+      }
+      if (action === "diff") {
+        setActiveTab("diff");
+      }
+      if (action === "build" || action === "restore") {
+        setActiveTab("terminal");
+      }
+      setConnectionStatus("API conectada");
+      return;
+    } catch {
+      setConnectionStatus("Modo local: API indisponivel");
+    }
+
     const actionLabels = {
       diff: "diff aberto para revisao",
       build: "build iniciado no sandbox",
       commit: "ponto de commit criado",
       pr: "preparando abertura de PR",
+      restore: `checkpoint ${restorePointId ?? "selecionado"}`,
     };
 
     appendTerminal(`coevo-dev ~/um-meeting-ai main > ${actionLabels[action]}`);
@@ -364,7 +479,7 @@ export default function DevConsolePage() {
                   key={point.id}
                   onClick={() => {
                     setActiveRestoreId(point.id);
-                    appendTerminal(`coevo-dev ~/um-meeting-ai main > checkpoint ${point.title}`);
+                    void runAction("restore", point.id);
                   }}
                   type="button"
                 >
@@ -424,6 +539,9 @@ export default function DevConsolePage() {
                 <h1 className="mt-1 font-display text-xl font-semibold md:text-2xl">
                   LP Coevo Labs
                 </h1>
+                <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.16em] text-white/34">
+                  {connectionStatus}
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 <button

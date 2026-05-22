@@ -43,6 +43,9 @@ AgentVoice = Literal[
     "marin",
     "cedar",
 ]
+DevConsoleMessageTone = Literal["user", "agent"]
+DevConsoleFileKind = Literal["code", "image", "upload"]
+DevConsoleAction = Literal["diff", "build", "commit", "pr", "restore"]
 
 
 class UserPublic(BaseModel):
@@ -381,6 +384,55 @@ class AgentRespondResponse(BaseModel):
     user_message: ConversationMessage
     assistant_message: ConversationMessage
     memory_results: list[MeetingMemorySearchResult] = Field(default_factory=list)
+
+
+class DevConsoleMessage(BaseModel):
+    id: int
+    author: str
+    tone: DevConsoleMessageTone
+    text: str
+
+
+class DevConsoleChatSession(BaseModel):
+    id: str
+    title: str
+    age: str = "agora"
+    messages: list[DevConsoleMessage] = Field(default_factory=list)
+
+
+class DevConsoleRestorePoint(BaseModel):
+    id: str
+    title: str
+    detail: str
+
+
+class DevConsoleFile(BaseModel):
+    id: str
+    group: str
+    name: str
+    kind: DevConsoleFileKind
+    status: str | None = None
+
+
+class DevConsoleState(BaseModel):
+    chats: list[DevConsoleChatSession]
+    restore_points: list[DevConsoleRestorePoint]
+    files: list[DevConsoleFile]
+    terminal_lines: list[str]
+
+
+class DevConsoleMessageRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=2000)
+
+
+class DevConsoleActionRequest(BaseModel):
+    action: DevConsoleAction
+    restore_point_id: str | None = Field(default=None, max_length=120)
+
+
+class DevConsoleActionResponse(BaseModel):
+    state: DevConsoleState
+    active_restore_point_id: str | None = None
 
 
 class AgentProfile(BaseModel):
