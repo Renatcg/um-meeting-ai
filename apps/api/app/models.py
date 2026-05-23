@@ -44,7 +44,7 @@ AgentVoice = Literal[
     "cedar",
 ]
 DevConsoleMessageTone = Literal["user", "agent"]
-DevConsoleFileKind = Literal["code", "image", "upload"]
+DevConsoleFileKind = Literal["code", "image", "text"]
 DevConsoleAction = Literal["diff", "build", "commit", "pr", "restore"]
 
 
@@ -421,10 +421,6 @@ class DevConsoleState(BaseModel):
     terminal_lines: list[str]
 
 
-class DevConsoleMessageRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=2000)
-
-
 class DevConsoleActionRequest(BaseModel):
     action: DevConsoleAction
     restore_point_id: str | None = Field(default=None, max_length=120)
@@ -433,6 +429,18 @@ class DevConsoleActionRequest(BaseModel):
 class DevConsoleActionResponse(BaseModel):
     state: DevConsoleState
     active_restore_point_id: str | None = None
+
+
+class DevConsoleFileContentResponse(BaseModel):
+    path: str
+    name: str
+    kind: DevConsoleFileKind
+    content: str | None = None
+
+
+class DevConsoleGitDiffResponse(BaseModel):
+    diff: str
+    terminal_lines: list[str] = Field(default_factory=list)
 
 
 class AgentProfile(BaseModel):

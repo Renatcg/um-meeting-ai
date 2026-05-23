@@ -1,201 +1,269 @@
-from copy import deepcopy
-from time import time
+from __future__ import annotations
+
+import os
+import subprocess
+from pathlib import Path
+
+from fastapi import HTTPException
 
 from app.models import (
     DevConsoleAction,
-    DevConsoleChatSession,
     DevConsoleFile,
-    DevConsoleMessage,
+    DevConsoleFileContentResponse,
+    DevConsoleGitDiffResponse,
     DevConsoleRestorePoint,
     DevConsoleState,
 )
 
 
-_state = DevConsoleState(
-    chats=[
-        DevConsoleChatSession(
-            id="labs",
-            title="LP Coevo Labs",
-            age="agora",
-            messages=[
-                DevConsoleMessage(
-                    id=1,
-                    author="Voce",
-                    tone="user",
-                    text="Melhore a segunda dobra da Coevo Labs, mas crie um ponto antes.",
-                ),
-                DevConsoleMessage(
-                    id=2,
-                    author="Coevo Dev",
-                    tone="agent",
-                    text=(
-                        "Ponto de restauracao criado: Estado inicial. Vou ajustar "
-                        "espacamentos, preservar a identidade visual e validar o build antes do PR."
-                    ),
-                ),
-                DevConsoleMessage(
-                    id=3,
-                    author="Coevo Dev",
-                    tone="agent",
-                    text=(
-                        "Clique em page.tsx ou no Preview Local para abrir em uma aba central. "
-                        "Se estiver bom, posso criar o commit e abrir o PR."
-                    ),
-                ),
-            ],
-        ),
-        DevConsoleChatSession(
-            id="livekit",
-            title="Agente LiveKit",
-            age="2 d",
-            messages=[
-                DevConsoleMessage(
-                    id=4,
-                    author="Coevo Dev",
-                    tone="agent",
-                    text=(
-                        "Contexto do agente LiveKit carregado. Posso revisar sala, audio, "
-                        "acoes e memoria de reunioes."
-                    ),
-                ),
-            ],
-        ),
-        DevConsoleChatSession(
-            id="api",
-            title="API Railway",
-            age="3 d",
-            messages=[
-                DevConsoleMessage(
-                    id=5,
-                    author="Coevo Dev",
-                    tone="agent",
-                    text=(
-                        "API Railway pronta para analise. Posso abrir endpoints, jobs e "
-                        "integracoes antes de propor mudancas."
-                    ),
-                ),
-            ],
-        ),
-    ],
-    restore_points=[
-        DevConsoleRestorePoint(id="initial", title="Estado inicial", detail="antes dos ajustes"),
-        DevConsoleRestorePoint(id="hero", title="Hero responsiva", detail="2 arquivos alterados"),
-        DevConsoleRestorePoint(id="how", title="Segunda dobra", detail="build passou"),
-        DevConsoleRestorePoint(id="precommit", title="Pre-commit", detail="pronto para PR"),
-    ],
-    files=[
-        DevConsoleFile(
-            id="labs-page",
-            group="Sistema",
-            name="apps/web/app/coevo-labs/page.tsx",
-            kind="code",
-        ),
-        DevConsoleFile(
-            id="brand-logo",
-            group="Sistema",
-            name="apps/web/public/brand/logo.png",
-            kind="image",
-        ),
-        DevConsoleFile(
-            id="antigravity",
-            group="Uploads",
-            name="referencia-antigravity.png",
-            kind="upload",
-        ),
-        DevConsoleFile(
-            id="coevo-logo-upload",
-            group="Uploads",
-            name="coevo-labs-logo.png",
-            kind="upload",
-        ),
-        DevConsoleFile(
-            id="dev-console-image",
-            group="Midias geradas",
-            name="dev-console-v3.png",
-            kind="image",
-        ),
-        DevConsoleFile(
-            id="home-preview",
-            group="Midias geradas",
-            name="home-v2-preview.png",
-            kind="image",
-        ),
-        DevConsoleFile(
-            id="changed-page",
-            group="Alterados",
-            name="page.tsx",
-            kind="code",
-            status="M",
-        ),
-    ],
-    terminal_lines=[
-        "coevo-dev ~/um-meeting-ai main > iniciar tarefa /coevo-labs",
-        "[ok] contexto lido",
-        "[ok] apps/web/app/coevo-labs/page.tsx alterado",
-        "[ok] preview local atualizado",
-        "[...] aguardando revisao do diff",
-    ],
+EXCLUDED_PARTS = {
+    ".git",
+    ".next",
+    ".turbo",
+    ".venv",
+    "__pycache__",
+    "node_modules",
+}
+
+CODE_SUFFIXES = {
+    ".css",
+    ".html",
+    ".js",
+    ".json",
+    ".md",
+    ".mjs",
+    ".py",
+    ".sql",
+    ".toml",
+    ".ts",
+    ".tsx",
+    ".txt",
+    ".yaml",
+    ".yml",
+}
+
+IMAGE_SUFFIXES = {".avif", ".gif", ".jpeg", ".jpg", ".png", ".svg", ".webp"}
+
+DEFAULT_PROJECT_FILES = (
+    "apps/web/app/dev-console/page.tsx",
+    "apps/web/app/home-v2/page.tsx",
+    "apps/web/app/coevo-labs/page.tsx",
+    "apps/api/app/dev_console_service.py",
+    "apps/api/app/main.py",
+    "apps/api/app/models.py",
 )
 
 
-def _next_id() -> int:
-    return int(time() * 1000)
+def _repo_root() -> Path:
+    configured_root = os.getenv("DEV_CONSOLE_REPO_ROOT")
+    if configured_root:
+        return Path(configured_root).expanduser().resolve()
+
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        if (parent / ".git").exists():
+            return parent
+
+    return current.parents[1]
+
+
+REPO_ROOT = _repo_root()
+
+
+def _run_git(args: list[str], *, timeout: int = 10) -> subprocess.CompletedProcess[str]:
+    try:
+        return subprocess.run(
+            ["git", *args],
+            cwd=REPO_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail="Git nao esta disponivel neste ambiente.") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise HTTPException(status_code=504, detail="Git demorou demais para responder.") from exc
+
+
+def _safe_relative_path(path: str) -> Path:
+    candidate = Path(path)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        raise HTTPException(status_code=400, detail="Caminho de arquivo invalido.")
+    if any(part in EXCLUDED_PARTS for part in candidate.parts):
+        raise HTTPException(status_code=400, detail="Caminho de arquivo bloqueado.")
+
+    absolute = (REPO_ROOT / candidate).resolve()
+    try:
+        absolute.relative_to(REPO_ROOT)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Arquivo fora do projeto.") from exc
+
+    return candidate
+
+
+def _file_kind(path: str) -> str:
+    suffix = Path(path).suffix.lower()
+    if suffix in IMAGE_SUFFIXES:
+        return "image"
+    if suffix in CODE_SUFFIXES:
+        return "code"
+    return "text"
+
+
+def _status_label(raw_status: str) -> str | None:
+    status = raw_status.strip()
+    if not status:
+        return None
+    if "??" in status:
+        return "A"
+    if "M" in status:
+        return "M"
+    if "D" in status:
+        return "D"
+    if "R" in status:
+        return "R"
+    return status[:1]
+
+
+def _git_status_entries() -> list[tuple[str, str]]:
+    result = _run_git(["status", "--short"])
+    if result.returncode != 0:
+        return []
+
+    entries: list[tuple[str, str]] = []
+    for line in result.stdout.splitlines():
+        if len(line) < 4:
+            continue
+        status = line[:2]
+        path = line[3:]
+        if " -> " in path:
+            path = path.split(" -> ", 1)[1]
+        if path and not any(part in EXCLUDED_PARTS for part in Path(path).parts):
+            entries.append((status, path))
+    return entries
+
+
+def _build_files() -> list[DevConsoleFile]:
+    changed_entries = _git_status_entries()
+    changed_paths = {path for _, path in changed_entries}
+    files: list[DevConsoleFile] = []
+
+    for status, path in changed_entries:
+        files.append(
+            DevConsoleFile(
+                id=path,
+                group="Alterados",
+                name=path,
+                kind=_file_kind(path),
+                status=_status_label(status),
+            )
+        )
+
+    for path in DEFAULT_PROJECT_FILES:
+        if path in changed_paths or not (REPO_ROOT / path).exists():
+            continue
+        files.append(
+            DevConsoleFile(
+                id=path,
+                group="Sistema",
+                name=path,
+                kind=_file_kind(path),
+            )
+        )
+
+    return files
+
+
+def _build_restore_points() -> list[DevConsoleRestorePoint]:
+    result = _run_git(["log", "--oneline", "-8"])
+    if result.returncode != 0:
+        return []
+
+    points: list[DevConsoleRestorePoint] = []
+    for line in result.stdout.splitlines():
+        if not line.strip():
+            continue
+        commit_hash, _, message = line.partition(" ")
+        points.append(
+            DevConsoleRestorePoint(
+                id=commit_hash,
+                title=message or commit_hash,
+                detail=commit_hash,
+            )
+        )
+    return points
+
+
+def _terminal_lines() -> list[str]:
+    branch_result = _run_git(["branch", "--show-current"])
+    status_entries = _git_status_entries()
+    branch = branch_result.stdout.strip() if branch_result.returncode == 0 else "sem-branch"
+    changed_count = len(status_entries)
+
+    lines = [
+        f"coevo-dev {REPO_ROOT.name} {branch} > estado real do projeto carregado",
+        f"[ok] git branch: {branch}",
+        f"[ok] arquivos alterados: {changed_count}",
+    ]
+    if changed_count:
+        lines.extend(f"[{status.strip() or '??'}] {path}" for status, path in status_entries[:12])
+    else:
+        lines.append("[ok] worktree sem alteracoes locais")
+    return lines
 
 
 def get_dev_console_state() -> DevConsoleState:
-    return deepcopy(_state)
-
-
-def create_dev_console_chat() -> DevConsoleState:
-    chat_id = f"chat-{_next_id()}"
-    _state.chats.insert(
-        0,
-        DevConsoleChatSession(
-            id=chat_id,
-            title="Nova tarefa",
-            age="agora",
-            messages=[
-                DevConsoleMessage(
-                    id=_next_id(),
-                    author="Coevo Dev",
-                    tone="agent",
-                    text="Novo chat criado. Descreva a mudanca que voce quer planejar ou executar.",
-                )
-            ],
-        ),
+    return DevConsoleState(
+        chats=[],
+        restore_points=_build_restore_points(),
+        files=_build_files(),
+        terminal_lines=_terminal_lines(),
     )
-    _state.terminal_lines.append("coevo-dev ~/um-meeting-ai main > novo chat criado")
-    return get_dev_console_state()
 
 
-def add_dev_console_message(*, chat_id: str, message: str) -> DevConsoleState:
-    chat = next((item for item in _state.chats if item.id == chat_id), None)
-    if chat is None:
-        chat = _state.chats[0]
+def get_dev_console_file(path: str) -> DevConsoleFileContentResponse:
+    relative_path = _safe_relative_path(path)
+    absolute_path = REPO_ROOT / relative_path
+    if not absolute_path.exists() or not absolute_path.is_file():
+        raise HTTPException(status_code=404, detail="Arquivo nao encontrado.")
 
-    chat.messages.extend(
-        [
-            DevConsoleMessage(
-                id=_next_id(),
-                author="Voce",
-                tone="user",
-                text=message,
-            ),
-            DevConsoleMessage(
-                id=_next_id() + 1,
-                author="Coevo Dev",
-                tone="agent",
-                text=(
-                    "Entendi. Registrei sua solicitacao neste chat e atualizei o terminal "
-                    "com a proxima acao sugerida."
-                ),
-            ),
-        ]
+    kind = _file_kind(str(relative_path))
+    if kind == "image":
+        return DevConsoleFileContentResponse(
+            path=str(relative_path),
+            name=absolute_path.name,
+            kind=kind,
+            content=None,
+        )
+
+    try:
+        content = absolute_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        content = absolute_path.read_text(encoding="latin-1")
+
+    return DevConsoleFileContentResponse(
+        path=str(relative_path),
+        name=absolute_path.name,
+        kind=kind,
+        content=content[:40000],
     )
-    chat.age = "agora"
-    _state.terminal_lines.append(f"coevo-dev ~/um-meeting-ai main > {message}")
-    _state.terminal_lines.append("[...] proxima acao preparada pelo Coevo Dev")
-    return get_dev_console_state()
+
+
+def get_dev_console_diff(path: str | None = None) -> DevConsoleGitDiffResponse:
+    args = ["diff", "--"]
+    if path:
+        args.append(str(_safe_relative_path(path)))
+
+    result = _run_git(args, timeout=20)
+    if result.returncode != 0:
+        raise HTTPException(status_code=500, detail=result.stderr.strip() or "Nao foi possivel gerar diff.")
+
+    diff = result.stdout or "Sem alteracoes locais para exibir."
+    return DevConsoleGitDiffResponse(
+        diff=diff[:60000],
+        terminal_lines=_terminal_lines(),
+    )
 
 
 def run_dev_console_action(
@@ -203,24 +271,15 @@ def run_dev_console_action(
     action: DevConsoleAction,
     restore_point_id: str | None = None,
 ) -> tuple[DevConsoleState, str | None]:
-    labels = {
-        "diff": "diff aberto para revisao",
-        "build": "build iniciado no sandbox",
-        "commit": "ponto de commit criado",
-        "pr": "preparando abertura de PR",
-        "restore": f"checkpoint {restore_point_id or 'selecionado'}",
-    }
-    _state.terminal_lines.append(f"coevo-dev ~/um-meeting-ai main > {labels[action]}")
+    if action == "diff":
+        return get_dev_console_state(), restore_point_id
+    if action == "restore":
+        return get_dev_console_state(), restore_point_id
 
-    active_restore_point_id = restore_point_id
-    if action == "commit":
-        active_restore_point_id = f"commit-{_next_id()}"
-        _state.restore_points.append(
-            DevConsoleRestorePoint(
-                id=active_restore_point_id,
-                title="Commit local",
-                detail="checkpoint criado agora",
-            )
-        )
-
-    return get_dev_console_state(), active_restore_point_id
+    raise HTTPException(
+        status_code=501,
+        detail=(
+            "Esta acao ainda nao foi conectada a um executor seguro. "
+            "Por enquanto o console le arquivos, status e diff reais."
+        ),
+    )

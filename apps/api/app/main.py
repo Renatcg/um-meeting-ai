@@ -35,8 +35,8 @@ from app.calendar_service import (
 from app.copilot import dispatch_copilot
 from app.conversation_service import respond_with_agent_memory
 from app.dev_console_service import (
-    add_dev_console_message,
-    create_dev_console_chat,
+    get_dev_console_diff,
+    get_dev_console_file,
     get_dev_console_state,
     run_dev_console_action,
 )
@@ -97,7 +97,8 @@ from app.models import (
     CreateTokenRequest,
     DevConsoleActionRequest,
     DevConsoleActionResponse,
-    DevConsoleMessageRequest,
+    DevConsoleFileContentResponse,
+    DevConsoleGitDiffResponse,
     DevConsoleState,
     KnowledgeSearchRequest,
     KnowledgeSearchResponse,
@@ -599,26 +600,32 @@ async def respond_with_agent(payload: AgentRespondRequest) -> AgentRespondRespon
 
 
 @app.get("/dev-console/state", response_model=DevConsoleState)
-async def read_dev_console_state() -> DevConsoleState:
+async def read_dev_console_state(
+    _: AppUserClaims = Depends(require_admin_user),
+) -> DevConsoleState:
     return get_dev_console_state()
 
 
-@app.post("/dev-console/chats", response_model=DevConsoleState)
-async def create_dev_console_session() -> DevConsoleState:
-    return create_dev_console_chat()
+@app.get("/dev-console/files/{path:path}", response_model=DevConsoleFileContentResponse)
+async def read_dev_console_file(
+    path: str,
+    _: AppUserClaims = Depends(require_admin_user),
+) -> DevConsoleFileContentResponse:
+    return get_dev_console_file(path)
 
 
-@app.post("/dev-console/chats/{chat_id}/messages", response_model=DevConsoleState)
-async def create_dev_console_message(
-    chat_id: str,
-    payload: DevConsoleMessageRequest,
-) -> DevConsoleState:
-    return add_dev_console_message(chat_id=chat_id, message=payload.message)
+@app.get("/dev-console/diff", response_model=DevConsoleGitDiffResponse)
+async def read_dev_console_diff(
+    path: str | None = None,
+    _: AppUserClaims = Depends(require_admin_user),
+) -> DevConsoleGitDiffResponse:
+    return get_dev_console_diff(path)
 
 
 @app.post("/dev-console/actions", response_model=DevConsoleActionResponse)
 async def create_dev_console_action(
     payload: DevConsoleActionRequest,
+    _: AppUserClaims = Depends(require_admin_user),
 ) -> DevConsoleActionResponse:
     state, active_restore_point_id = run_dev_console_action(
         action=payload.action,
