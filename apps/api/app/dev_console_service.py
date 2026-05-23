@@ -11,6 +11,7 @@ from app.models import (
     DevConsoleFile,
     DevConsoleFileContentResponse,
     DevConsoleGitDiffResponse,
+    DevConsoleProject,
     DevConsoleRestorePoint,
     DevConsoleState,
 )
@@ -213,12 +214,18 @@ def _terminal_lines() -> list[str]:
     return lines
 
 
-def get_dev_console_state() -> DevConsoleState:
+def get_dev_console_state(
+    *,
+    projects: list[DevConsoleProject] | None = None,
+    active_project_id: str = "um-meeting-ai",
+) -> DevConsoleState:
     return DevConsoleState(
         chats=[],
         restore_points=_build_restore_points(),
         files=_build_files(),
         terminal_lines=_terminal_lines(),
+        projects=projects or [],
+        active_project_id=active_project_id,
     )
 
 
@@ -270,11 +277,25 @@ def run_dev_console_action(
     *,
     action: DevConsoleAction,
     restore_point_id: str | None = None,
+    projects: list[DevConsoleProject] | None = None,
+    active_project_id: str = "um-meeting-ai",
 ) -> tuple[DevConsoleState, str | None]:
     if action == "diff":
-        return get_dev_console_state(), restore_point_id
+        return (
+            get_dev_console_state(
+                projects=projects,
+                active_project_id=active_project_id,
+            ),
+            restore_point_id,
+        )
     if action == "restore":
-        return get_dev_console_state(), restore_point_id
+        return (
+            get_dev_console_state(
+                projects=projects,
+                active_project_id=active_project_id,
+            ),
+            restore_point_id,
+        )
 
     raise HTTPException(
         status_code=501,

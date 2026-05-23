@@ -44,10 +44,12 @@ from app.database import (
     count_app_users,
     get_conversation_session,
     delete_trial_request,
+    ensure_default_dev_console_project,
     ensure_meeting,
     get_agent_profile,
     get_app_user_by_email,
     get_app_user_by_id,
+    get_dev_console_project_access,
     get_google_calendar_connection,
     get_meeting_join_request_by_email,
     get_meeting_participant_by_identity,
@@ -65,6 +67,7 @@ from app.database import (
     list_app_users,
     list_conversation_messages,
     list_conversation_sessions,
+    list_accessible_dev_console_projects,
     list_meeting_recordings,
     list_meeting_agent_actions,
     list_meeting_join_requests,
@@ -81,6 +84,7 @@ from app.database import (
     register_meeting_participant,
     update_meeting_join_request_status,
     update_trial_request,
+    upsert_dev_console_project_member,
     upsert_meeting_join_request,
     upsert_agent_profile,
 )
@@ -99,6 +103,8 @@ from app.models import (
     DevConsoleActionResponse,
     DevConsoleFileContentResponse,
     DevConsoleGitDiffResponse,
+    DevConsoleProject,
+    DevConsoleProjectShareRequest,
     DevConsoleState,
     KnowledgeSearchRequest,
     KnowledgeSearchResponse,
@@ -599,37 +605,161 @@ async def respond_with_agent(payload: AgentRespondRequest) -> AgentRespondRespon
     return await respond_with_agent_memory(settings=settings, payload=payload)
 
 
+async def authorize_dev_console_project(
+    *,
+    claims: AppUserClaims,
+    project_id: str,
+    minimum_permission: str = "view",
+):
+    if claims.is_admin:
+        await ensure_default_dev_console_project(
+            settings=settings,
+            owner_user_id=claims.user_id,
+        )
+
+    project = await get_dev_console_project_access(
+        settings=settings,
+        project_id=project_id,
+        user_id=claims.user_id,
+    )
+    if project is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this Dev Console project.",
+        )
+
+    allowed_permissions = {
+        "view": {"view", "edit", "owner"},
+        "edit": {"edit", "owner"},
+        "owner": {"owner"},
+    }
+    if project.permission not in allowed_permissions[minimum_permission]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This action requires a higher project permission.",
+        )
+
+    return project
+
+
+async def list_dev_console_projects_for_user(
+    *,
+    claims: AppUserClaims,
+):
+    if claims.is_admin:
+        await ensure_default_dev_console_project(
+            settings=settings,
+            owner_user_id=claims.user_id,
+        )
+    return list(
+        await list_accessible_dev_console_projects(
+            settings=settings,
+            user_id=claims.user_id,
+        )
+    )
+
+
+@app.get("/dev-console/projects", response_model=list[DevConsoleProject])
+async def read_dev_console_projects(
+    claims: AppUserClaims = Depends(get_current_user_claims),
+) -> list[DevConsoleProject]:
+    return await list_dev_console_projects_for_user(claims=claims)
+
+
+@app.post("/dev-console/projects/{project_id}/shares", response_model=DevConsoleProject)
+async def share_dev_console_project(
+    project_id: str,
+    payload: DevConsoleProjectShareRequest,
+    claims: AppUserClaims = Depends(get_current_user_claims),
+) -> DevConsoleProject:
+    project = await authorize_dev_console_project(
+        claims=claims,
+        project_id=project_id,
+        minimum_permission="owner",
+    )
+    target_user = await get_app_user_by_email(
+        settings=settings,
+        email=str(payload.email),
+    )
+    if target_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
+    if target_user["id"] == project.owner_user_id:
+        return project
+
+    return await upsert_dev_console_project_member(
+        settings=settings,
+        project_id=project_id,
+        user_id=target_user["id"],
+        permission=payload.permission,
+    )
+
+
 @app.get("/dev-console/state", response_model=DevConsoleState)
 async def read_dev_console_state(
-    _: AppUserClaims = Depends(require_admin_user),
+    project_id: str = "um-meeting-ai",
+    claims: AppUserClaims = Depends(get_current_user_claims),
 ) -> DevConsoleState:
-    return get_dev_console_state()
+    await authorize_dev_console_project(
+        claims=claims,
+        project_id=project_id,
+        minimum_permission="view",
+    )
+    projects = await list_dev_console_projects_for_user(claims=claims)
+    return get_dev_console_state(
+        projects=projects,
+        active_project_id=project_id,
+    )
 
 
 @app.get("/dev-console/files/{path:path}", response_model=DevConsoleFileContentResponse)
 async def read_dev_console_file(
     path: str,
-    _: AppUserClaims = Depends(require_admin_user),
+    project_id: str = "um-meeting-ai",
+    claims: AppUserClaims = Depends(get_current_user_claims),
 ) -> DevConsoleFileContentResponse:
+    await authorize_dev_console_project(
+        claims=claims,
+        project_id=project_id,
+        minimum_permission="view",
+    )
     return get_dev_console_file(path)
 
 
 @app.get("/dev-console/diff", response_model=DevConsoleGitDiffResponse)
 async def read_dev_console_diff(
     path: str | None = None,
-    _: AppUserClaims = Depends(require_admin_user),
+    project_id: str = "um-meeting-ai",
+    claims: AppUserClaims = Depends(get_current_user_claims),
 ) -> DevConsoleGitDiffResponse:
+    await authorize_dev_console_project(
+        claims=claims,
+        project_id=project_id,
+        minimum_permission="view",
+    )
     return get_dev_console_diff(path)
 
 
 @app.post("/dev-console/actions", response_model=DevConsoleActionResponse)
 async def create_dev_console_action(
     payload: DevConsoleActionRequest,
-    _: AppUserClaims = Depends(require_admin_user),
+    project_id: str = "um-meeting-ai",
+    claims: AppUserClaims = Depends(get_current_user_claims),
 ) -> DevConsoleActionResponse:
+    minimum_permission = "edit" if payload.action in {"build", "commit", "pr"} else "view"
+    await authorize_dev_console_project(
+        claims=claims,
+        project_id=project_id,
+        minimum_permission=minimum_permission,
+    )
+    projects = await list_dev_console_projects_for_user(claims=claims)
     state, active_restore_point_id = run_dev_console_action(
         action=payload.action,
         restore_point_id=payload.restore_point_id,
+        projects=projects,
+        active_project_id=project_id,
     )
     return DevConsoleActionResponse(
         state=state,

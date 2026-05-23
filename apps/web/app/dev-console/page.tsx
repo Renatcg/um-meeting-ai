@@ -22,6 +22,17 @@ type ConsoleFile = {
   status?: string | null;
 };
 
+type DevConsoleProject = {
+  id: string;
+  name: string;
+  repo_root?: string | null;
+  default_route: string;
+  owner_user_id: number;
+  permission: "owner" | "edit" | "view";
+  created_at: string;
+  updated_at: string;
+};
+
 type ChatMessage = {
   id: number;
   author: "Voce" | "Coevo Dev";
@@ -41,6 +52,8 @@ type DevConsoleState = {
   restore_points: RestorePoint[];
   files: ConsoleFile[];
   terminal_lines: string[];
+  projects: DevConsoleProject[];
+  active_project_id: string;
 };
 
 type FileContent = {
@@ -55,6 +68,8 @@ const emptyState: DevConsoleState = {
   restore_points: [],
   files: [],
   terminal_lines: ["coevo-dev > aguardando conexao com a API"],
+  projects: [],
+  active_project_id: "um-meeting-ai",
 };
 
 function tabClass(active: boolean) {
@@ -87,7 +102,7 @@ function authStatusMessage(status: number) {
     return "Login necessario para acessar o Dev Console";
   }
   if (status === 403) {
-    return "Acesso restrito a administradores";
+    return "Sem permissao para este projeto";
   }
   return "API indisponivel";
 }
@@ -99,6 +114,8 @@ export default function DevConsolePage() {
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [restorePoints, setRestorePoints] = useState<RestorePoint[]>([]);
   const [files, setFiles] = useState<ConsoleFile[]>([]);
+  const [projects, setProjects] = useState<DevConsoleProject[]>([]);
+  const [activeProjectId, setActiveProjectId] = useState("um-meeting-ai");
   const [activeRestoreId, setActiveRestoreId] = useState<string | null>(null);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [selectedFileContent, setSelectedFileContent] = useState<FileContent | null>(null);
@@ -109,6 +126,7 @@ export default function DevConsolePage() {
 
   const activeChat = chatSessions.find((chat) => chat.id === activeChatId) ?? null;
   const selectedFile = files.find((file) => file.id === selectedFileId) ?? files[0] ?? null;
+  const activeProject = projects.find((project) => project.id === activeProjectId) ?? projects[0] ?? null;
   const selectedPublicImage = selectedFile ? publicAssetUrl(selectedFile.name) : null;
 
   const fileGroups = useMemo(() => {
@@ -121,10 +139,13 @@ export default function DevConsolePage() {
   useEffect(() => {
     async function loadState() {
       try {
-        const response = await fetch(`${apiUrl}/dev-console/state`, {
-          cache: "no-store",
-          headers: getAuthHeaders(),
-        });
+        const response = await fetch(
+          `${apiUrl}/dev-console/state?project_id=${encodeURIComponent(activeProjectId)}`,
+          {
+            cache: "no-store",
+            headers: getAuthHeaders(),
+          },
+        );
         if (!response.ok) {
           throw new Error(authStatusMessage(response.status));
         }
@@ -137,7 +158,7 @@ export default function DevConsolePage() {
     }
 
     void loadState();
-  }, []);
+  }, [activeProjectId]);
 
   useEffect(() => {
     if (!selectedFile) {
@@ -145,12 +166,14 @@ export default function DevConsolePage() {
       return;
     }
     void loadFile(selectedFile);
-  }, [selectedFile?.id]);
+  }, [selectedFile?.id, activeProjectId]);
 
   function syncState(state: DevConsoleState) {
     setChatSessions(state.chats);
     setRestorePoints(state.restore_points);
     setFiles(state.files);
+    setProjects(state.projects);
+    setActiveProjectId(state.active_project_id);
     setTerminalLines(state.terminal_lines.length ? state.terminal_lines : emptyState.terminal_lines);
 
     setActiveChatId((current) =>
@@ -183,10 +206,13 @@ export default function DevConsolePage() {
 
     try {
       const encodedPath = file.name.split("/").map(encodeURIComponent).join("/");
-      const response = await fetch(`${apiUrl}/dev-console/files/${encodedPath}`, {
-        cache: "no-store",
-        headers: getAuthHeaders(),
-      });
+      const response = await fetch(
+        `${apiUrl}/dev-console/files/${encodedPath}?project_id=${encodeURIComponent(activeProjectId)}`,
+        {
+          cache: "no-store",
+          headers: getAuthHeaders(),
+        },
+      );
       if (!response.ok) {
         throw new Error(authStatusMessage(response.status));
       }
@@ -252,10 +278,14 @@ export default function DevConsolePage() {
     if (action === "diff") {
       try {
         const query = selectedFile ? `?path=${encodeURIComponent(selectedFile.name)}` : "";
-        const response = await fetch(`${apiUrl}/dev-console/diff${query}`, {
-          cache: "no-store",
-          headers: getAuthHeaders(),
-        });
+        const separator = query ? "&" : "?";
+        const response = await fetch(
+          `${apiUrl}/dev-console/diff${query}${separator}project_id=${encodeURIComponent(activeProjectId)}`,
+          {
+            cache: "no-store",
+            headers: getAuthHeaders(),
+          },
+        );
         if (!response.ok) {
           throw new Error(authStatusMessage(response.status));
         }
@@ -428,16 +458,30 @@ export default function DevConsolePage() {
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="font-mono text-xs uppercase tracking-[0.18em] text-white/38">
-                  um-meeting-ai / main / sandbox seguro
+                  {activeProject?.id ?? activeProjectId} / main / sandbox seguro
                 </p>
                 <h1 className="mt-1 font-display text-xl font-semibold md:text-2xl">
-                  Coevo Dev Console
+                  {activeProject?.name ?? "Coevo Dev Console"}
                 </h1>
                 <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.16em] text-white/34">
                   {connectionStatus}
+                  {activeProject ? ` / ${activeProject.permission}` : ""}
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                {projects.length > 1 ? (
+                  <select
+                    className="h-9 rounded-lg border border-white/12 bg-white/[0.035] px-3 text-xs font-bold text-white/72 outline-none"
+                    value={activeProjectId}
+                    onChange={(event) => setActiveProjectId(event.target.value)}
+                  >
+                    {projects.map((project) => (
+                      <option className="bg-[#080B10] text-white" key={project.id} value={project.id}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
                 <button
                   className="rounded-lg border border-white/12 bg-white/[0.035] px-3 py-2 text-xs font-bold text-white/64 transition hover:text-white"
                   onClick={() => router.push("/home-v2")}

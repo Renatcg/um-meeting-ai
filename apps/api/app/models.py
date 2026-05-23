@@ -46,6 +46,8 @@ AgentVoice = Literal[
 DevConsoleMessageTone = Literal["user", "agent"]
 DevConsoleFileKind = Literal["code", "image", "text"]
 DevConsoleAction = Literal["diff", "build", "commit", "pr", "restore"]
+DevConsoleProjectPermission = Literal["owner", "edit", "view"]
+DevConsoleSharePermission = Literal["edit", "view"]
 
 
 class UserPublic(BaseModel):
@@ -414,11 +416,24 @@ class DevConsoleFile(BaseModel):
     status: str | None = None
 
 
+class DevConsoleProject(BaseModel):
+    id: str
+    name: str
+    repo_root: str | None = None
+    default_route: str = "/coevo-labs"
+    owner_user_id: int
+    permission: DevConsoleProjectPermission
+    created_at: datetime
+    updated_at: datetime
+
+
 class DevConsoleState(BaseModel):
     chats: list[DevConsoleChatSession]
     restore_points: list[DevConsoleRestorePoint]
     files: list[DevConsoleFile]
     terminal_lines: list[str]
+    projects: list[DevConsoleProject] = Field(default_factory=list)
+    active_project_id: str = "um-meeting-ai"
 
 
 class DevConsoleActionRequest(BaseModel):
@@ -441,6 +456,11 @@ class DevConsoleFileContentResponse(BaseModel):
 class DevConsoleGitDiffResponse(BaseModel):
     diff: str
     terminal_lines: list[str] = Field(default_factory=list)
+
+
+class DevConsoleProjectShareRequest(BaseModel):
+    email: EmailStr
+    permission: DevConsoleSharePermission
 
 
 class AgentProfile(BaseModel):

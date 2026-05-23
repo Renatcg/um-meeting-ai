@@ -9,6 +9,7 @@ from app.models import (
     AgentProfile,
     ConversationMessage,
     ConversationSession,
+    DevConsoleProject,
     KnowledgeDocument,
     KnowledgeSearchResult,
     Meeting,
@@ -248,6 +249,39 @@ CREATE INDEX IF NOT EXISTS idx_app_users_email
 ON app_users (lower(email));
 """
 
+CREATE_DEV_CONSOLE_PROJECTS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS dev_console_projects (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    repo_root TEXT,
+    default_route TEXT NOT NULL DEFAULT '/coevo-labs',
+    owner_user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
+
+CREATE_DEV_CONSOLE_PROJECTS_OWNER_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_dev_console_projects_owner
+ON dev_console_projects (owner_user_id, updated_at DESC);
+"""
+
+CREATE_DEV_CONSOLE_PROJECT_MEMBERS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS dev_console_project_members (
+    project_id TEXT NOT NULL REFERENCES dev_console_projects(id) ON DELETE CASCADE,
+    user_id BIGINT NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+    permission TEXT NOT NULL CHECK (permission IN ('view', 'edit')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (project_id, user_id)
+);
+"""
+
+CREATE_DEV_CONSOLE_PROJECT_MEMBERS_USER_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_dev_console_project_members_user
+ON dev_console_project_members (user_id, updated_at DESC);
+"""
+
 CREATE_TRIAL_REQUESTS_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS trial_requests (
     id BIGSERIAL PRIMARY KEY,
@@ -483,6 +517,10 @@ async def init_database(settings: Settings) -> None:
         await conn.execute(CREATE_AGENT_PROFILE_TABLE_SQL)
         await conn.execute(CREATE_APP_USERS_TABLE_SQL)
         await conn.execute(CREATE_APP_USERS_EMAIL_INDEX_SQL)
+        await conn.execute(CREATE_DEV_CONSOLE_PROJECTS_TABLE_SQL)
+        await conn.execute(CREATE_DEV_CONSOLE_PROJECTS_OWNER_INDEX_SQL)
+        await conn.execute(CREATE_DEV_CONSOLE_PROJECT_MEMBERS_TABLE_SQL)
+        await conn.execute(CREATE_DEV_CONSOLE_PROJECT_MEMBERS_USER_INDEX_SQL)
         await conn.execute(CREATE_MEETING_AGENT_ACTIONS_TABLE_SQL)
         await conn.execute(CREATE_MEETING_AGENT_ACTIONS_INDEX_SQL)
         await conn.execute(CREATE_MEETING_PENDING_EMAILS_TABLE_SQL)
@@ -795,6 +833,168 @@ async def list_app_users(*, settings: Settings) -> Sequence[UserPublic]:
             rows = await cur.fetchall()
 
     return [UserPublic.model_validate(row) for row in rows]
+
+
+async def ensure_default_dev_console_project(
+    *,
+    settings: Settings,
+    owner_user_id: int,
+) -> DevConsoleProject:
+    query = """
+    INSERT INTO dev_console_projects (
+        id,
+        name,
+        repo_root,
+        default_route,
+        owner_user_id
+    )
+    VALUES ('um-meeting-ai', 'UM Meeting AI', NULL, '/coevo-labs', %s)
+    ON CONFLICT (id) DO UPDATE
+    SET updated_at = dev_console_projects.updated_at
+    RETURNING
+        id,
+        name,
+        repo_root,
+        default_route,
+        owner_user_id,
+        'owner'::text AS permission,
+        created_at,
+        updated_at;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (owner_user_id,))
+            row = await cur.fetchone()
+
+    if row is None:
+        raise RuntimeError("Dev Console project upsert did not return a row.")
+    return DevConsoleProject.model_validate(row)
+
+
+async def get_dev_console_project_access(
+    *,
+    settings: Settings,
+    project_id: str,
+    user_id: int,
+) -> DevConsoleProject | None:
+    query = """
+    SELECT
+        p.id,
+        p.name,
+        p.repo_root,
+        p.default_route,
+        p.owner_user_id,
+        CASE
+            WHEN p.owner_user_id = %s THEN 'owner'
+            ELSE m.permission
+        END AS permission,
+        p.created_at,
+        p.updated_at
+    FROM dev_console_projects p
+    LEFT JOIN dev_console_project_members m
+        ON m.project_id = p.id
+       AND m.user_id = %s
+    WHERE p.id = %s
+      AND (
+        p.owner_user_id = %s
+        OR m.user_id IS NOT NULL
+      )
+    LIMIT 1;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (user_id, user_id, project_id, user_id))
+            row = await cur.fetchone()
+
+    return DevConsoleProject.model_validate(row) if row else None
+
+
+async def list_accessible_dev_console_projects(
+    *,
+    settings: Settings,
+    user_id: int,
+) -> Sequence[DevConsoleProject]:
+    query = """
+    SELECT
+        p.id,
+        p.name,
+        p.repo_root,
+        p.default_route,
+        p.owner_user_id,
+        CASE
+            WHEN p.owner_user_id = %s THEN 'owner'
+            ELSE m.permission
+        END AS permission,
+        p.created_at,
+        p.updated_at
+    FROM dev_console_projects p
+    LEFT JOIN dev_console_project_members m
+        ON m.project_id = p.id
+       AND m.user_id = %s
+    WHERE p.owner_user_id = %s
+       OR m.user_id IS NOT NULL
+    ORDER BY p.updated_at DESC, p.id;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (user_id, user_id, user_id))
+            rows = await cur.fetchall()
+
+    return [DevConsoleProject.model_validate(row) for row in rows]
+
+
+async def upsert_dev_console_project_member(
+    *,
+    settings: Settings,
+    project_id: str,
+    user_id: int,
+    permission: str,
+) -> DevConsoleProject:
+    query = """
+    INSERT INTO dev_console_project_members (
+        project_id,
+        user_id,
+        permission
+    )
+    VALUES (%s, %s, %s)
+    ON CONFLICT (project_id, user_id) DO UPDATE
+    SET
+        permission = EXCLUDED.permission,
+        updated_at = now()
+    RETURNING project_id;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (project_id, user_id, permission))
+            row = await cur.fetchone()
+
+    if row is None:
+        raise RuntimeError("Dev Console project member upsert did not return a row.")
+
+    project = await get_dev_console_project_access(
+        settings=settings,
+        project_id=project_id,
+        user_id=user_id,
+    )
+    if project is None:
+        raise RuntimeError("Shared Dev Console project is not readable after upsert.")
+    return project
 
 
 async def insert_meeting(*, settings: Settings, meeting: Meeting) -> Meeting:
