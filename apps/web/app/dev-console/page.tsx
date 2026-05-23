@@ -304,28 +304,48 @@ export default function DevConsolePage() {
   function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = messageDraft.trim();
-    if (!text || !activeChatId) {
+    if (!text) {
       return;
     }
 
+    const targetChatId = activeChatId ?? `chat-${Date.now()}`;
     const userMessage: ChatMessage = {
       id: Date.now(),
       author: "Voce",
       tone: "user",
       text,
     };
+    const agentMessage: ChatMessage = {
+      id: Date.now() + 1,
+      author: "Coevo Dev",
+      tone: "agent",
+      text: "Recebi sua mensagem. Ainda nao estou conectado ao executor Codex dentro desta tela; por enquanto consigo registrar a conversa e mostrar contexto, arquivos, diff e sinais do ambiente.",
+    };
+
     setChatSessions((current) =>
-      current.map((chat) =>
-        chat.id === activeChatId
-          ? {
-              ...chat,
+      current.some((chat) => chat.id === targetChatId)
+        ? current.map((chat) =>
+            chat.id === targetChatId
+              ? {
+                  ...chat,
+                  age: "agora",
+                  title: chat.messages.length ? chat.title : text.slice(0, 42),
+                  messages: [...chat.messages, userMessage, agentMessage],
+                }
+              : chat,
+          )
+        : [
+            {
+              id: targetChatId,
+              title: text.slice(0, 42),
               age: "agora",
-              title: chat.messages.length ? chat.title : text.slice(0, 42),
-              messages: [...chat.messages, userMessage],
-            }
-          : chat,
-      ),
+              messages: [userMessage, agentMessage],
+            },
+            ...current,
+          ],
     );
+    setActiveChatId(targetChatId);
+    setActiveTab("conversation");
     setMessageDraft("");
   }
 
@@ -570,10 +590,10 @@ export default function DevConsolePage() {
             </div>
           </header>
 
-          <div className="min-h-0 flex-1 overflow-hidden p-4 md:p-5">
+          <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-5">
             {activeTab === "conversation" ? (
-              <div className="mx-auto flex h-full max-w-5xl flex-col">
-                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-2">
+              <div className="mx-auto flex min-h-full max-w-5xl flex-col">
+                <div className="space-y-4 pr-2">
                   <section className="rounded-xl border border-white/10 bg-white/[0.035] p-4 shadow-[0_28px_90px_rgba(0,0,0,0.26)]">
                     <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 pb-3">
                       <div>
@@ -715,15 +735,14 @@ export default function DevConsolePage() {
             </button>
             <input
               className="min-w-0 rounded-lg border border-white/12 bg-white/[0.045] px-4 text-xs text-white outline-none placeholder:text-white/34 focus:border-white/34"
-              disabled={!activeChatId}
-              placeholder={activeChatId ? "Converse com o Coevo Dev..." : "Crie uma nova conversa para enviar mensagens"}
+              placeholder="Converse com o Coevo Dev..."
               value={messageDraft}
               onChange={(event) => setMessageDraft(event.target.value)}
             />
             <button className="h-10 w-10 rounded-lg border border-white/12 bg-white/[0.035] text-[11px] text-white/62" type="button">
               mic
             </button>
-            <button className="h-10 rounded-lg bg-white px-4 text-xs font-bold text-[#05070C] disabled:opacity-45" disabled={!activeChatId} type="submit">
+            <button className="h-10 rounded-lg bg-white px-4 text-xs font-bold text-[#05070C]" type="submit">
               Enviar
             </button>
           </form>
