@@ -107,6 +107,19 @@ function authStatusMessage(status: number) {
   return "API indisponivel";
 }
 
+async function responseErrorMessage(response: Response) {
+  if (response.status === 401 || response.status === 403) {
+    return authStatusMessage(response.status);
+  }
+
+  try {
+    const payload = (await response.json()) as { detail?: string };
+    return payload.detail || authStatusMessage(response.status);
+  } catch {
+    return authStatusMessage(response.status);
+  }
+}
+
 export default function DevConsolePage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<CenterTab>("conversation");
@@ -147,7 +160,7 @@ export default function DevConsolePage() {
           },
         );
         if (!response.ok) {
-          throw new Error(authStatusMessage(response.status));
+          throw new Error(await responseErrorMessage(response));
         }
         syncState((await response.json()) as DevConsoleState);
         setConnectionStatus("API conectada");
@@ -214,7 +227,7 @@ export default function DevConsolePage() {
         },
       );
       if (!response.ok) {
-        throw new Error(authStatusMessage(response.status));
+        throw new Error(await responseErrorMessage(response));
       }
       setSelectedFileContent((await response.json()) as FileContent);
       setConnectionStatus("API conectada");
@@ -287,7 +300,7 @@ export default function DevConsolePage() {
           },
         );
         if (!response.ok) {
-          throw new Error(authStatusMessage(response.status));
+          throw new Error(await responseErrorMessage(response));
         }
         const result = (await response.json()) as { diff: string; terminal_lines: string[] };
         setDiff(result.diff);

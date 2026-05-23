@@ -71,7 +71,7 @@ def _repo_root() -> Path:
 REPO_ROOT = _repo_root()
 
 
-def _run_git(args: list[str], *, timeout: int = 10) -> subprocess.CompletedProcess[str]:
+def _run_git(args: list[str], *, timeout: int = 10) -> subprocess.CompletedProcess[str] | None:
     try:
         return subprocess.run(
             ["git", *args],
@@ -81,10 +81,8 @@ def _run_git(args: list[str], *, timeout: int = 10) -> subprocess.CompletedProce
             text=True,
             timeout=timeout,
         )
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=503, detail="Git nao esta disponivel neste ambiente.") from exc
-    except subprocess.TimeoutExpired as exc:
-        raise HTTPException(status_code=504, detail="Git demorou demais para responder.") from exc
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
 
 
 def _safe_relative_path(path: str) -> Path:
@@ -129,7 +127,7 @@ def _status_label(raw_status: str) -> str | None:
 
 def _git_status_entries() -> list[tuple[str, str]]:
     result = _run_git(["status", "--short"])
-    if result.returncode != 0:
+    if result is None or result.returncode != 0:
         return []
 
     entries: list[tuple[str, str]] = []
@@ -178,7 +176,7 @@ def _build_files() -> list[DevConsoleFile]:
 
 def _build_restore_points() -> list[DevConsoleRestorePoint]:
     result = _run_git(["log", "--oneline", "-8"])
-    if result.returncode != 0:
+    if result is None or result.returncode != 0:
         return []
 
     points: list[DevConsoleRestorePoint] = []
@@ -199,7 +197,11 @@ def _build_restore_points() -> list[DevConsoleRestorePoint]:
 def _terminal_lines() -> list[str]:
     branch_result = _run_git(["branch", "--show-current"])
     status_entries = _git_status_entries()
-    branch = branch_result.stdout.strip() if branch_result.returncode == 0 else "sem-branch"
+    branch = (
+        branch_result.stdout.strip()
+        if branch_result is not None and branch_result.returncode == 0
+        else "sem-repo"
+    )
     changed_count = len(status_entries)
 
     lines = [
@@ -207,6 +209,10 @@ def _terminal_lines() -> list[str]:
         f"[ok] git branch: {branch}",
         f"[ok] arquivos alterados: {changed_count}",
     ]
+    if branch_result is None:
+        lines.append("[aviso] git nao esta disponivel neste ambiente de API")
+    elif branch_result.returncode != 0:
+        lines.append("[aviso] repositorio git completo nao esta disponivel neste ambiente")
     if changed_count:
         lines.extend(f"[{status.strip() or '??'}] {path}" for status, path in status_entries[:12])
     else:
@@ -263,8 +269,16 @@ def get_dev_console_diff(path: str | None = None) -> DevConsoleGitDiffResponse:
         args.append(str(_safe_relative_path(path)))
 
     result = _run_git(args, timeout=20)
+    if result is None:
+        return DevConsoleGitDiffResponse(
+            diff="Git nao esta disponivel neste ambiente de API.",
+            terminal_lines=_terminal_lines(),
+        )
     if result.returncode != 0:
-        raise HTTPException(status_code=500, detail=result.stderr.strip() or "Nao foi possivel gerar diff.")
+        return DevConsoleGitDiffResponse(
+            diff=result.stderr.strip() or "Repositorio git completo nao esta disponivel neste ambiente.",
+            terminal_lines=_terminal_lines(),
+        )
 
     diff = result.stdout or "Sem alteracoes locais para exibir."
     return DevConsoleGitDiffResponse(
