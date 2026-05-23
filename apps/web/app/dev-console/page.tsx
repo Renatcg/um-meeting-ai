@@ -136,6 +136,7 @@ export default function DevConsolePage() {
   const [connectionStatus, setConnectionStatus] = useState("Conectando API...");
   const [terminalLines, setTerminalLines] = useState(emptyState.terminal_lines);
   const [diff, setDiff] = useState("Carregue o diff real do projeto pelo botao Ver diff.");
+  const [expandedStepId, setExpandedStepId] = useState<string | null>("terminal");
 
   const activeChat = chatSessions.find((chat) => chat.id === activeChatId) ?? null;
   const selectedFile = files.find((file) => file.id === selectedFileId) ?? files[0] ?? null;
@@ -148,6 +149,47 @@ export default function DevConsolePage() {
       return groups;
     }, {});
   }, [files]);
+  const agentStatus = connectionStatus === "API conectada"
+    ? activeChatId
+      ? "Pronto para executar"
+      : "Aguardando tarefa"
+    : connectionStatus;
+  const agentSteps = useMemo(
+    () => [
+      {
+        id: "context",
+        title: "Contexto do projeto",
+        summary: `${files.length} arquivos listados, ${restorePoints.length} pontos encontrados`,
+        detail: [
+          `Projeto: ${activeProject?.name ?? activeProjectId}`,
+          `Permissao: ${activeProject?.permission ?? "pendente"}`,
+          `Arquivos visiveis: ${files.length}`,
+          `Pontos de restauracao: ${restorePoints.length}`,
+        ].join("\n"),
+      },
+      {
+        id: "environment",
+        title: "Ambiente da IA",
+        summary: connectionStatus === "API conectada" ? "API conectada, ambiente sincronizado" : connectionStatus,
+        detail: terminalLines.join("\n"),
+      },
+      {
+        id: "terminal",
+        title: "Terminal e sinais do agente",
+        summary: terminalLines[terminalLines.length - 1] ?? "Aguardando execucao",
+        detail: terminalLines.join("\n"),
+      },
+    ],
+    [
+      activeProject?.name,
+      activeProject?.permission,
+      activeProjectId,
+      connectionStatus,
+      files.length,
+      restorePoints.length,
+      terminalLines,
+    ],
+  );
 
   useEffect(() => {
     async function loadState() {
@@ -531,40 +573,99 @@ export default function DevConsolePage() {
           <div className="min-h-0 flex-1 overflow-hidden p-4 md:p-5">
             {activeTab === "conversation" ? (
               <div className="mx-auto flex h-full max-w-5xl flex-col">
-                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-2">
-                  {activeChat?.messages.length ? (
-                    activeChat.messages.map((message) => (
-                      <article
-                        className={`max-w-3xl ${message.tone === "user" ? "ml-auto" : ""}`}
-                        key={`${message.id}-${message.author}`}
-                      >
-                        <p className="mb-2 px-1 text-xs font-bold uppercase tracking-[0.14em] text-white/36">
-                          {message.author}
+                <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-2">
+                  <section className="rounded-xl border border-white/10 bg-white/[0.035] p-4 shadow-[0_28px_90px_rgba(0,0,0,0.26)]">
+                    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/10 pb-3">
+                      <div>
+                        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-white/34">
+                          Coevo Dev
                         </p>
-                        <div
-                          className={`rounded-xl border p-4 text-xs leading-6 shadow-[0_24px_80px_rgba(0,0,0,0.18)] ${
-                            message.tone === "user"
-                              ? "border-white/16 bg-white text-[#05070C]"
-                              : "border-white/10 bg-white/[0.045] text-white/72"
+                        <h2 className="mt-1 font-display text-lg font-semibold text-white">
+                          {agentStatus}
+                        </h2>
+                      </div>
+                      <div className="flex items-center gap-2 rounded-full border border-white/10 bg-[#03050A] px-3 py-1.5">
+                        <span
+                          className={`h-2 w-2 rounded-full ${
+                            connectionStatus === "API conectada" ? "bg-emerald-300" : "bg-white/36"
                           }`}
-                        >
-                          {message.text}
-                        </div>
-                      </article>
-                    ))
-                  ) : activeChat ? (
-                    <div className="rounded-xl border border-white/10 bg-white/[0.035] p-5 text-sm text-white/58">
-                      Converse aqui para registrar o pedido. A resposta automatica do Coevo Dev ainda nao foi ligada ao executor seguro.
+                        />
+                        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/48">
+                          {activeProject?.permission ?? "sem acesso"}
+                        </span>
+                      </div>
                     </div>
-                  ) : (
-                    <div className="rounded-xl border border-white/10 bg-white/[0.035] p-5 text-sm text-white/58">
-                      Crie uma nova conversa para falar com o Coevo Dev. Por enquanto, a parte real conectada e leitura de arquivos, status e diff.
-                    </div>
-                  )}
 
-                  <pre className="overflow-x-auto rounded-xl border border-white/10 bg-[#03050A] p-4 font-mono text-xs leading-6 text-white/72 shadow-[0_28px_90px_rgba(0,0,0,0.32)]">
-{terminalLines.slice(-8).join("\n")}
-                  </pre>
+                    <p className="mt-4 max-w-3xl text-sm leading-7 text-white/70">
+                      A conversa central acompanha o que a IA esta fazendo: status, contexto,
+                      arquivos consultados e sinais do terminal. Os passos ficam recolhidos para
+                      preservar foco, mas podem ser abertos quando voce quiser auditar o andamento.
+                    </p>
+
+                    <div className="mt-4 space-y-2">
+                      {agentSteps.map((step) => {
+                        const isExpanded = expandedStepId === step.id;
+                        return (
+                          <div className="rounded-lg border border-white/10 bg-[#03050A]" key={step.id}>
+                            <button
+                              className="flex w-full items-center justify-between gap-4 px-3 py-2.5 text-left"
+                              onClick={() => setExpandedStepId(isExpanded ? null : step.id)}
+                              type="button"
+                            >
+                              <span className="min-w-0">
+                                <span className="block text-xs font-bold text-white/72">
+                                  {step.title}
+                                </span>
+                                <span className="mt-0.5 block truncate font-mono text-[11px] text-white/38">
+                                  {step.summary}
+                                </span>
+                              </span>
+                              <span className="shrink-0 font-mono text-lg text-white/38">
+                                {isExpanded ? "-" : "+"}
+                              </span>
+                            </button>
+                            {isExpanded ? (
+                              <pre className="max-h-40 overflow-auto border-t border-white/10 px-3 py-3 font-mono text-[11px] leading-5 text-white/58">
+{step.detail}
+                              </pre>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+
+                  <section className="space-y-3">
+                    {activeChat?.messages.length ? (
+                      activeChat.messages.map((message) => (
+                        <article
+                          className={`max-w-3xl ${message.tone === "user" ? "ml-auto" : ""}`}
+                          key={`${message.id}-${message.author}`}
+                        >
+                          <p className="mb-2 px-1 text-xs font-bold uppercase tracking-[0.14em] text-white/36">
+                            {message.author}
+                          </p>
+                          <div
+                            className={`rounded-xl border p-4 text-xs leading-6 shadow-[0_24px_80px_rgba(0,0,0,0.18)] ${
+                              message.tone === "user"
+                                ? "border-white/16 bg-white text-[#05070C]"
+                                : "border-white/10 bg-white/[0.045] text-white/72"
+                            }`}
+                          >
+                            {message.text}
+                          </div>
+                        </article>
+                      ))
+                    ) : activeChat ? (
+                      <div className="rounded-xl border border-white/10 bg-white/[0.035] p-5 text-sm text-white/58">
+                        Converse aqui para registrar o pedido. A resposta automatica do Coevo Dev ainda nao foi ligada ao executor seguro.
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-white/10 bg-white/[0.035] p-5 text-sm text-white/58">
+                        Crie uma nova conversa para falar com o Coevo Dev. Por enquanto, a parte real conectada e leitura de arquivos, status e diff.
+                      </div>
+                    )}
+                  </section>
                 </div>
               </div>
             ) : null}
