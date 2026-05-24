@@ -219,6 +219,20 @@ class SalesRecommendation(BaseModel):
     created_at: datetime
 
 
+class MeetingChatMessage(BaseModel):
+    id: int
+    meeting_id: str
+    sender_identity: str
+    sender_name: str
+    sender_role: ParticipantRole
+    content: str
+    created_at: datetime
+
+
+class MeetingChatMessageCreate(BaseModel):
+    content: str = Field(min_length=1, max_length=4000)
+
+
 class KnowledgeDocument(BaseModel):
     id: int
     filename: str

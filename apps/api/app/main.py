@@ -56,6 +56,7 @@ from app.database import (
     has_host_or_commercial_joined,
     init_database,
     insert_meeting_agent_action,
+    insert_meeting_chat_message,
     insert_meeting_pending_email,
     insert_sales_recommendations,
     insert_transcript_segment,
@@ -68,6 +69,7 @@ from app.database import (
     list_conversation_messages,
     list_conversation_sessions,
     list_accessible_dev_console_projects,
+    list_meeting_chat_messages,
     list_meeting_recordings,
     list_meeting_agent_actions,
     list_meeting_join_requests,
@@ -114,6 +116,8 @@ from app.models import (
     GoogleCalendarStatus,
     MeetingCalendarActionRequest,
     MeetingCalendarActionResponse,
+    MeetingChatMessage,
+    MeetingChatMessageCreate,
     MeetingEmailDeferResponse,
     MeetingEmailActionRequest,
     MeetingEmailActionResponse,
@@ -2374,6 +2378,56 @@ async def get_meeting_transcript(meeting_id: str) -> list[TranscriptSegment]:
     await ensure_meeting(settings=settings, meeting_id=meeting_id)
     segments = await list_transcript_segments(settings=settings, meeting_id=meeting_id)
     return list(segments)
+
+
+@app.get("/meetings/{meeting_id}/chat", response_model=list[MeetingChatMessage])
+async def get_meeting_chat_messages(
+    meeting_id: str,
+    claims: ParticipantClaims = Depends(get_participant_claims),
+    limit: int = 100,
+) -> list[MeetingChatMessage]:
+    if claims.meeting_id != meeting_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Participant token does not belong to this meeting.",
+        )
+
+    await ensure_meeting(settings=settings, meeting_id=meeting_id)
+    safe_limit = min(max(limit, 1), 200)
+    return list(
+        await list_meeting_chat_messages(
+            settings=settings,
+            meeting_id=meeting_id,
+            limit=safe_limit,
+        )
+    )
+
+
+@app.post(
+    "/meetings/{meeting_id}/chat",
+    response_model=MeetingChatMessage,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_meeting_chat_message(
+    meeting_id: str,
+    payload: MeetingChatMessageCreate,
+    claims: ParticipantClaims = Depends(get_participant_claims),
+) -> MeetingChatMessage:
+    if claims.meeting_id != meeting_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Participant token does not belong to this meeting.",
+        )
+
+    await ensure_meeting(settings=settings, meeting_id=meeting_id)
+    return await insert_meeting_chat_message(
+        settings=settings,
+        meeting_id=meeting_id,
+        sender_identity=claims.identity,
+        sender_name=claims.name,
+        sender_role=claims.role,
+        content=payload.content.strip(),
+    )
 
 
 @app.get(

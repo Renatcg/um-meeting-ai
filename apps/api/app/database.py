@@ -16,6 +16,7 @@ from app.models import (
     MeetingJoinRequest,
     MeetingMemoryItem,
     MeetingMemorySearchResult,
+    MeetingChatMessage,
     MeetingParticipant,
     MeetingProcessingJob,
     MeetingRecording,
@@ -66,6 +67,25 @@ CREATE TABLE IF NOT EXISTS sales_recommendations (
 CREATE_RECOMMENDATIONS_INDEX_SQL = """
 CREATE INDEX IF NOT EXISTS idx_sales_recommendations_meeting_created
 ON sales_recommendations (meeting_id, created_at, id);
+"""
+
+CREATE_MEETING_CHAT_MESSAGES_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS meeting_chat_messages (
+    id BIGSERIAL PRIMARY KEY,
+    meeting_id TEXT NOT NULL,
+    sender_identity TEXT NOT NULL,
+    sender_name TEXT NOT NULL,
+    sender_role TEXT NOT NULL CHECK (
+        sender_role IN ('host', 'commercial', 'client', 'observer')
+    ),
+    content TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
+
+CREATE_MEETING_CHAT_MESSAGES_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_meeting_chat_messages_meeting_created
+ON meeting_chat_messages (meeting_id, created_at, id);
 """
 
 CREATE_VECTOR_EXTENSION_SQL = "CREATE EXTENSION IF NOT EXISTS vector;"
@@ -548,6 +568,8 @@ async def init_database(settings: Settings) -> None:
         await conn.execute(CREATE_TRANSCRIPT_INDEX_SQL)
         await conn.execute(CREATE_RECOMMENDATIONS_TABLE_SQL)
         await conn.execute(CREATE_RECOMMENDATIONS_INDEX_SQL)
+        await conn.execute(CREATE_MEETING_CHAT_MESSAGES_TABLE_SQL)
+        await conn.execute(CREATE_MEETING_CHAT_MESSAGES_INDEX_SQL)
         await conn.execute(CREATE_KNOWLEDGE_DOCUMENTS_TABLE_SQL)
         await conn.execute(ALTER_KNOWLEDGE_DOCUMENTS_MEETING_SQL)
         await conn.execute(CREATE_KNOWLEDGE_DOCUMENTS_MEETING_INDEX_SQL)
@@ -1608,6 +1630,82 @@ async def list_conversation_messages(
             rows = await cur.fetchall()
 
     return [ConversationMessage.model_validate(row) for row in rows]
+
+
+async def insert_meeting_chat_message(
+    *,
+    settings: Settings,
+    meeting_id: str,
+    sender_identity: str,
+    sender_name: str,
+    sender_role: str,
+    content: str,
+) -> MeetingChatMessage:
+    query = """
+    INSERT INTO meeting_chat_messages (
+        meeting_id,
+        sender_identity,
+        sender_name,
+        sender_role,
+        content
+    )
+    VALUES (%s, %s, %s, %s, %s)
+    RETURNING
+        id,
+        meeting_id,
+        sender_identity,
+        sender_name,
+        sender_role,
+        content,
+        created_at;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                query,
+                (meeting_id, sender_identity, sender_name, sender_role, content),
+            )
+            row = await cur.fetchone()
+
+    if row is None:
+        raise RuntimeError("Meeting chat insert did not return a row.")
+    return MeetingChatMessage.model_validate(row)
+
+
+async def list_meeting_chat_messages(
+    *,
+    settings: Settings,
+    meeting_id: str,
+    limit: int = 100,
+) -> Sequence[MeetingChatMessage]:
+    query = """
+    SELECT
+        id,
+        meeting_id,
+        sender_identity,
+        sender_name,
+        sender_role,
+        content,
+        created_at
+    FROM meeting_chat_messages
+    WHERE meeting_id = %s
+    ORDER BY created_at ASC, id ASC
+    LIMIT %s;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (meeting_id, limit))
+            rows = await cur.fetchall()
+
+    return [MeetingChatMessage.model_validate(row) for row in rows]
 
 
 async def mark_meeting_copilot_dispatched(

@@ -4,6 +4,7 @@ import {
   type ComponentProps,
   type Dispatch,
   FormEvent,
+  type ReactNode,
   type SetStateAction,
   useCallback,
   useEffect,
@@ -24,7 +25,7 @@ import { useRouter } from "next/navigation";
 
 type Step = "lobby" | "room";
 type ParticipantRole = "host" | "commercial" | "client" | "observer";
-type SidePanelTab = "chat" | "sales";
+type SidePanelTab = "chat" | "insights" | "memory";
 type VideoEffectMode = "none" | "blur" | "coevo" | "image";
 
 type Participant = {
@@ -70,6 +71,24 @@ type SalesRecommendation = {
   title: string;
   recommendation: string;
   evidence: string;
+  created_at: string;
+};
+
+type MeetingChatMessageResponse = {
+  id: number;
+  meeting_id: string;
+  sender_identity: string;
+  sender_name: string;
+  sender_role: ParticipantRole;
+  content: string;
+  created_at: string;
+};
+
+type MeetingMemoryItem = {
+  id: number;
+  memory_type: string;
+  content: string;
+  source_label?: string | null;
   created_at: string;
 };
 
@@ -469,6 +488,41 @@ function CloseIcon() {
         strokeLinecap="round"
         strokeWidth="2"
       />
+    </svg>
+  );
+}
+
+function InsightIcon() {
+  return (
+    <svg className="um-control-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 3v2" />
+      <path d="M18.4 5.6 17 7" />
+      <path d="M21 12h-2" />
+      <path d="M5 12H3" />
+      <path d="M7 7 5.6 5.6" />
+      <path d="M9 18h6" />
+      <path d="M10 21h4" />
+      <path d="M8.5 14.5a5 5 0 1 1 7 0c-.8.8-1.1 1.5-1.2 2.5H9.7c-.1-1-.4-1.7-1.2-2.5Z" />
+    </svg>
+  );
+}
+
+function MemoryIcon() {
+  return (
+    <svg className="um-control-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 4h10a2 2 0 0 1 2 2v14H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" />
+      <path d="M9 8h6" />
+      <path d="M9 12h6" />
+      <path d="M9 16h4" />
+    </svg>
+  );
+}
+
+function TaskIcon() {
+  return (
+    <svg className="um-control-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M9 11 11 13 15.5 8.5" />
+      <path d="M5 5h14v14H5z" />
     </svg>
   );
 }
@@ -1537,6 +1591,7 @@ function MeetingControls({
 type ChatMessage = {
   id: string;
   sender: string;
+  senderRole?: ParticipantRole;
   content: string;
   createdAt: string;
   isLocal: boolean;
@@ -1546,15 +1601,88 @@ type ChatPayload = {
   type: "chat";
   id: string;
   sender: string;
+  senderRole?: ParticipantRole;
   content: string;
   createdAt: string;
 };
 
-function MeetingChatPanel({ participantName }: { participantName: string }) {
+function EmptyPanelState({
+  icon,
+  title,
+  description,
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="flex h-full min-h-[220px] flex-col items-center justify-center rounded-xl border border-dashed border-white/10 bg-white/[0.03] px-5 py-8 text-center">
+      <div className="mb-4 grid h-12 w-12 place-items-center rounded-full border border-[#4FC3F7]/30 bg-[#4FC3F7]/10 text-[#4FC3F7]">
+        {icon}
+      </div>
+      <p className="text-sm font-semibold text-white">{title}</p>
+      <p className="mt-2 max-w-[240px] text-sm leading-6 text-[#8EA2BA]">
+        {description}
+      </p>
+    </div>
+  );
+}
+
+function MeetingChatPanel({
+  connection,
+  meetingId,
+  participantName,
+}: {
+  connection: TokenResponse;
+  meetingId: string;
+  participantName: string;
+}) {
   const room = useRoomContext();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [sendError, setSendError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMessages() {
+      try {
+        const response = await fetch(`${apiUrl}/meetings/${meetingId}/chat`, {
+          headers: {
+            Authorization: `Bearer ${connection.participant_access_token}`,
+          },
+        });
+        if (!response.ok) {
+          return;
+        }
+
+        const persistedMessages =
+          (await response.json()) as MeetingChatMessageResponse[];
+        if (cancelled) {
+          return;
+        }
+
+        setMessages(
+          persistedMessages.map((message) => ({
+            id: `persisted-${message.id}`,
+            sender: message.sender_name,
+            senderRole: message.sender_role,
+            content: message.content,
+            createdAt: message.created_at,
+            isLocal: message.sender_identity === room.localParticipant.identity,
+          })),
+        );
+      } catch {
+        // The live meeting chat keeps working through LiveKit even if history fails.
+      }
+    }
+
+    loadMessages();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [connection.participant_access_token, meetingId, room.localParticipant.identity]);
 
   useEffect(() => {
     const decoder = new TextDecoder();
@@ -1586,6 +1714,7 @@ function MeetingChatPanel({ participantName }: { participantName: string }) {
             {
               id: parsed.id,
               sender: parsed.sender || participant?.name || "Participante",
+              senderRole: parsed.senderRole,
               content: parsed.content,
               createdAt: parsed.createdAt,
               isLocal: participant?.identity === room.localParticipant.identity,
@@ -1617,6 +1746,7 @@ function MeetingChatPanel({ participantName }: { participantName: string }) {
       type: "chat",
       id: crypto.randomUUID(),
       sender: participantName || room.localParticipant.name || "Participante",
+      senderRole: connection.role,
       content,
       createdAt: new Date().toISOString(),
     };
@@ -1626,6 +1756,7 @@ function MeetingChatPanel({ participantName }: { participantName: string }) {
       {
         id: message.id,
         sender: message.sender,
+        senderRole: message.senderRole,
         content: message.content,
         createdAt: message.createdAt,
         isLocal: true,
@@ -1645,6 +1776,14 @@ function MeetingChatPanel({ participantName }: { participantName: string }) {
         reliable: true,
         topic: CHAT_TOPIC,
       });
+      await fetch(`${apiUrl}/meetings/${meetingId}/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${connection.participant_access_token}`,
+        },
+        body: JSON.stringify({ content }),
+      });
     } catch {
       setSendError("Nao foi possivel enviar a mensagem.");
     }
@@ -1654,10 +1793,11 @@ function MeetingChatPanel({ participantName }: { participantName: string }) {
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
         {messages.length === 0 ? (
-          <p className="text-sm leading-6 text-[#B8C7D9]">
-            Use o chat para mensagens escritas durante a reuniao. A transcricao
-            continua sendo processada em segundo plano pelo Coevo.
-          </p>
+          <EmptyPanelState
+            icon={<SendIcon />}
+            title="A conversa escrita ainda nao comecou."
+            description="Use este espaco para links, combinados rapidos e mensagens que precisam ficar no historico da reuniao."
+          />
         ) : null}
 
         {messages.map((message) => (
@@ -1673,6 +1813,11 @@ function MeetingChatPanel({ participantName }: { participantName: string }) {
               <p className="truncate text-sm font-semibold text-white">
                 {message.sender}
               </p>
+              {message.senderRole ? (
+                <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-[#8EA2BA]">
+                  {roleLabel(message.senderRole)}
+                </span>
+              ) : null}
               <time className="shrink-0 text-xs text-[#B8C7D9]">
                 {new Date(message.createdAt).toLocaleTimeString("pt-BR", {
                   hour: "2-digit",
@@ -1734,8 +1879,11 @@ function MeetingChatPanel({ participantName }: { participantName: string }) {
 
 function MeetingSidePanel({
   canViewSalesPanel,
+  connection,
   isDesktopVisible,
   isMobileOpen,
+  memoryItems,
+  meetingId,
   onClose,
   participantName,
   recommendations,
@@ -1743,14 +1891,50 @@ function MeetingSidePanel({
   setSidePanelTab,
 }: {
   canViewSalesPanel: boolean;
+  connection: TokenResponse;
   isDesktopVisible: boolean;
   isMobileOpen: boolean;
+  memoryItems: MeetingMemoryItem[];
+  meetingId: string;
   onClose: () => void;
   participantName: string;
   recommendations: SalesRecommendation[];
   sidePanelTab: SidePanelTab;
   setSidePanelTab: (tab: SidePanelTab) => void;
 }) {
+  const [actionDraft, setActionDraft] = useState<string | null>(null);
+  const activeTitle =
+    sidePanelTab === "chat"
+      ? "Conversa da reuniao"
+      : sidePanelTab === "insights"
+        ? "Insights privados"
+        : "Memoria da reuniao";
+  const activeKicker =
+    sidePanelTab === "chat"
+      ? "Conversa"
+      : sidePanelTab === "insights"
+        ? "Comercial"
+        : "Memoria";
+
+  function buildFollowUpText(card: SalesRecommendation) {
+    return [
+      `Follow-up sugerido: ${card.title}`,
+      "",
+      card.recommendation,
+      "",
+      `Evidencia: ${card.evidence}`,
+    ].join("\n");
+  }
+
+  function buildTaskText(card: SalesRecommendation) {
+    return [
+      `Tarefa sugerida: tratar ${card.kind}`,
+      "",
+      card.title,
+      card.recommendation,
+    ].join("\n");
+  }
+
   return (
     <aside
       className={`um-meeting-side-panel fixed inset-y-0 right-0 z-40 flex h-full w-full max-w-[360px] min-h-0 flex-col overflow-hidden border-l border-white/10 bg-[#070A10] text-white shadow-[0_24px_90px_rgba(0,0,0,0.45)] transition-transform duration-200 lg:static lg:z-auto lg:w-auto lg:max-w-none lg:translate-x-0 lg:shadow-none ${
@@ -1761,9 +1945,9 @@ function MeetingSidePanel({
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-[#4FC3F7]">
-              Conversa
+              {activeKicker}
             </p>
-            <h2 className="mt-1 text-lg font-semibold">Chat da reuniao</h2>
+            <h2 className="mt-1 text-lg font-semibold">{activeTitle}</h2>
           </div>
           <button
             className="grid h-10 w-10 place-items-center rounded-lg border border-white/10 bg-white/5 text-white transition hover:border-[#4FC3F7] hover:bg-[#4FC3F7]/10 lg:hidden"
@@ -1777,9 +1961,9 @@ function MeetingSidePanel({
         </div>
       </div>
 
-      <div className="flex border-b border-white/10 bg-[#070A10]">
+      <div className="grid grid-cols-3 border-b border-white/10 bg-[#070A10]">
         <button
-          className={`border-b-2 px-5 py-3 text-sm font-medium ${
+          className={`flex items-center justify-center gap-2 border-b-2 px-3 py-3 text-xs font-medium sm:text-sm ${
             sidePanelTab === "chat"
               ? "border-[#4FC3F7] text-white"
               : "border-transparent text-[#B8C7D9] hover:text-white"
@@ -1787,38 +1971,57 @@ function MeetingSidePanel({
           type="button"
           onClick={() => setSidePanelTab("chat")}
         >
-          Chat
+          <SendIcon />
+          Conversa
         </button>
         {canViewSalesPanel ? (
           <button
-            className={`border-b-2 px-5 py-3 text-sm font-medium ${
-              sidePanelTab === "sales"
+            className={`flex items-center justify-center gap-2 border-b-2 px-3 py-3 text-xs font-medium sm:text-sm ${
+              sidePanelTab === "insights"
                 ? "border-[#4FC3F7] text-white"
                 : "border-transparent text-[#B8C7D9] hover:text-white"
             }`}
             type="button"
-            onClick={() => setSidePanelTab("sales")}
+            onClick={() => setSidePanelTab("insights")}
           >
-            Comercial
+            <InsightIcon />
+            Insights
           </button>
         ) : null}
+        <button
+          className={`flex items-center justify-center gap-2 border-b-2 px-3 py-3 text-xs font-medium sm:text-sm ${
+            sidePanelTab === "memory"
+              ? "border-[#4FC3F7] text-white"
+              : "border-transparent text-[#B8C7D9] hover:text-white"
+          } ${canViewSalesPanel ? "" : "col-span-2"}`}
+          type="button"
+          onClick={() => setSidePanelTab("memory")}
+        >
+          <MemoryIcon />
+          Memoria
+        </button>
       </div>
 
       {sidePanelTab === "chat" ? (
-        <MeetingChatPanel participantName={participantName} />
+        <MeetingChatPanel
+          connection={connection}
+          meetingId={meetingId}
+          participantName={participantName}
+        />
       ) : null}
 
-      {sidePanelTab === "sales" && canViewSalesPanel ? (
+      {sidePanelTab === "insights" && canViewSalesPanel ? (
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
           {recommendations.length === 0 ? (
-            <p className="text-sm leading-6 text-[#B8C7D9]">
-              Cards privados aparecerao aqui quando houver objecao, risco ou
-              oportunidade.
-            </p>
+            <EmptyPanelState
+              icon={<InsightIcon />}
+              title="Nenhum sinal comercial relevante ainda."
+              description="Quando surgir objecao, risco ou oportunidade, o Coevo transforma isso em um card privado para Host e Comercial."
+            />
           ) : (
             recommendations.map((card) => (
               <article
-                className="rounded-md border border-[#4FC3F7]/35 bg-[#4FC3F7]/10 px-4 py-3"
+                className="rounded-xl border border-[#4FC3F7]/30 bg-[#07111A] px-4 py-4 shadow-[0_16px_44px_rgba(0,0,0,0.22)]"
                 key={card.id}
               >
                 <div className="mb-2 flex items-center justify-between gap-3">
@@ -1829,12 +2032,91 @@ function MeetingSidePanel({
                     {card.kind}
                   </span>
                 </div>
+                <div className="mb-3 flex items-center gap-2">
+                  <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] uppercase tracking-wide text-[#8EA2BA]">
+                    prioridade {card.severity}
+                  </span>
+                  <time className="text-xs text-[#6F8197]">
+                    {new Date(card.created_at).toLocaleTimeString("pt-BR", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </time>
+                </div>
                 <p className="text-sm leading-6 text-[#EAF6FF]">
                   {card.recommendation}
                 </p>
                 <p className="mt-3 border-l-2 border-[#4FC3F7]/60 pl-3 text-xs leading-5 text-[#B8C7D9]">
                   {card.evidence}
                 </p>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <button
+                    className="rounded-lg border border-[#4FC3F7]/30 bg-[#4FC3F7]/10 px-3 py-2 text-xs font-semibold text-[#DDF6FF] transition hover:border-[#4FC3F7] hover:bg-[#4FC3F7]/20"
+                    type="button"
+                    onClick={() => setActionDraft(buildFollowUpText(card))}
+                  >
+                    Follow-up
+                  </button>
+                  <button
+                    className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:border-[#4FC3F7] hover:bg-white/10"
+                    type="button"
+                    onClick={() => setActionDraft(buildTaskText(card))}
+                  >
+                    <span className="inline-flex items-center gap-1">
+                      <TaskIcon />
+                      Tarefa
+                    </span>
+                  </button>
+                </div>
+              </article>
+            ))
+          )}
+          {actionDraft ? (
+            <div className="rounded-xl border border-[#4FC3F7]/30 bg-[#4FC3F7]/10 p-4">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-white">Acao preparada</p>
+                <button
+                  className="text-xs font-semibold text-[#4FC3F7]"
+                  type="button"
+                  onClick={() => setActionDraft(null)}
+                >
+                  limpar
+                </button>
+              </div>
+              <p className="whitespace-pre-wrap text-xs leading-5 text-[#DDF6FF]">
+                {actionDraft}
+              </p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {sidePanelTab === "memory" ? (
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+          {memoryItems.length === 0 ? (
+            <EmptyPanelState
+              icon={<MemoryIcon />}
+              title="Memoria ainda em formacao."
+              description="Ao fim da reuniao, o Coevo organiza resumo, decisoes, proximos passos, riscos e promessas para consulta posterior."
+            />
+          ) : (
+            memoryItems.map((item) => (
+              <article
+                className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-4"
+                key={item.id}
+              >
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <span className="rounded-full border border-[#4FC3F7]/30 px-2 py-1 text-[10px] uppercase tracking-wide text-[#BFEFFF]">
+                    {item.memory_type.replaceAll("_", " ")}
+                  </span>
+                  <time className="text-xs text-[#6F8197]">
+                    {new Date(item.created_at).toLocaleDateString("pt-BR")}
+                  </time>
+                </div>
+                <p className="text-sm leading-6 text-[#EAF6FF]">{item.content}</p>
+                {item.source_label ? (
+                  <p className="mt-3 text-xs text-[#8EA2BA]">{item.source_label}</p>
+                ) : null}
               </article>
             ))
           )}
@@ -2037,6 +2319,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
   const [recommendations, setRecommendations] = useState<SalesRecommendation[]>(
     [],
   );
+  const [memoryItems, setMemoryItems] = useState<MeetingMemoryItem[]>([]);
   const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>("chat");
   const [isDesktopSidePanelVisible, setIsDesktopSidePanelVisible] = useState(true);
   const [isMobileSidePanelOpen, setIsMobileSidePanelOpen] = useState(false);
@@ -2222,6 +2505,44 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
       window.clearInterval(interval);
     };
   }, [canViewSalesPanel, connection, meetingId, step]);
+
+  useEffect(() => {
+    if (step !== "room" || !connection) {
+      return;
+    }
+
+    let cancelled = false;
+    const participantAccessToken = connection.participant_access_token;
+
+    async function loadMemory() {
+      try {
+        const response = await fetch(`${apiUrl}/meetings/${meetingId}/memory`, {
+          headers: {
+            Authorization: `Bearer ${participantAccessToken}`,
+          },
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const items = (await response.json()) as MeetingMemoryItem[];
+        if (!cancelled) {
+          setMemoryItems(items.slice(0, 12));
+        }
+      } catch {
+        // Memory may still be processing; keep the meeting UI calm.
+      }
+    }
+
+    loadMemory();
+    const interval = window.setInterval(loadMemory, 10000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [connection, meetingId, step]);
 
   useEffect(() => {
     return () => {
@@ -2543,8 +2864,11 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
 
           <MeetingSidePanel
             canViewSalesPanel={canViewSalesPanel}
+            connection={connection}
             isDesktopVisible={isDesktopSidePanelVisible}
             isMobileOpen={isMobileSidePanelOpen}
+            memoryItems={memoryItems}
+            meetingId={meetingId}
             onClose={() => setIsMobileSidePanelOpen(false)}
             participantName={participant.name}
             recommendations={recommendations}
