@@ -27,6 +27,7 @@ type Step = "lobby" | "room";
 type ParticipantRole = "host" | "commercial" | "client" | "observer";
 type SidePanelTab = "chat" | "insights" | "memory";
 type VideoEffectMode = "none" | "blur" | "coevo" | "image";
+type RecordingStatus = "idle" | "starting" | "active" | "failed";
 
 type Participant = {
   name: string;
@@ -47,8 +48,14 @@ type TokenResponse = {
 type RecordingStartResponse = {
   started: boolean;
   configured: boolean;
-  recording?: unknown;
+  recording?: MeetingRecording | null;
   detail?: string | null;
+};
+
+type MeetingRecording = {
+  status: string;
+  ended_at?: string | null;
+  error?: string | null;
 };
 
 type MeetingJoinRequest = {
@@ -550,6 +557,66 @@ function FullscreenIcon() {
       />
     </svg>
   );
+}
+
+function RecordingIndicator({ status }: { status: RecordingStatus }) {
+  if (status === "idle") {
+    return null;
+  }
+
+  const label =
+    status === "active"
+      ? "REC"
+      : status === "starting"
+        ? "REC..."
+        : "REC off";
+
+  return (
+    <span className={`um-recording-pill is-${status}`} aria-label={label}>
+      <span className="um-rec-dot" />
+      <span>{label}</span>
+    </span>
+  );
+}
+
+function deriveRecordingStatus(
+  recordings: MeetingRecording[],
+): RecordingStatus | null {
+  if (recordings.length === 0) {
+    return null;
+  }
+
+  const statuses = recordings.map((recording) =>
+    recording.status.toUpperCase(),
+  );
+
+  if (
+    statuses.some(
+      (status) => status === "EGRESS_ACTIVE" || status === "ACTIVE",
+    )
+  ) {
+    return "active";
+  }
+
+  if (
+    statuses.some(
+      (status) => status === "EGRESS_STARTING" || status === "STARTING",
+    )
+  ) {
+    return "starting";
+  }
+
+  if (
+    statuses.some((status) =>
+      ["FAILED", "ABORTED", "LIMIT_REACHED"].some((marker) =>
+        status.includes(marker),
+      ),
+    )
+  ) {
+    return "failed";
+  }
+
+  return "idle";
 }
 
 function formatElapsedTime(totalSeconds: number) {
@@ -1054,7 +1121,7 @@ function MeetingGrid({
   onLeaveMeeting: () => void;
   participantName: string;
   previewStream: MediaStream | null;
-  recordingStatus: "idle" | "starting" | "active" | "failed";
+  recordingStatus: RecordingStatus;
   setVideoEffect: (effect: VideoEffectMode) => void;
   setIsDesktopSidePanelVisible: Dispatch<SetStateAction<boolean>>;
   videoEffect: VideoEffectMode;
@@ -1337,9 +1404,7 @@ function MeetingGrid({
       <footer className="um-meeting-footer grid min-h-24 shrink-0 grid-cols-1 items-center gap-4 px-4 py-4 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:px-6">
         <div className="hidden min-w-0 md:block">
           <p className="flex min-w-0 items-center gap-2 truncate font-mono text-sm text-[#B8C7D9]">
-            {recordingStatus === "active" ? (
-              <span className="um-rec-dot" aria-label="Gravando" />
-            ) : null}
+            <RecordingIndicator status={recordingStatus} />
             <span className="truncate">
               {clock || "--:--"} | {elapsedTime} | {meetingId}
             </span>
@@ -1961,45 +2026,47 @@ function MeetingSidePanel({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 border-b border-white/10 bg-[#070A10]">
-        <button
-          className={`flex items-center justify-center gap-2 border-b-2 px-3 py-3 text-xs font-medium sm:text-sm ${
-            sidePanelTab === "chat"
-              ? "border-[#4FC3F7] text-white"
-              : "border-transparent text-[#B8C7D9] hover:text-white"
-          }`}
-          type="button"
-          onClick={() => setSidePanelTab("chat")}
-        >
-          <SendIcon />
-          Conversa
-        </button>
-        {canViewSalesPanel ? (
+      <div className="um-panel-tabs border-b border-white/10 bg-[#070A10] px-4 py-3">
+        <div className="grid grid-cols-3 gap-1 rounded-xl border border-white/10 bg-white/[0.04] p-1">
           <button
-            className={`flex items-center justify-center gap-2 border-b-2 px-3 py-3 text-xs font-medium sm:text-sm ${
-              sidePanelTab === "insights"
-                ? "border-[#4FC3F7] text-white"
-                : "border-transparent text-[#B8C7D9] hover:text-white"
+            className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-[11px] font-semibold transition ${
+              sidePanelTab === "chat"
+                ? "bg-[#4FC3F7] text-[#05070B] shadow-[0_0_18px_rgba(79,195,247,0.22)]"
+                : "text-[#8EA2BA] hover:bg-white/5 hover:text-white"
             }`}
             type="button"
-            onClick={() => setSidePanelTab("insights")}
+            onClick={() => setSidePanelTab("chat")}
           >
-            <InsightIcon />
-            Insights
+            <SendIcon />
+            Conversa
           </button>
-        ) : null}
-        <button
-          className={`flex items-center justify-center gap-2 border-b-2 px-3 py-3 text-xs font-medium sm:text-sm ${
-            sidePanelTab === "memory"
-              ? "border-[#4FC3F7] text-white"
-              : "border-transparent text-[#B8C7D9] hover:text-white"
-          } ${canViewSalesPanel ? "" : "col-span-2"}`}
-          type="button"
-          onClick={() => setSidePanelTab("memory")}
-        >
-          <MemoryIcon />
-          Memoria
-        </button>
+          {canViewSalesPanel ? (
+            <button
+              className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-[11px] font-semibold transition ${
+                sidePanelTab === "insights"
+                  ? "bg-[#4FC3F7] text-[#05070B] shadow-[0_0_18px_rgba(79,195,247,0.22)]"
+                  : "text-[#8EA2BA] hover:bg-white/5 hover:text-white"
+              }`}
+              type="button"
+              onClick={() => setSidePanelTab("insights")}
+            >
+              <InsightIcon />
+              Insights
+            </button>
+          ) : null}
+          <button
+            className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-[11px] font-semibold transition ${
+              sidePanelTab === "memory"
+                ? "bg-[#4FC3F7] text-[#05070B] shadow-[0_0_18px_rgba(79,195,247,0.22)]"
+                : "text-[#8EA2BA] hover:bg-white/5 hover:text-white"
+            } ${canViewSalesPanel ? "" : "col-span-2"}`}
+            type="button"
+            onClick={() => setSidePanelTab("memory")}
+          >
+            <MemoryIcon />
+            Memoria
+          </button>
+        </div>
       </div>
 
       {sidePanelTab === "chat" ? (
@@ -2133,17 +2200,42 @@ function RecordingStarter({
 }: {
   connection: TokenResponse;
   meetingId: string;
-  onStatusChange: (status: "idle" | "starting" | "active" | "failed") => void;
+  onStatusChange: (status: RecordingStatus) => void;
 }) {
   const room = useRoomContext();
   const hasRequestedRecording = useRef(false);
 
   useEffect(() => {
-    if (connection.role !== "host" && connection.role !== "commercial") {
-      return;
+    let cancelled = false;
+
+    async function syncRecordingStatus() {
+      try {
+        const response = await fetch(`${apiUrl}/meetings/${meetingId}/recordings`, {
+          headers: {
+            Authorization: `Bearer ${connection.participant_access_token}`,
+          },
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const recordings = (await response.json()) as MeetingRecording[];
+        const nextStatus = deriveRecordingStatus(recordings);
+        if (!cancelled && nextStatus) {
+          onStatusChange(nextStatus);
+        }
+      } catch {
+        // The starter request below already reports hard failures. Polling is best effort.
+      }
     }
 
     function requestRecording() {
+      if (connection.role !== "host" && connection.role !== "commercial") {
+        void syncRecordingStatus();
+        return;
+      }
+
       if (hasRequestedRecording.current) {
         return;
       }
@@ -2163,7 +2255,14 @@ function RecordingStarter({
           }
 
           const payload = (await response.json()) as RecordingStartResponse;
-          onStatusChange(payload.started || payload.recording ? "active" : "failed");
+          const statusFromRecording = payload.recording
+            ? deriveRecordingStatus([payload.recording])
+            : null;
+          onStatusChange(
+            statusFromRecording ??
+              (payload.started || payload.configured ? "starting" : "failed"),
+          );
+          void syncRecordingStatus();
         })
         .catch(() => {
           onStatusChange("failed");
@@ -2175,7 +2274,12 @@ function RecordingStarter({
     }
 
     room.on(RoomEvent.Connected, requestRecording);
+    void syncRecordingStatus();
+    const intervalId = window.setInterval(syncRecordingStatus, 5000);
+
     return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
       room.off(RoomEvent.Connected, requestRecording);
     };
   }, [connection, meetingId, onStatusChange, room]);
@@ -2329,9 +2433,8 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
     null,
   );
   const [waitingMessage, setWaitingMessage] = useState<string | null>(null);
-  const [recordingStatus, setRecordingStatus] = useState<
-    "idle" | "starting" | "active" | "failed"
-  >("idle");
+  const [recordingStatus, setRecordingStatus] =
+    useState<RecordingStatus>("idle");
   const [isHostCreator, setIsHostCreator] = useState<boolean | null>(null);
   const [meetingTitle, setMeetingTitle] = useState("");
   const [inviteLink, setInviteLink] = useState("");
