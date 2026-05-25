@@ -521,6 +521,72 @@
   opacity: 0.45;
 }
 
+.um-lobby-form section,
+.um-lobby-form label.rounded-lg,
+.um-lobby-form div.rounded-lg {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  background: rgba(255, 255, 255, 0.045) !important;
+}
+
+.um-lobby-form section,
+.um-lobby-form > div.rounded-lg,
+.um-lobby-form > label.rounded-lg {
+  margin-top: 0.65rem !important;
+  padding: 0.7rem !important;
+}
+
+.um-lobby-form input,
+.um-lobby-form textarea,
+.um-lobby-form select {
+  border-color: rgba(255, 255, 255, 0.11) !important;
+  background-color: #0b111a !important;
+  color: #f4fbff !important;
+}
+
+.um-lobby-form input::placeholder,
+.um-lobby-form textarea::placeholder {
+  color: #6f8197 !important;
+}
+
+.um-lobby-form input[type="file"]::file-selector-button {
+  border: 0;
+  border-radius: 0.45rem;
+  background: rgba(79, 195, 247, 0.16);
+  color: #bfefff;
+  font-weight: 800;
+}
+
+.um-lobby-form textarea {
+  height: 3.4rem !important;
+}
+
+.um-lobby-form input[type="file"] {
+  padding: 0.55rem !important;
+}
+
+.um-lobby-form .text-\[\#11110F\],
+.um-lobby-form .font-semibold,
+.um-lobby-form .font-bold,
+.um-lobby-form .font-medium {
+  color: #eaf6ff !important;
+}
+
+.um-lobby-form .text-\[\#73736B\] {
+  color: #8ea2ba !important;
+}
+
+.um-lobby-form .text-\[\#F97316\] {
+  color: #4fc3f7 !important;
+}
+
+.um-lobby-form .border-\[\#FDBA74\] {
+  border-color: rgba(79, 195, 247, 0.35) !important;
+}
+
+.um-lobby-form .bg-\[\#FFF3EA\] {
+  background: rgba(79, 195, 247, 0.1) !important;
+}
+
 .lk-room-container.um-room-shell .um-meeting-side-panel {
   border-left-color: var(--room-line);
 }

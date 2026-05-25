@@ -23,7 +23,12 @@ MemoryItemType = Literal[
 MemoryVisibility = Literal["participants", "host_commercial", "organization"]
 SensitivityLevel = Literal["low", "medium", "high"]
 AgentAction = Literal["send_email", "schedule_meeting", "web_search"]
-AgentIntegration = Literal["resend_email", "google_calendar", "web_search"]
+AgentIntegration = Literal[
+    "resend_email",
+    "google_calendar",
+    "web_search",
+    "client_directory",
+]
 EmailRecipientScope = Literal["all_participants", "clients", "host", "custom"]
 CalendarAttendeeScope = Literal["all_participants", "clients", "host", "custom"]
 ConversationChannel = Literal["web", "whatsapp", "voice", "meeting"]
@@ -504,6 +509,26 @@ class AgentProfile(BaseModel):
     )
     enabled_integrations: list[AgentIntegration] = Field(
         default_factory=lambda: ["resend_email", "google_calendar", "web_search"]
+    )
+    meeting_types: list[str] = Field(
+        default_factory=lambda: [
+            "Primeira Reuniao",
+            "Apresentacao de Proposta",
+            "Imersao",
+            "Devolutiva",
+            "Feedback Mensal",
+            "Operacional",
+            "Novos Negocios",
+            "Outros",
+        ],
+        max_length=20,
+    )
+    client_directory_integration: dict = Field(
+        default_factory=lambda: {
+            "provider": "Sistema externo de clientes",
+            "status": "not_configured",
+            "source": "API ou MCP",
+        }
     )
     permissions: dict = Field(default_factory=dict)
     knowledge_base_ids: list[str] = Field(default_factory=list, max_length=50)

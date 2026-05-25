@@ -11,13 +11,23 @@ type CoevoConfigTab =
   | "voice"
   | "behavior"
   | "actions"
+  | "meeting_types"
   | "integrations"
   | "language";
 type AgentGender = "masculine" | "feminine" | "neutral";
 type WeeklyMeetingVolume = "ate-5" | "5-10" | "10-20" | "mais-20";
 type ParticipantRole = "host" | "commercial" | "client" | "observer";
 type AgentAction = "send_email" | "schedule_meeting" | "web_search";
-type AgentIntegration = "resend_email" | "google_calendar" | "web_search";
+type AgentIntegration =
+  | "resend_email"
+  | "google_calendar"
+  | "web_search"
+  | "client_directory";
+type ClientDirectoryIntegration = {
+  provider: string;
+  status: "not_configured" | "configured" | "connected";
+  source: string;
+};
 type AgentVoice =
   | "alloy"
   | "ash"
@@ -49,6 +59,8 @@ type AgentProfile = {
   voice_command_roles: ParticipantRole[];
   enabled_actions: AgentAction[];
   enabled_integrations: AgentIntegration[];
+  meeting_types: string[];
+  client_directory_integration?: ClientDirectoryIntegration;
   require_voice_confirmation: boolean;
   updated_at?: string | null;
 };
@@ -197,6 +209,21 @@ const defaultProfile: AgentProfile = {
   voice_command_roles: ["host"],
   enabled_actions: ["send_email", "schedule_meeting", "web_search"],
   enabled_integrations: ["resend_email", "google_calendar", "web_search"],
+  meeting_types: [
+    "Primeira Reuniao",
+    "Apresentacao de Proposta",
+    "Imersao",
+    "Devolutiva",
+    "Feedback Mensal",
+    "Operacional",
+    "Novos Negocios",
+    "Outros",
+  ],
+  client_directory_integration: {
+    provider: "Sistema externo de clientes",
+    status: "not_configured",
+    source: "API ou MCP",
+  },
   require_voice_confirmation: true,
 };
 
@@ -260,13 +287,19 @@ const integrationOptions: Array<{
     label: "Busca na internet",
     description: "Autoriza consultas externas sob comando do Host.",
   },
+  {
+    value: "client_directory",
+    label: "Diretorio de clientes",
+    description: "Alimenta o menu de clientes do lobby por API ou MCP externo.",
+  },
 ];
 const coevoConfigTabs: Array<{ id: CoevoConfigTab; label: string; description: string }> = [
   { id: "identity", label: "Identidade", description: "Nome, genero e metodo" },
   { id: "voice", label: "Voz", description: "Voz e demos" },
   { id: "behavior", label: "Comportamento", description: "Tom, sliders e palavras" },
   { id: "actions", label: "Acoes", description: "Comandos por voz" },
-  { id: "integrations", label: "Integracoes", description: "Resend e Google Agenda" },
+  { id: "meeting_types", label: "Tipos de reuniao", description: "Opcoes do lobby" },
+  { id: "integrations", label: "Integracoes", description: "Agenda, e-mail e clientes" },
   { id: "language", label: "Idioma", description: "Idioma e instrucoes livres" },
 ];
 const keywordOptions = [
@@ -2393,6 +2426,32 @@ export default function HomePage() {
                     </div>
                   ) : null}
 
+                  {activeCoevoTab === "meeting_types" ? (
+                    <div className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                      <p className="font-mono text-xs uppercase text-[#F97316]">
+                        Lobby do Host
+                      </p>
+                      <h2 className="mt-2 font-display text-xl font-semibold">
+                        Tipos de reuniao disponiveis
+                      </h2>
+                      <p className="mt-2 text-sm leading-6 text-[#73736B]">
+                        Estes nomes aparecem no menu suspenso antes da sala.
+                        Cliente fica habilitado apenas para Imersao, Devolutiva,
+                        Feedback Mensal e Operacional.
+                      </p>
+                      <div className="mt-5 flex flex-wrap gap-2">
+                        {profile.meeting_types.map((type) => (
+                          <span
+                            className="rounded-full border border-[#E7E7E2] bg-[#FCFCFB] px-3 py-2 text-sm font-bold text-[#11110F]"
+                            key={type}
+                          >
+                            {type}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
                   {activeCoevoTab === "integrations" ? (
                     <div className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
                       <p className="font-mono text-xs uppercase text-[#F97316]">
@@ -2452,6 +2511,27 @@ export default function HomePage() {
                               {googleCalendar.connected ? "Reconectar" : "Conectar"}
                             </a>
                           ) : null}
+                        </div>
+                      </div>
+
+                      <div className="mt-5 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <p className="text-sm font-bold text-[#11110F]">
+                              Diretório de clientes
+                            </p>
+                            <p className="mt-1 text-xs leading-5 text-[#73736B]">
+                              Integração planejada via API ou MCP externo para
+                              alimentar o menu de clientes do lobby.
+                            </p>
+                          </div>
+                          <span className="rounded-full border border-[#E7E7E2] bg-white px-3 py-2 text-xs font-bold uppercase text-[#73736B]">
+                            {profile.client_directory_integration?.status === "connected"
+                              ? "Conectado"
+                              : profile.client_directory_integration?.status === "configured"
+                                ? "Configurado"
+                                : "A configurar"}
+                          </span>
                         </div>
                       </div>
                     </div>

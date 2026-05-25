@@ -112,6 +112,28 @@ const HAND_RAISE_TOPIC = "coevo-hand-raise";
 const COEVO_BACKGROUND_URL = "/backgrounds/coevo-meeting.svg";
 const agentNameMatchers = ["coevo", "jarvis", "um copilot", "copilot"];
 const commercialUserEmails = new Set(["renato@coevo.ai", "marina@coevo.ai"]);
+const meetingTypeOptions = [
+  "Primeira Reuniao",
+  "Apresentacao de Proposta",
+  "Imersao",
+  "Devolutiva",
+  "Feedback Mensal",
+  "Operacional",
+  "Novos Negocios",
+  "Outros",
+];
+const meetingTypesThatRequireClient = new Set([
+  "Imersao",
+  "Devolutiva",
+  "Feedback Mensal",
+  "Operacional",
+]);
+const clientDirectoryPreview = [
+  "Cliente via integracao",
+  "Grupo Coevo",
+  "Rede Escolar",
+  "Operacao Comercial",
+];
 
 type MeetingParticipantTileProps = ComponentProps<typeof ParticipantTile> & {
   agentParticipant?: {
@@ -2455,6 +2477,8 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
   const [customBackgroundName, setCustomBackgroundName] = useState<string | null>(
     null,
   );
+  const [meetingType, setMeetingType] = useState(meetingTypeOptions[0]);
+  const [selectedClient, setSelectedClient] = useState("");
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
   const previewStreamRef = useRef<MediaStream | null>(null);
   const preservePreviewStreamRef = useRef(false);
@@ -2469,7 +2493,15 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
     isHostCreator === true,
   );
   const isHostLobby = inferredRole === "host";
+  const isConfiguratorLobby = inferredRole === "host" || inferredRole === "commercial";
   const lobbyTitle = meetingTitle || meetingId;
+  const shouldSelectClient = meetingTypesThatRequireClient.has(meetingType);
+
+  useEffect(() => {
+    if (!meetingTypesThatRequireClient.has(meetingType)) {
+      setSelectedClient("");
+    }
+  }, [meetingType]);
 
   const canViewSalesPanel =
     connection?.role === "host" || connection?.role === "commercial";
@@ -2990,57 +3022,59 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-white px-5 py-10 text-[#11110F]">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#05070B] px-5 py-5 text-white">
       <video
         ref={previewVideoRef}
         autoPlay
         muted
         playsInline
-        className={`absolute inset-0 h-full w-full scale-x-[-1] object-cover opacity-20 grayscale ${
+        className={`absolute inset-0 h-full w-full scale-x-[-1] object-cover opacity-[0.22] ${
           videoEffect === "blur" ? "blur-sm" : ""
         }`}
       />
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(17,17,15,0.055)_1px,transparent_1px),linear-gradient(to_bottom,rgba(17,17,15,0.055)_1px,transparent_1px)] bg-[length:42px_42px]" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_10%,rgba(249,115,22,0.12),transparent_35%),linear-gradient(90deg,rgba(255,255,255,0.96),rgba(255,255,255,0.84))]" />
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(79,195,247,0.055)_1px,transparent_1px),linear-gradient(to_bottom,rgba(79,195,247,0.045)_1px,transparent_1px)] bg-[length:42px_42px]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_78%_12%,rgba(79,195,247,0.18),transparent_34%),linear-gradient(90deg,rgba(5,7,11,0.94),rgba(5,7,11,0.78))]" />
 
       {cameraError ? (
-        <div className="absolute inset-0 bg-[#FCFCFB]" />
+        <div className="absolute inset-0 bg-[#05070B]" />
       ) : null}
 
       <form
         onSubmit={joinMeeting}
-        className={`relative z-10 max-h-[92vh] w-full overflow-y-auto rounded-2xl border border-[#E7E7E2] bg-white/90 p-6 shadow-[0_24px_90px_rgba(17,17,15,0.12)] backdrop-blur-xl sm:p-8 ${
-          isHostLobby ? "max-w-4xl" : "max-w-2xl"
+        className={`um-lobby-form relative z-10 w-full rounded-2xl border border-white/10 bg-[#070A10]/92 shadow-[0_24px_90px_rgba(0,0,0,0.45)] backdrop-blur-xl ${
+          isConfiguratorLobby
+            ? "max-h-[94dvh] max-w-6xl overflow-hidden p-4 sm:p-5"
+            : "max-h-[92dvh] max-w-2xl overflow-y-auto p-5 sm:p-6"
         }`}
       >
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="inline-flex rounded-full border border-[#FDBA74] bg-[#FFF3EA] px-3 py-1 font-mono text-xs uppercase text-[#F97316]">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <p className="inline-flex rounded-full border border-[#4FC3F7]/35 bg-[#4FC3F7]/10 px-3 py-1 font-mono text-xs uppercase text-[#BFEFFF]">
             {isHostLobby ? `Sala ${meetingId}` : "Convite de reuniao"}
           </p>
           <button
-            className="rounded-lg border border-[#E7E7E2] bg-white px-3 py-2 text-sm font-semibold text-[#11110F] transition hover:-translate-y-0.5 hover:border-[#F97316] hover:bg-[#FFF3EA]"
+            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:border-[#4FC3F7] hover:bg-[#4FC3F7]/10"
             type="button"
             onClick={goBackHome}
           >
             Voltar
           </button>
         </div>
-        <h1 className="font-display text-3xl font-semibold leading-tight text-[#11110F]">
+        <h1 className="font-display text-2xl font-semibold leading-tight text-white sm:text-3xl">
           {isHostLobby ? "Antes de entrar, configure a sala." : lobbyTitle}
         </h1>
-        <p className="mt-2 text-sm leading-6 text-[#73736B]">
+        <p className="mt-1 text-sm leading-6 text-[#8EA2BA]">
           {isHostLobby
             ? "Sua camera ja esta em preview. O link abaixo pode ser enviado para os convidados entrarem como participantes."
             : "Informe seus dados para entrar na reuniao. A traducao simultanea ainda nao esta ativa neste MVP."}
         </p>
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <label className="block">
-            <span className="mb-2 block text-sm font-medium text-[#11110F]">
+            <span className="mb-1.5 block text-sm font-medium text-[#EAF6FF]">
               Nome
             </span>
             <input
-              className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-[#11110F] outline-none transition placeholder:text-[#73736B] focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/15"
+              className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-white outline-none transition placeholder:text-[#6F8197] focus:border-[#4FC3F7] focus:ring-2 focus:ring-[#4FC3F7]/15"
               value={participant.name}
               onChange={(event) =>
                 setParticipant((current) => ({
@@ -3055,11 +3089,11 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
           </label>
 
           <label className="block">
-            <span className="mb-2 block text-sm font-medium text-[#11110F]">
+            <span className="mb-1.5 block text-sm font-medium text-[#EAF6FF]">
               E-mail
             </span>
             <input
-              className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-[#11110F] outline-none transition placeholder:text-[#73736B] focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/15"
+              className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-white outline-none transition placeholder:text-[#6F8197] focus:border-[#4FC3F7] focus:ring-2 focus:ring-[#4FC3F7]/15"
               type="email"
               value={participant.email}
               onChange={(event) =>
@@ -3074,7 +3108,54 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
           </label>
         </div>
 
-        <section className="mt-4 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">
+        {isConfiguratorLobby ? (
+          <section className="mt-3 grid gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-[#EAF6FF]">
+                Tipo de reuniao
+              </span>
+              <select
+                className="w-full rounded-lg border border-white/10 bg-[#0B111A] px-3 py-2.5 text-sm text-white outline-none transition focus:border-[#4FC3F7] focus:ring-2 focus:ring-[#4FC3F7]/15"
+                value={meetingType}
+                onChange={(event) => setMeetingType(event.target.value)}
+              >
+                {meetingTypeOptions.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-[#EAF6FF]">
+                Cliente
+              </span>
+              <select
+                className="w-full rounded-lg border border-white/10 bg-[#0B111A] px-3 py-2.5 text-sm text-white outline-none transition disabled:cursor-not-allowed disabled:opacity-45 focus:border-[#4FC3F7] focus:ring-2 focus:ring-[#4FC3F7]/15"
+                disabled={!shouldSelectClient}
+                value={selectedClient}
+                onChange={(event) => setSelectedClient(event.target.value)}
+              >
+                <option value="">
+                  {shouldSelectClient
+                    ? "Selecione um cliente"
+                    : "Disponivel para Imersao, Devolutiva, Feedback Mensal e Operacional"}
+                </option>
+                {clientDirectoryPreview.map((client) => (
+                  <option key={client} value={client}>
+                    {client}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-[#6F8197]">
+                A lista sera alimentada pela integracao externa de clientes.
+              </span>
+            </label>
+          </section>
+        ) : null}
+
+        <section className="mt-3 rounded-lg border border-white/10 bg-white/[0.04] p-3">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="font-mono text-xs uppercase text-[#F97316]">
