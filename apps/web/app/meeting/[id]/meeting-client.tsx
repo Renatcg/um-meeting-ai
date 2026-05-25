@@ -1075,41 +1075,127 @@ function VideoEffectPicker({
   setVideoEffect: (effect: VideoEffectMode) => void;
   videoEffect: VideoEffectMode;
 }) {
-  return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      {(["none", "blur", "coevo"] as VideoEffectMode[]).map((effect) => (
-        <button
-          className={`um-effect-option ${
-            videoEffect === effect ? "is-selected" : ""
-          }`}
-          key={effect}
-          type="button"
-          onClick={() => setVideoEffect(effect)}
-        >
-          <span className={`um-effect-preview is-${effect}`} />
-          <span>{videoEffectLabel(effect)}</span>
-        </button>
-      ))}
+  const [isOpen, setIsOpen] = useState(false);
 
-      <label
-        className={`um-effect-option cursor-pointer ${
-          videoEffect === "image" ? "is-selected" : ""
-        }`}
+  return (
+    <div className="um-filter-dropdown">
+      <button
+        className="um-filter-trigger"
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
       >
-        <span className="um-effect-preview is-image" />
-        <span className="truncate">
-          {customBackgroundName ? customBackgroundName : "Imagem personalizada"}
+        <span>
+          <span className="block text-xs uppercase tracking-[0.18em] text-[#4FC3F7]">
+            Filtro de camera
+          </span>
+          <span className="mt-1 block text-sm font-bold text-white">
+            {videoEffectLabel(videoEffect)}
+          </span>
         </span>
-        <input
-          className="sr-only"
-          type="file"
-          accept="image/*"
-          onChange={(event) =>
-            onCustomImageChange(event.target.files?.item(0) ?? null)
-          }
-        />
-      </label>
+        <span className={`um-filter-chevron ${isOpen ? "is-open" : ""}`}>
+          {">"}
+        </span>
+      </button>
+
+      {isOpen ? (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {(["none", "blur", "coevo"] as VideoEffectMode[]).map((effect) => (
+            <button
+              className={`um-effect-option ${
+                videoEffect === effect ? "is-selected" : ""
+              }`}
+              key={effect}
+              type="button"
+              onClick={() => {
+                setVideoEffect(effect);
+                setIsOpen(false);
+              }}
+            >
+              <span className={`um-effect-preview is-${effect}`} />
+              <span>{videoEffectLabel(effect)}</span>
+            </button>
+          ))}
+
+          <label
+            className={`um-effect-option cursor-pointer ${
+              videoEffect === "image" ? "is-selected" : ""
+            }`}
+          >
+            <span className="um-effect-preview is-image" />
+            <span className="truncate">
+              {customBackgroundName ? customBackgroundName : "Imagem personalizada"}
+            </span>
+            <input
+              className="sr-only"
+              type="file"
+              accept="image/*"
+              onChange={(event) => {
+                onCustomImageChange(event.target.files?.item(0) ?? null);
+                setIsOpen(false);
+              }}
+            />
+          </label>
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+function TranslationAndLgpdBlock({
+  acceptedLgpd,
+  setAcceptedLgpd,
+}: {
+  acceptedLgpd: boolean;
+  setAcceptedLgpd: (accepted: boolean) => void;
+}) {
+  return (
+    <section className="mt-3 grid gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-3 md:grid-cols-[1fr_1.15fr]">
+      <label className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.03] p-3 text-sm text-[#B8C7D9]">
+        <input className="h-4 w-4 accent-[#4FC3F7]" type="checkbox" disabled />
+        <span>
+          <span className="block font-semibold text-[#EAF6FF]">
+            Traducao simultanea
+          </span>
+          <span className="mt-0.5 block text-xs text-[#6F8197]">
+            Em breve no MVP
+          </span>
+        </span>
+      </label>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block">
+          <span className="mb-1.5 block text-sm font-medium text-[#EAF6FF]">
+            Idioma
+          </span>
+          <select
+            className="w-full rounded-lg border border-white/10 bg-[#0B111A] px-3 py-2.5 text-sm text-[#8EA2BA] outline-none disabled:cursor-not-allowed"
+            disabled
+            defaultValue=""
+          >
+            <option value="">Selecione</option>
+            <option value="pt-BR">Portugues do Brasil</option>
+            <option value="en-US">Ingles</option>
+            <option value="es-ES">Espanhol</option>
+            <option value="fr-FR">Frances</option>
+            <option value="de-DE">Alemao</option>
+            <option value="it-IT">Italiano</option>
+          </select>
+        </label>
+
+        <label className="flex items-center gap-3 rounded-lg border border-[#4FC3F7]/25 bg-[#4FC3F7]/10 p-3 text-xs leading-5 text-[#B8C7D9]">
+          <input
+            className="h-4 w-4 shrink-0 accent-[#4FC3F7]"
+            type="checkbox"
+            checked={acceptedLgpd}
+            onChange={(event) => setAcceptedLgpd(event.target.checked)}
+          />
+          <span>
+            Aceito o tratamento de dados conforme a LGPD para participar desta
+            reuniao.
+          </span>
+        </label>
+      </div>
+    </section>
   );
 }
 
@@ -3155,11 +3241,16 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
           </section>
         ) : null}
 
+        <TranslationAndLgpdBlock
+          acceptedLgpd={acceptedLgpd}
+          setAcceptedLgpd={setAcceptedLgpd}
+        />
+
         <section className="mt-3 rounded-lg border border-white/10 bg-white/[0.04] p-3">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="font-mono text-xs uppercase text-[#F97316]">
-                Efeitos de video
+                Filtro de camera
               </p>
               <p className="mt-1 text-sm font-semibold text-[#11110F]">
                 {videoEffectLabel(videoEffect)}
@@ -3221,8 +3312,8 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
         ) : null}
 
         {isHostLobby ? (
-          <section className="mt-4 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
+          <details className="mt-4 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">
+            <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="font-mono text-xs uppercase text-[#F97316]">
                   Base de conhecimento
@@ -3234,7 +3325,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
               <span className="rounded-full border border-[#E7E7E2] bg-white px-3 py-1 font-mono text-xs uppercase text-[#73736B]">
                 Host liberado
               </span>
-            </div>
+            </summary>
 
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <label className="block">
@@ -3287,63 +3378,8 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
                 />
               </label>
             </div>
-          </section>
+          </details>
         ) : null}
-
-        <section className="mt-4 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4 opacity-70">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="font-mono text-xs uppercase text-[#F97316]">
-                Traducao simultanea
-              </p>
-              <p className="mt-1 text-sm text-[#73736B]">
-                Funcao planejada: cada participante fala e ouve na propria lingua.
-              </p>
-            </div>
-            <span className="rounded-full border border-[#E7E7E2] bg-white px-3 py-1 font-mono text-xs uppercase text-[#73736B]">
-              Em breve
-            </span>
-          </div>
-
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <label className="flex items-center gap-3 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4 text-sm text-[#73736B]">
-              <input className="h-4 w-4" type="checkbox" disabled />
-              Preciso de traducao simultanea
-            </label>
-
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium text-[#11110F]">
-                Lingua desejada
-              </span>
-              <select
-                className="w-full rounded-lg border border-[#E7E7E2] bg-white px-4 py-3 text-sm text-[#73736B] outline-none disabled:cursor-not-allowed"
-                disabled
-                defaultValue=""
-              >
-                <option value="">Selecione uma lingua</option>
-                <option value="pt-BR">Portugues do Brasil</option>
-                <option value="en-US">Ingles</option>
-                <option value="es-ES">Espanhol</option>
-                <option value="fr-FR">Frances</option>
-                <option value="de-DE">Alemao</option>
-                <option value="it-IT">Italiano</option>
-              </select>
-            </label>
-          </div>
-        </section>
-
-        <label className="mt-4 flex gap-3 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4 text-sm leading-6 text-[#73736B]">
-          <input
-            className="mt-1 h-4 w-4 accent-[#F97316]"
-            type="checkbox"
-            checked={acceptedLgpd}
-            onChange={(event) => setAcceptedLgpd(event.target.checked)}
-          />
-          <span>
-            Li e aceito o tratamento de dados conforme a LGPD para participar
-            desta reuniao.
-          </span>
-        </label>
 
         {error ? (
           <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

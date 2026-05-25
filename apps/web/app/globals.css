@@ -522,6 +522,7 @@
 }
 
 .um-lobby-form section,
+.um-lobby-form details,
 .um-lobby-form label.rounded-lg,
 .um-lobby-form div.rounded-lg {
   border-color: rgba(255, 255, 255, 0.1) !important;
@@ -529,10 +530,15 @@
 }
 
 .um-lobby-form section,
+.um-lobby-form details,
 .um-lobby-form > div.rounded-lg,
 .um-lobby-form > label.rounded-lg {
   margin-top: 0.65rem !important;
   padding: 0.7rem !important;
+}
+
+.um-lobby-form details > summary::-webkit-details-marker {
+  display: none;
 }
 
 .um-lobby-form input,
@@ -562,6 +568,66 @@
 
 .um-lobby-form input[type="file"] {
   padding: 0.55rem !important;
+}
+
+.um-filter-dropdown {
+  position: relative;
+}
+
+.um-filter-trigger {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid rgba(79, 195, 247, 0.22);
+  border-radius: 0.75rem;
+  background:
+    radial-gradient(circle at 94% 12%, rgba(79, 195, 247, 0.16), transparent 38%),
+    rgba(255, 255, 255, 0.055);
+  padding: 0.72rem 0.85rem;
+  text-align: left;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.um-filter-trigger:hover {
+  border-color: #4fc3f7;
+  background: rgba(79, 195, 247, 0.1);
+  box-shadow: 0 0 24px rgba(79, 195, 247, 0.18);
+}
+
+.um-filter-chevron {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid rgba(79, 195, 247, 0.25);
+  border-radius: 999px;
+  color: #4fc3f7;
+  transform: rotate(90deg);
+  transition: transform 180ms ease;
+}
+
+.um-filter-chevron.is-open {
+  transform: rotate(-90deg);
+}
+
+.um-lobby-form .um-effect-option {
+  min-height: 3.4rem;
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.055);
+  color: #eaf6ff;
+}
+
+.um-lobby-form .um-effect-option:hover,
+.um-lobby-form .um-effect-option.is-selected {
+  border-color: #4fc3f7;
+  background: rgba(79, 195, 247, 0.12);
+  color: #4fc3f7;
+  box-shadow: 0 0 22px rgba(79, 195, 247, 0.14);
 }
 
 .um-lobby-form .text-\[\#11110F\],
