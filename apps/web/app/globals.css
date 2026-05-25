@@ -350,6 +350,35 @@
   box-shadow: none;
 }
 
+.lk-room-container.um-room-shell .um-meeting-meta {
+  display: inline-flex;
+  height: 3.5rem;
+  max-width: min(100%, 24rem);
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.26rem;
+  line-height: 1;
+}
+
+.lk-room-container.um-room-shell .um-meeting-meta-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.58rem;
+  white-space: nowrap;
+}
+
+.lk-room-container.um-room-shell .um-meeting-meta-row.is-room {
+  max-width: 100%;
+  color: #8ea2ba;
+  font-size: 0.78rem;
+}
+
+.lk-room-container.um-room-shell .um-meeting-meta-divider {
+  color: #6f8197;
+}
+
 .lk-room-container.um-room-shell .um-panel-tabs .um-control-icon {
   width: 0.8rem;
   height: 0.8rem;

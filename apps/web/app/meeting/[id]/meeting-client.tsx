@@ -1403,21 +1403,28 @@ function MeetingGrid({
 
       <footer className="um-meeting-footer grid min-h-24 shrink-0 grid-cols-1 items-center gap-4 px-4 py-4 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:px-6">
         <div className="hidden min-w-0 md:block">
-          <p className="flex min-w-0 items-center gap-2 truncate font-mono text-sm text-[#B8C7D9]">
-            <RecordingIndicator status={recordingStatus} />
-            <span className="truncate">
-              {clock || "--:--"} | {elapsedTime} | {meetingId}
-            </span>
-            <button
-              className="um-copy-link-button"
-              type="button"
-              aria-label="Copiar link da reuniao"
-              title={copiedInviteLink ? "Link copiado" : "Copiar link da reuniao"}
-              onClick={onCopyInviteLink}
-            >
-              <LinkIcon />
-            </button>
-          </p>
+          <div className="um-meeting-meta font-mono text-sm text-[#B8C7D9]">
+            <div className="um-meeting-meta-row">
+              <RecordingIndicator status={recordingStatus} />
+              <span>{clock || "--:--"}</span>
+              <span className="um-meeting-meta-divider">|</span>
+              <span>{elapsedTime}</span>
+            </div>
+            <div className="um-meeting-meta-row is-room">
+              <span className="truncate" title={meetingId}>
+                {meetingId}
+              </span>
+              <button
+                className="um-copy-link-button"
+                type="button"
+                aria-label="Copiar link da reuniao"
+                title={copiedInviteLink ? "Link copiado" : "Copiar link da reuniao"}
+                onClick={onCopyInviteLink}
+              >
+                <LinkIcon />
+              </button>
+            </div>
+          </div>
         </div>
 
         <MeetingControls
