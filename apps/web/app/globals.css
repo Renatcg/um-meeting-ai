@@ -543,6 +543,7 @@
 
 .um-lobby-container {
   min-width: 0;
+  align-self: start;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 0.9rem;
   background:
@@ -553,6 +554,7 @@
 
 .um-lobby-block {
   min-width: 0;
+  align-self: stretch;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 0.78rem;
   background: rgba(255, 255, 255, 0.04);

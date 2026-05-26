@@ -3145,7 +3145,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
         onSubmit={joinMeeting}
         className={`um-lobby-form relative z-10 w-full rounded-2xl border border-white/10 bg-[#070A10]/92 shadow-[0_24px_90px_rgba(0,0,0,0.45)] backdrop-blur-xl ${
           isConfiguratorLobby
-            ? "max-h-[94dvh] max-w-6xl overflow-hidden p-4 sm:p-5"
+            ? "max-h-[calc(100dvh-2rem)] max-w-6xl overflow-y-auto p-4 sm:p-5"
             : "max-h-[92dvh] max-w-2xl overflow-y-auto p-5 sm:p-6"
         }`}
       >
@@ -3257,7 +3257,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
           </section>
         ) : null}
 
-        <div className="mt-3 grid gap-3 xl:grid-cols-2">
+        <div className="mt-3 grid items-start gap-3 xl:grid-cols-2">
           <section className="um-lobby-container grid gap-3 md:grid-cols-2">
             <TranslationToggleBlock />
             <TranslationLanguageBlock />
