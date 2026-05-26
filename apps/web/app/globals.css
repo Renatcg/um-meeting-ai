@@ -541,6 +541,24 @@
   display: none;
 }
 
+.um-lobby-container {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.9rem;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(79, 195, 247, 0.08), transparent 34%),
+    rgba(255, 255, 255, 0.04);
+  padding: 0.7rem;
+}
+
+.um-lobby-block {
+  min-width: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.78rem;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0.72rem;
+}
+
 .um-lobby-form input,
 .um-lobby-form textarea,
 .um-lobby-form select {

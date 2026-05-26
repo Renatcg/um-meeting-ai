@@ -1141,7 +1141,46 @@ function VideoEffectPicker({
   );
 }
 
-function TranslationAndLgpdBlock({
+function TranslationToggleBlock() {
+  return (
+    <label className="um-lobby-block flex items-center gap-3 text-sm text-[#B8C7D9]">
+      <input className="h-4 w-4 accent-[#4FC3F7]" type="checkbox" disabled />
+      <span>
+        <span className="block font-semibold text-[#EAF6FF]">
+          Traducao simultanea
+        </span>
+        <span className="mt-0.5 block text-xs text-[#6F8197]">
+          Em breve no MVP
+        </span>
+      </span>
+    </label>
+  );
+}
+
+function TranslationLanguageBlock() {
+  return (
+    <label className="um-lobby-block block">
+      <span className="mb-1.5 block text-sm font-medium text-[#EAF6FF]">
+        Idioma
+      </span>
+      <select
+        className="w-full rounded-lg border border-white/10 bg-[#0B111A] px-3 py-2.5 text-sm text-[#8EA2BA] outline-none disabled:cursor-not-allowed"
+        disabled
+        defaultValue=""
+      >
+        <option value="">Selecione</option>
+        <option value="pt-BR">Portugues do Brasil</option>
+        <option value="en-US">Ingles</option>
+        <option value="es-ES">Espanhol</option>
+        <option value="fr-FR">Frances</option>
+        <option value="de-DE">Alemao</option>
+        <option value="it-IT">Italiano</option>
+      </select>
+    </label>
+  );
+}
+
+function LgpdConsentBlock({
   acceptedLgpd,
   setAcceptedLgpd,
 }: {
@@ -1149,53 +1188,18 @@ function TranslationAndLgpdBlock({
   setAcceptedLgpd: (accepted: boolean) => void;
 }) {
   return (
-    <section className="mt-3 grid gap-3 rounded-lg border border-white/10 bg-white/[0.04] p-3 md:grid-cols-[1fr_1.15fr]">
-      <label className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.03] p-3 text-sm text-[#B8C7D9]">
-        <input className="h-4 w-4 accent-[#4FC3F7]" type="checkbox" disabled />
-        <span>
-          <span className="block font-semibold text-[#EAF6FF]">
-            Traducao simultanea
-          </span>
-          <span className="mt-0.5 block text-xs text-[#6F8197]">
-            Em breve no MVP
-          </span>
-        </span>
-      </label>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block">
-          <span className="mb-1.5 block text-sm font-medium text-[#EAF6FF]">
-            Idioma
-          </span>
-          <select
-            className="w-full rounded-lg border border-white/10 bg-[#0B111A] px-3 py-2.5 text-sm text-[#8EA2BA] outline-none disabled:cursor-not-allowed"
-            disabled
-            defaultValue=""
-          >
-            <option value="">Selecione</option>
-            <option value="pt-BR">Portugues do Brasil</option>
-            <option value="en-US">Ingles</option>
-            <option value="es-ES">Espanhol</option>
-            <option value="fr-FR">Frances</option>
-            <option value="de-DE">Alemao</option>
-            <option value="it-IT">Italiano</option>
-          </select>
-        </label>
-
-        <label className="flex items-center gap-3 rounded-lg border border-[#4FC3F7]/25 bg-[#4FC3F7]/10 p-3 text-xs leading-5 text-[#B8C7D9]">
-          <input
-            className="h-4 w-4 shrink-0 accent-[#4FC3F7]"
-            type="checkbox"
-            checked={acceptedLgpd}
-            onChange={(event) => setAcceptedLgpd(event.target.checked)}
-          />
-          <span>
-            Aceito o tratamento de dados conforme a LGPD para participar desta
-            reuniao.
-          </span>
-        </label>
-      </div>
-    </section>
+    <label className="um-lobby-block flex items-center gap-3 text-xs leading-5 text-[#B8C7D9]">
+      <input
+        className="h-4 w-4 shrink-0 accent-[#4FC3F7]"
+        type="checkbox"
+        checked={acceptedLgpd}
+        onChange={(event) => setAcceptedLgpd(event.target.checked)}
+      />
+      <span>
+        Aceito o tratamento de dados conforme a LGPD para participar desta
+        reuniao.
+      </span>
+    </label>
   );
 }
 
@@ -2939,12 +2943,20 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
 
   async function uploadMeetingKnowledge() {
     const documents = Array.from(knowledgeDocumentsRef.current?.files ?? []);
+    const mediaExtensions = new Set(["mp3", "mp4", "mov"]);
 
     for (const file of documents) {
       const formData = new FormData();
       formData.append("file", file);
+      const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+      const isMediaFile =
+        file.type.startsWith("audio/") ||
+        file.type.startsWith("video/") ||
+        mediaExtensions.has(extension);
       const response = await fetch(
-        `${apiUrl}/meetings/${meetingId}/knowledge/documents`,
+        `${apiUrl}/meetings/${meetingId}/knowledge/${
+          isMediaFile ? "media" : "documents"
+        }`,
         {
           method: "POST",
           body: formData,
@@ -2952,7 +2964,11 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
       );
 
       if (!response.ok) {
-        throw new Error("Nao foi possivel enviar a base de conhecimento.");
+        throw new Error(
+          isMediaFile
+            ? "Nao foi possivel transcrever a midia enviada."
+            : "Nao foi possivel enviar a base de conhecimento.",
+        );
       }
     }
 
@@ -3241,145 +3257,126 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
           </section>
         ) : null}
 
-        <TranslationAndLgpdBlock
-          acceptedLgpd={acceptedLgpd}
-          setAcceptedLgpd={setAcceptedLgpd}
-        />
+        <div className="mt-3 grid gap-3 xl:grid-cols-2">
+          <section className="um-lobby-container grid gap-3 md:grid-cols-2">
+            <TranslationToggleBlock />
+            <TranslationLanguageBlock />
+          </section>
 
-        <section className="mt-3 rounded-lg border border-white/10 bg-white/[0.04] p-3">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="font-mono text-xs uppercase text-[#F97316]">
-                Filtro de camera
-              </p>
-              <p className="mt-1 text-sm font-semibold text-[#11110F]">
-                {videoEffectLabel(videoEffect)}
-              </p>
+          <section className="um-lobby-container grid gap-3 md:grid-cols-2">
+            <div className="um-lobby-block">
+              <VideoEffectPicker
+                customBackgroundName={customBackgroundName}
+                onCustomImageChange={handleCustomBackgroundChange}
+                setVideoEffect={setVideoEffect}
+                videoEffect={videoEffect}
+              />
             </div>
-            <span className="rounded-full border border-[#E7E7E2] bg-white px-3 py-1 font-mono text-xs uppercase text-[#73736B]">
-              Camera local
-            </span>
-          </div>
-          <VideoEffectPicker
-            customBackgroundName={customBackgroundName}
-            onCustomImageChange={handleCustomBackgroundChange}
-            setVideoEffect={setVideoEffect}
-            videoEffect={videoEffect}
-          />
-        </section>
+            {isHostLobby ? (
+              <label className="um-lobby-block block">
+                <span className="mb-1.5 block text-sm font-medium text-[#EAF6FF]">
+                  Link para convidar
+                </span>
+                <div className="flex gap-2">
+                  <input
+                    className="min-w-0 flex-1 rounded-lg border border-white/10 bg-[#0B111A] px-3 py-2.5 text-sm text-[#8EA2BA] outline-none"
+                    value={inviteLink}
+                    readOnly
+                  />
+                  <button
+                    className="shrink-0 rounded-lg border border-[#4FC3F7]/35 bg-[#4FC3F7]/10 px-3 py-2.5 text-sm font-semibold text-[#8EDCFF] transition hover:border-[#4FC3F7] hover:bg-[#4FC3F7]/20"
+                    type="button"
+                    onClick={copyInviteLink}
+                  >
+                    {copiedInviteLink ? "Copiado" : "Copiar"}
+                  </button>
+                </div>
+              </label>
+            ) : null}
+          </section>
 
-        {isHostLobby ? (
-          <div className="mt-4 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+          <section className="um-lobby-container grid gap-3 md:grid-cols-2">
+            <div className="um-lobby-block flex items-center justify-between gap-3">
               <div>
-                <p className="font-mono text-xs uppercase text-[#F97316]">
+                <p className="font-mono text-xs uppercase text-[#4FC3F7]">
                   Papel automatico
                 </p>
-                <p className="mt-1 text-sm text-[#73736B]">
-                  Host para quem criou a sala; Comercial pelo cadastro; demais
-                  entram como Participante.
+                <p className="mt-1 text-sm text-[#8EA2BA]">
+                  Host para quem criou; Comercial pelo cadastro; demais como Participante.
                 </p>
               </div>
-              <span className="rounded-full border border-[#FDBA74] bg-[#FFF3EA] px-3 py-1 font-mono text-xs uppercase text-[#F97316]">
+              <span className="rounded-full border border-[#4FC3F7]/35 bg-[#4FC3F7]/10 px-3 py-1 font-mono text-xs uppercase text-[#8EDCFF]">
                 {entryContextReady ? roleLabel(inferredRole) : "Preparando"}
               </span>
             </div>
-          </div>
-        ) : null}
+            <LgpdConsentBlock
+              acceptedLgpd={acceptedLgpd}
+              setAcceptedLgpd={setAcceptedLgpd}
+            />
+          </section>
 
-        {isHostLobby ? (
-          <div className="mt-4 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">
-            <label className="block">
-              <span className="mb-2 block text-sm font-medium text-[#11110F]">
-                Link para convidar
-              </span>
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <input
-                  className="min-w-0 flex-1 rounded-lg border border-[#E7E7E2] bg-[#F8F8F6] px-4 py-3 text-sm text-[#73736B] outline-none"
-                  value={inviteLink}
-                  readOnly
-                />
-                <button
-                  className="rounded-lg border border-[#FDBA74] px-4 py-3 text-sm font-semibold text-[#F97316] transition hover:bg-[#FFF3EA]"
-                  type="button"
-                  onClick={copyInviteLink}
-                >
-                  {copiedInviteLink ? "Copiado" : "Copiar link"}
-                </button>
+          {isHostLobby ? (
+            <section className="um-lobby-container">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-mono text-xs uppercase text-[#4FC3F7]">
+                    Base de conhecimento da reuniao
+                  </p>
+                  <p className="mt-1 text-sm text-[#8EA2BA]">
+                    Upload de arquivos, links e transcricoes antes da reuniao.
+                  </p>
+                </div>
+                <span className="rounded-full border border-[#4FC3F7]/25 bg-[#4FC3F7]/10 px-3 py-1 font-mono text-xs uppercase text-[#8EDCFF]">
+                  Host
+                </span>
               </div>
-            </label>
-          </div>
-        ) : null}
 
-        {isHostLobby ? (
-          <details className="mt-4 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">
-            <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="font-mono text-xs uppercase text-[#F97316]">
-                  Base de conhecimento
-                </p>
-                <p className="mt-1 text-sm text-[#73736B]">
-                  Apenas o Host pode alimentar a base antes da reuniao.
-                </p>
-              </div>
-              <span className="rounded-full border border-[#E7E7E2] bg-white px-3 py-1 font-mono text-xs uppercase text-[#73736B]">
-                Host liberado
-              </span>
-            </summary>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <label className="um-lobby-block block">
+                  <span className="mb-1.5 block text-sm font-medium text-[#EAF6FF]">
+                    Arquivos
+                  </span>
+                  <input
+                    ref={knowledgeDocumentsRef}
+                    className="w-full rounded-lg border border-white/10 bg-[#0B111A] px-3 py-2.5 text-sm text-[#8EA2BA]"
+                    type="file"
+                    multiple
+                    accept=".doc,.docx,.xls,.xlsx,.pdf,.mp4,.mp3,.mov,.txt,.md,audio/*,video/*"
+                  />
+                </label>
 
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium text-[#11110F]">
-                  Documentos
-                </span>
-                <input
-                  ref={knowledgeDocumentsRef}
-                  className="w-full rounded-lg border border-[#E7E7E2] bg-white px-4 py-3 text-sm text-[#73736B] file:mr-3 file:rounded-md file:border-0 file:bg-[#11110F] file:px-3 file:py-2 file:text-sm file:font-bold file:text-white"
-                  type="file"
-                  multiple
-                  accept=".pdf,.doc,.docx,.txt,.md"
-                />
-              </label>
+                <label className="um-lobby-block block">
+                  <span className="mb-1.5 block text-sm font-medium text-[#EAF6FF]">
+                    Links da internet
+                  </span>
+                  <textarea
+                    ref={knowledgeLinkRef}
+                    className="w-full resize-none rounded-lg border border-white/10 bg-[#0B111A] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-[#6F8197] focus:border-[#4FC3F7] focus:ring-2 focus:ring-[#4FC3F7]/15"
+                    placeholder="Cole um ou mais links, um por linha."
+                  />
+                </label>
 
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium text-[#11110F]">
-                  Links da web
-                </span>
-                <textarea
-                  ref={knowledgeLinkRef}
-                  className="h-24 w-full resize-none rounded-lg border border-[#E7E7E2] bg-white px-4 py-3 text-sm text-[#11110F] outline-none transition placeholder:text-[#73736B] focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/15"
-                  placeholder="Cole um ou mais links, um por linha."
-                />
-              </label>
-            </div>
-
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium text-[#11110F]">
-                  Audios e videos
-                </span>
+                <label className="um-lobby-block block md:col-span-2">
+                  <span className="mb-1.5 block text-sm font-medium text-[#EAF6FF]">
+                    Texto de transcricao ou briefing
+                  </span>
+                  <textarea
+                    ref={knowledgeTranscriptRef}
+                    className="w-full resize-none rounded-lg border border-white/10 bg-[#0B111A] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-[#6F8197] focus:border-[#4FC3F7] focus:ring-2 focus:ring-[#4FC3F7]/15"
+                    placeholder="Cole uma transcricao, briefing ou contexto da reuniao."
+                  />
+                </label>
                 <input
                   ref={knowledgeMediaRef}
-                  className="w-full rounded-lg border border-[#E7E7E2] bg-white px-4 py-3 text-sm text-[#73736B] file:mr-3 file:rounded-md file:border-0 file:bg-[#F8F8F6] file:px-3 file:py-2 file:text-sm file:font-bold file:text-[#11110F]"
+                  className="sr-only"
                   type="file"
                   multiple
-                  accept="audio/*,video/*"
+                  accept="audio/*,video/*,.mp4,.mp3,.mov"
                 />
-              </label>
-
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium text-[#11110F]">
-                  Transcricoes
-                </span>
-                <textarea
-                  ref={knowledgeTranscriptRef}
-                  className="h-24 w-full resize-none rounded-lg border border-[#E7E7E2] bg-white px-4 py-3 text-sm text-[#11110F] outline-none transition placeholder:text-[#73736B] focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/15"
-                  placeholder="Cole uma transcricao, briefing ou contexto da reuniao."
-                />
-              </label>
-            </div>
-          </details>
-        ) : null}
+              </div>
+            </section>
+          ) : null}
+        </div>
 
         {error ? (
           <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
