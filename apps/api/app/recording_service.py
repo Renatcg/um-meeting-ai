@@ -76,9 +76,29 @@ def _duration_seconds(value: int | None) -> float | None:
     return value / 1_000_000_000
 
 
-def _recording_object_key(settings: Settings, meeting_id: str) -> str:
+def _safe_path_segment(value: str | None, fallback: str) -> str:
+    clean = "".join(
+        character.lower()
+        if character.isalnum() or character in {"-", "_"}
+        else "-"
+        for character in (value or "").strip()
+    ).strip("-")
+    return clean or fallback
+
+
+def _recording_object_key(
+    settings: Settings,
+    meeting_id: str,
+    organization_id: str = "default",
+    client_external_id: str | None = None,
+) -> str:
     prefix = settings.recording_object_prefix.strip("/ ") or "recordings"
-    return f"{prefix}/{meeting_id}/{uuid4().hex}.mp4"
+    organization_segment = _safe_path_segment(organization_id, "default")
+    client_segment = _safe_path_segment(client_external_id, "unassigned")
+    return (
+        f"{prefix}/{organization_segment}/clients/{client_segment}/"
+        f"meetings/{meeting_id}/{uuid4().hex}.mp4"
+    )
 
 
 def _storage_location(settings: Settings, object_key: str) -> str:
@@ -104,6 +124,8 @@ async def start_meeting_recording(
     *,
     settings: Settings,
     meeting_id: str,
+    organization_id: str = "default",
+    client_external_id: str | None = None,
 ) -> RecordingStartResponse:
     if not settings.recordings_enabled:
         return RecordingStartResponse(
@@ -131,7 +153,12 @@ async def start_meeting_recording(
             detail="Recording already active.",
         )
 
-    object_key = _recording_object_key(settings, meeting_id)
+    object_key = _recording_object_key(
+        settings,
+        meeting_id,
+        organization_id=organization_id,
+        client_external_id=client_external_id,
+    )
     file_output = api.EncodedFileOutput(
         file_type=api.EncodedFileType.MP4,
         filepath=object_key,
@@ -251,7 +278,11 @@ async def reconcile_recording(
 
         recording = await save_egress_info(settings=settings, info=info)
 
-    if recording and (not recording.location or _is_failed_status(recording.status)):
+    if recording and (
+        not recording.location
+        or not recording.size_bytes
+        or _is_failed_status(recording.status)
+    ):
         logger.error(
             "recording reconciliation ended without a usable recording",
             extra={
@@ -259,6 +290,7 @@ async def reconcile_recording(
                 "egress_id": recording.egress_id,
                 "status": recording.status,
                 "location": recording.location,
+                "size_bytes": recording.size_bytes,
                 "error": recording.error,
             },
         )
@@ -311,30 +343,30 @@ async def recording_health(
         for item in recordings
         if _is_failed_status(item.status) or bool(item.error)
     ]
-    missing_location = [
+    missing_file = [
         item
         for item in recordings
         if _is_terminal_status(item.status)
         and not _is_failed_status(item.status)
-        and not item.location
+        and (not item.location or not item.size_bytes)
     ]
 
     if active:
         alerts.append(f"{len(active)} recording(s) still active or starting.")
     if failed:
         alerts.append(f"{len(failed)} recording(s) failed recently.")
-    if missing_location:
+    if missing_file:
         alerts.append(
-            f"{len(missing_location)} completed recording(s) are missing storage location."
+            f"{len(missing_file)} completed recording(s) are missing confirmed storage file."
         )
 
-    healthy = configured and not failed and not missing_location
+    healthy = configured and not failed and not missing_file
     return RecordingHealthResponse(
         healthy=healthy,
         configured=bool(configured),
         active_count=len(active),
         failed_count=len(failed),
-        missing_location_count=len(missing_location),
+        missing_location_count=len(missing_file),
         alerts=alerts,
     )
 

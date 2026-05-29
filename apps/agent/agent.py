@@ -57,11 +57,11 @@ SILENCE_WORDS = ("silencie", "silencio", "silenciar", "cale", "pare")
 INITIAL_ACTIVE_LISTEN_SECONDS = 15.0
 POST_REPLY_ACTIVE_SECONDS = 10.0
 FOLLOW_UP_SILENCE_SECONDS = 5.0
-VAD_THRESHOLD = float(os.getenv("JARVIS_VAD_THRESHOLD", "0.64"))
-VAD_PREFIX_PADDING_MS = int(os.getenv("JARVIS_VAD_PREFIX_PADDING_MS", "300"))
-VAD_SILENCE_DURATION_MS = int(os.getenv("JARVIS_VAD_SILENCE_DURATION_MS", "750"))
-MIN_TRANSCRIPT_CHARS = int(os.getenv("JARVIS_MIN_TRANSCRIPT_CHARS", "8"))
-MIN_TRANSCRIPT_WORDS = int(os.getenv("JARVIS_MIN_TRANSCRIPT_WORDS", "2"))
+VAD_THRESHOLD = float(os.getenv("JARVIS_VAD_THRESHOLD", "0.78"))
+VAD_PREFIX_PADDING_MS = int(os.getenv("JARVIS_VAD_PREFIX_PADDING_MS", "250"))
+VAD_SILENCE_DURATION_MS = int(os.getenv("JARVIS_VAD_SILENCE_DURATION_MS", "950"))
+MIN_TRANSCRIPT_CHARS = int(os.getenv("JARVIS_MIN_TRANSCRIPT_CHARS", "12"))
+MIN_TRANSCRIPT_WORDS = int(os.getenv("JARVIS_MIN_TRANSCRIPT_WORDS", "3"))
 current_meeting_id: contextvars.ContextVar[str] = contextvars.ContextVar(
     "current_meeting_id",
     default="unknown-meeting",

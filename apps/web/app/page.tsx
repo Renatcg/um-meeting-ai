@@ -114,6 +114,19 @@ type GoogleCalendarStatus = {
   auth_url?: string | null;
 };
 
+type ClientDirectoryStatus = {
+  configured: boolean;
+  enabled: boolean;
+  client_count: number;
+  last_synced_at?: string | null;
+  provider: string;
+};
+
+type ClientDirectoryClient = {
+  external_id: string;
+  name: string;
+};
+
 type ConversationSession = {
   id: string;
   title: string;
@@ -135,6 +148,10 @@ type MemorySearchResult = {
   id: number;
   meeting_id: string;
   meeting_title?: string | null;
+  client_external_id?: string | null;
+  client_name?: string | null;
+  meeting_type?: string | null;
+  project_name?: string | null;
   memory_type: string;
   content: string;
   score: number;
@@ -511,11 +528,18 @@ export default function HomePage() {
   const [leadFormStatus, setLeadFormStatus] = useState<string | null>(null);
   const [isSavingLead, setIsSavingLead] = useState(false);
   const [googleCalendar, setGoogleCalendar] = useState<GoogleCalendarStatus | null>(null);
+  const [clientDirectoryStatus, setClientDirectoryStatus] =
+    useState<ClientDirectoryStatus | null>(null);
+  const [clientDirectoryClients, setClientDirectoryClients] = useState<
+    ClientDirectoryClient[]
+  >([]);
   const [conversationSessions, setConversationSessions] = useState<ConversationSession[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>([]);
   const [memoryQuestion, setMemoryQuestion] = useState("");
   const [memoryCustomer, setMemoryCustomer] = useState("");
+  const [memoryClientExternalId, setMemoryClientExternalId] = useState("");
+  const [memoryMeetingType, setMemoryMeetingType] = useState("");
   const [memoryMeetingId, setMemoryMeetingId] = useState("");
   const [memoryStatus, setMemoryStatus] = useState<string | null>(null);
   const [memorySources, setMemorySources] = useState<MemorySearchResult[]>([]);
@@ -685,6 +709,30 @@ export default function HomePage() {
     }
   }
 
+  async function loadClientDirectoryStatus() {
+    try {
+      const response = await fetch(`${apiUrl}/clients/status`);
+      if (!response.ok) {
+        return;
+      }
+      setClientDirectoryStatus((await response.json()) as ClientDirectoryStatus);
+    } catch {
+      setClientDirectoryStatus(null);
+    }
+  }
+
+  async function loadClientDirectoryClients() {
+    try {
+      const response = await fetch(`${apiUrl}/clients`);
+      if (!response.ok) {
+        return;
+      }
+      setClientDirectoryClients((await response.json()) as ClientDirectoryClient[]);
+    } catch {
+      setClientDirectoryClients([]);
+    }
+  }
+
   async function loadTrialRequests() {
     setIsLoadingTrialRequests(true);
     setTrialRequestsStatus(null);
@@ -786,6 +834,8 @@ export default function HomePage() {
           requester_role: "host",
           context_scope: {
             meeting_id: memoryMeetingId.trim() || null,
+            client_external_id: memoryClientExternalId.trim() || null,
+            meeting_type: memoryMeetingType.trim() || null,
             customer: memoryCustomer.trim() || null,
           },
         }),
@@ -975,6 +1025,8 @@ export default function HomePage() {
 
     loadProfile();
     loadGoogleCalendarStatus();
+    loadClientDirectoryStatus();
+    loadClientDirectoryClients();
     loadConversationSessions();
     loadMeetingHistory();
 
@@ -1753,13 +1805,47 @@ export default function HomePage() {
                     </p>
                     <label className="mt-4 block">
                       <span className="mb-2 block text-sm font-semibold">
-                        Cliente ou projeto
+                        Cliente sincronizado
+                      </span>
+                      <select
+                        className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-3 py-2 text-sm outline-none focus:border-[#F97316]"
+                        value={memoryClientExternalId}
+                        onChange={(event) => setMemoryClientExternalId(event.target.value)}
+                      >
+                        <option value="">Todos os clientes</option>
+                        {clientDirectoryClients.map((client) => (
+                          <option key={client.external_id} value={client.external_id}>
+                            {client.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="mt-4 block">
+                      <span className="mb-2 block text-sm font-semibold">
+                        Tipo de reunião
+                      </span>
+                      <select
+                        className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-3 py-2 text-sm outline-none focus:border-[#F97316]"
+                        value={memoryMeetingType}
+                        onChange={(event) => setMemoryMeetingType(event.target.value)}
+                      >
+                        <option value="">Todos os tipos</option>
+                        {profile.meeting_types.map((type) => (
+                          <option key={type} value={type}>
+                            {type}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="mt-4 block">
+                      <span className="mb-2 block text-sm font-semibold">
+                        Busca textual livre
                       </span>
                       <input
                         className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-3 py-2 text-sm outline-none focus:border-[#F97316]"
                         value={memoryCustomer}
                         onChange={(event) => setMemoryCustomer(event.target.value)}
-                        placeholder="XPTO, ACME..."
+                        placeholder="Cliente, projeto, termo..."
                       />
                     </label>
                     <label className="mt-4 block">
@@ -1800,6 +1886,13 @@ export default function HomePage() {
                           <p className="mt-1 text-xs text-[#73736B]">
                             {source.meeting_title ?? source.meeting_id}
                           </p>
+                          {source.client_name || source.meeting_type ? (
+                            <p className="mt-1 text-[11px] uppercase tracking-[0.12em] text-[#73736B]">
+                              {[source.client_name, source.meeting_type]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </p>
+                          ) : null}
                           <p className="mt-2 line-clamp-4 text-sm leading-5 text-[#11110F]">
                             {source.content}
                           </p>
@@ -2521,16 +2614,31 @@ export default function HomePage() {
                               Diretório de clientes
                             </p>
                             <p className="mt-1 text-xs leading-5 text-[#73736B]">
-                              Integração planejada via API ou MCP externo para
-                              alimentar o menu de clientes do lobby.
+                              Sincroniza clientes de uma API externa e alimenta o
+                              menu do lobby. A chave fica apenas na API.
+                            </p>
+                            <p className="mt-2 text-xs leading-5 text-[#73736B]">
+                              {clientDirectoryStatus
+                                ? `${clientDirectoryStatus.client_count} clientes sincronizados${
+                                    clientDirectoryStatus.last_synced_at
+                                      ? ` · ultima sync ${formatMeetingDate(
+                                          clientDirectoryStatus.last_synced_at,
+                                        )}`
+                                      : ""
+                                  }`
+                                : "Configure CLIENT_DIRECTORY_* no Railway."}
                             </p>
                           </div>
-                          <span className="rounded-full border border-[#E7E7E2] bg-white px-3 py-2 text-xs font-bold uppercase text-[#73736B]">
-                            {profile.client_directory_integration?.status === "connected"
-                              ? "Conectado"
-                              : profile.client_directory_integration?.status === "configured"
-                                ? "Configurado"
-                                : "A configurar"}
+                          <span
+                            className={`rounded-full border px-3 py-2 text-xs font-bold uppercase ${
+                              clientDirectoryStatus?.configured
+                                ? "border-[#BBF7D0] bg-[#F0FDF4] text-[#15803D]"
+                                : "border-[#E7E7E2] bg-white text-[#73736B]"
+                            }`}
+                          >
+                            {clientDirectoryStatus?.configured
+                              ? "API ativa"
+                              : "A configurar"}
                           </span>
                         </div>
                       </div>

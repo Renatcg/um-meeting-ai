@@ -1,5 +1,4 @@
 from functools import lru_cache
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -57,6 +56,20 @@ class Settings(BaseSettings):
     whatsapp_tts_model: str = "gpt-4o-mini-tts"
     whatsapp_group_enabled: bool = True
     whatsapp_group_summary_limit: int = 80
+    smart_speaker_api_key: str | None = None
+    smart_speaker_tts_model: str = "gpt-4o-mini-tts"
+    smart_speaker_default_mimetype: str = "audio/wav"
+    client_directory_enabled: bool = False
+    client_directory_api_url: str | None = None
+    client_directory_api_key: str | None = None
+    client_directory_auth_header: str = "Authorization"
+    client_directory_auth_scheme: str = "Bearer"
+    client_directory_name_field: str = "name"
+    client_directory_external_id_field: str = "id"
+    client_directory_items_path: str = ""
+    client_directory_sync_enabled: bool = True
+    client_directory_sync_hours: str = "6,14"
+    client_directory_sync_interval_seconds: int = 300
 
     model_config = SettingsConfigDict(
         env_file=("../../.env", ".env"),
@@ -89,6 +102,18 @@ class Settings(BaseSettings):
             for phone in self.whatsapp_allowed_phones.split(",")
             if phone.strip()
         }
+
+    @property
+    def client_directory_sync_hour_set(self) -> set[int]:
+        hours: set[int] = set()
+        for raw_hour in self.client_directory_sync_hours.split(","):
+            try:
+                hour = int(raw_hour.strip())
+            except ValueError:
+                continue
+            if 0 <= hour <= 23:
+                hours.add(hour)
+        return hours or {6, 14}
 
 
 @lru_cache

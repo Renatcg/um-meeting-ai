@@ -1,11 +1,24 @@
 from datetime import datetime, timedelta, timezone
 import asyncio
+import json
 import logging
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, File, Header, HTTPException, Request, UploadFile, status
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Header,
+    HTTPException,
+    Request,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from livekit import api
@@ -32,6 +45,7 @@ from app.calendar_service import (
     google_calendar_configured,
     google_calendar_can_create_events,
 )
+from app.client_directory_service import ClientDirectoryError, fetch_external_clients
 from app.copilot import dispatch_copilot
 from app.conversation_service import respond_with_agent_memory
 from app.dev_console_service import (
@@ -49,6 +63,7 @@ from app.database import (
     get_agent_profile,
     get_app_user_by_email,
     get_app_user_by_id,
+    get_client_directory_status,
     get_dev_console_project_access,
     get_google_calendar_connection,
     get_meeting_join_request_by_email,
@@ -66,6 +81,7 @@ from app.database import (
     insert_whatsapp_group_message,
     insert_whatsapp_webhook_event,
     list_app_users,
+    list_client_directory_client_options,
     list_conversation_messages,
     list_conversation_sessions,
     list_accessible_dev_console_projects,
@@ -85,7 +101,9 @@ from app.database import (
     mark_meeting_ended,
     register_meeting_participant,
     update_meeting_join_request_status,
+    update_meeting_context,
     update_trial_request,
+    upsert_client_directory_clients,
     upsert_dev_console_project_member,
     upsert_meeting_join_request,
     upsert_agent_profile,
@@ -97,6 +115,9 @@ from app.models import (
     AgentRespondRequest,
     AgentRespondResponse,
     AuthResponse,
+    ClientDirectoryClientOption,
+    ClientDirectoryStatus,
+    ClientDirectorySyncResponse,
     ConversationMessage,
     ConversationSession,
     CreateMeetingRequest,
@@ -136,6 +157,8 @@ from app.models import (
     MeetingWebSearchResponse,
     RecordingStartResponse,
     SalesRecommendation,
+    SmartSpeakerTestRequest,
+    SmartSpeakerTestResponse,
     TranscriptSegment,
     TranscriptSegmentCreate,
     TrialRequest,
@@ -169,6 +192,12 @@ from app.recording_service import (
 )
 from app.sales_coach_service import analyze_segment
 from app.store import meeting_store
+from app.voice_channel_service import (
+    audio_base64_to_bytes,
+    audio_bytes_to_base64,
+    synthesize_voice_audio,
+    transcribe_voice_audio,
+)
 from app.web_search_service import search_web
 from app.whatsapp_group_service import (
     answer_whatsapp_group_message,
@@ -187,6 +216,7 @@ from app.whatsapp_service import (
 settings = get_settings()
 MEETING_JOIN_GRACE_PERIOD = timedelta(minutes=15)
 logger = logging.getLogger(__name__)
+SAO_PAULO_TZ = ZoneInfo("America/Sao_Paulo")
 
 
 LIVEKIT_WEBHOOK_ROOM_FINISHED = "room_finished"
@@ -206,6 +236,28 @@ def verify_agent_api_key(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid agent API key.",
         )
+
+
+def smart_speaker_expected_api_key() -> str | None:
+    return settings.smart_speaker_api_key or settings.agent_api_key
+
+
+def smart_speaker_api_key_is_valid(api_key: str | None) -> bool:
+    expected = smart_speaker_expected_api_key()
+    if not expected:
+        return False
+    return api_key == expected
+
+
+def verify_smart_speaker_api_key(
+    x_agent_api_key: str | None = Header(default=None),
+) -> None:
+    if smart_speaker_api_key_is_valid(x_agent_api_key):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid smart speaker API key.",
+    )
 
 
 def log_background_task_failure(task: asyncio.Task) -> None:
@@ -343,6 +395,56 @@ async def stale_meeting_cleanup_loop() -> None:
         await cleanup_livekit_rooms_without_humans()
 
 
+async def sync_client_directory() -> ClientDirectorySyncResponse:
+    configured = bool(
+        settings.client_directory_enabled and settings.client_directory_api_url
+    )
+    if not configured:
+        return ClientDirectorySyncResponse(
+            configured=False,
+            detail="Client directory integration is not configured.",
+        )
+
+    try:
+        external_clients = await fetch_external_clients(settings)
+        clients = await upsert_client_directory_clients(
+            settings=settings,
+            clients=external_clients,
+        )
+    except ClientDirectoryError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+
+    return ClientDirectorySyncResponse(
+        configured=True,
+        synced_count=len(clients),
+        clients=clients,
+    )
+
+
+async def client_directory_sync_loop() -> None:
+    interval = max(int(settings.client_directory_sync_interval_seconds), 60)
+    synced_slots: set[str] = set()
+
+    while True:
+        now = datetime.now(SAO_PAULO_TZ)
+        slot = f"{now.date().isoformat()}-{now.hour}"
+        if (
+            now.hour in settings.client_directory_sync_hour_set
+            and slot not in synced_slots
+        ):
+            try:
+                await sync_client_directory()
+                logger.info("client directory sync completed")
+            except Exception:
+                logger.exception("client directory sync failed")
+            synced_slots.add(slot)
+
+        await asyncio.sleep(interval)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     try:
@@ -355,6 +457,11 @@ async def lifespan(_: FastAPI):
         cleanup_task = asyncio.create_task(stale_meeting_cleanup_loop())
         cleanup_task.add_done_callback(log_background_task_failure)
 
+    client_directory_task = None
+    if settings.client_directory_sync_enabled and settings.client_directory_enabled:
+        client_directory_task = asyncio.create_task(client_directory_sync_loop())
+        client_directory_task.add_done_callback(log_background_task_failure)
+
     try:
         yield
     finally:
@@ -362,6 +469,12 @@ async def lifespan(_: FastAPI):
             cleanup_task.cancel()
             try:
                 await cleanup_task
+            except asyncio.CancelledError:
+                pass
+        if client_directory_task:
+            client_directory_task.cancel()
+            try:
+                await client_directory_task
             except asyncio.CancelledError:
                 pass
 
@@ -380,6 +493,25 @@ app.add_middleware(
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/clients", response_model=list[ClientDirectoryClientOption])
+async def read_client_directory_clients() -> list[ClientDirectoryClientOption]:
+    return await list_client_directory_client_options(settings=settings)
+
+
+@app.get("/clients/status", response_model=ClientDirectoryStatus)
+async def read_client_directory_status() -> ClientDirectoryStatus:
+    return await get_client_directory_status(settings=settings)
+
+
+@app.post(
+    "/clients/sync",
+    response_model=ClientDirectorySyncResponse,
+    dependencies=[Depends(verify_agent_api_key)],
+)
+async def sync_client_directory_endpoint() -> ClientDirectorySyncResponse:
+    return await sync_client_directory()
 
 
 @app.post("/auth/register", response_model=AuthResponse, status_code=201)
@@ -607,6 +739,313 @@ async def read_conversation_messages(session_id: str) -> list[ConversationMessag
 @app.post("/agent/respond", response_model=AgentRespondResponse)
 async def respond_with_agent(payload: AgentRespondRequest) -> AgentRespondResponse:
     return await respond_with_agent_memory(settings=settings, payload=payload)
+
+
+async def authorize_smart_speaker_websocket(websocket: WebSocket) -> bool:
+    api_key = (
+        websocket.headers.get("x-agent-api-key")
+        or websocket.query_params.get("api_key")
+        or websocket.query_params.get("token")
+    )
+    if smart_speaker_api_key_is_valid(api_key):
+        return True
+
+    await websocket.send_json(
+        {
+            "type": "auth_required",
+            "detail": "Send {\"type\":\"auth\",\"api_key\":\"...\"} before audio.",
+        }
+    )
+    try:
+        raw_message = await asyncio.wait_for(websocket.receive_text(), timeout=10)
+        message = json.loads(raw_message)
+    except (TimeoutError, ValueError, WebSocketDisconnect):
+        return False
+
+    return (
+        isinstance(message, dict)
+        and message.get("type") == "auth"
+        and smart_speaker_api_key_is_valid(str(message.get("api_key") or ""))
+    )
+
+
+def _speaker_payload_value(payload: dict, key: str, fallback: str) -> str:
+    value = payload.get(key)
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return fallback
+
+
+def _speaker_email_value(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    clean = value.strip()
+    if "@" not in clean:
+        return None
+    return clean
+
+
+async def answer_smart_speaker_text(
+    *,
+    text: str,
+    session_id: str,
+    organization_id: str,
+    user_id: str,
+    user_name: str,
+    user_email: str | None,
+) -> tuple[AgentRespondResponse, bytes]:
+    response = await respond_with_agent_memory(
+        settings=settings,
+        payload=AgentRespondRequest(
+            message=text,
+            session_id=session_id,
+            agent_id="coevo",
+            organization_id=organization_id,
+            channel="voice",
+            user_id=user_id,
+            user_name=user_name,
+            user_email=_speaker_email_value(user_email),
+            requester_role="host",
+        ),
+    )
+    profile = await get_agent_profile(settings=settings)
+    audio_bytes = await synthesize_voice_audio(
+        settings=settings,
+        text=response.assistant_message.content,
+        voice=profile.voice,
+    )
+    return response, audio_bytes
+
+
+@app.post(
+    "/agent/speaker/test",
+    response_model=SmartSpeakerTestResponse,
+    dependencies=[Depends(verify_smart_speaker_api_key)],
+)
+async def test_smart_speaker_channel(
+    payload: SmartSpeakerTestRequest,
+) -> SmartSpeakerTestResponse:
+    response, audio_bytes = await answer_smart_speaker_text(
+        text=payload.text,
+        session_id=payload.session_id,
+        organization_id=payload.organization_id,
+        user_id=payload.user_id,
+        user_name=payload.user_name,
+        user_email=payload.user_email,
+    )
+    return SmartSpeakerTestResponse(
+        session_id=response.session.id,
+        text=response.assistant_message.content,
+        audio_base64=audio_bytes_to_base64(audio_bytes),
+        memory_count=len(response.memory_results),
+    )
+
+
+@app.websocket("/agent/speaker/ws")
+async def smart_speaker_websocket(websocket: WebSocket) -> None:
+    await websocket.accept()
+
+    if not smart_speaker_expected_api_key():
+        await websocket.send_json(
+            {
+                "type": "error",
+                "detail": "SMART_SPEAKER_API_KEY or AGENT_API_KEY is required.",
+            }
+        )
+        await websocket.close(code=1008)
+        return
+
+    authorized = await authorize_smart_speaker_websocket(websocket)
+    if not authorized:
+        await websocket.send_json({"type": "error", "detail": "Unauthorized."})
+        await websocket.close(code=1008)
+        return
+
+    profile = await get_agent_profile(settings=settings)
+    session_id = (
+        websocket.query_params.get("session_id")
+        or f"voice-{uuid4().hex[:12]}"
+    )
+    organization_id = websocket.query_params.get("organization_id") or profile.organization_id
+    user_id = websocket.query_params.get("user_id") or "smart-speaker"
+    user_name = websocket.query_params.get("user_name") or "Smart speaker"
+    user_email = websocket.query_params.get("user_email") or None
+    mimetype = (
+        websocket.query_params.get("mimetype")
+        or settings.smart_speaker_default_mimetype
+    )
+    audio_buffer = bytearray()
+
+    await websocket.send_json(
+        {
+            "type": "ready",
+            "agent": {
+                "id": profile.id,
+                "name": profile.name,
+                "voice": profile.voice,
+                "organization_id": profile.organization_id,
+            },
+            "session_id": session_id,
+            "input": "binary frames, audio_chunk JSON, audio_commit JSON, or text JSON",
+            "output_audio": "mp3_base64",
+        }
+    )
+
+    async def process_text(text: str) -> None:
+        clean_text = " ".join(text.strip().split())
+        if len(clean_text) < 3:
+            await websocket.send_json(
+                {
+                    "type": "error",
+                    "detail": "Nao consegui entender. Envie um pouco mais de audio ou texto.",
+                }
+            )
+            return
+
+        await websocket.send_json({"type": "thinking", "transcript": clean_text})
+        response, audio_bytes = await answer_smart_speaker_text(
+            text=clean_text,
+            session_id=session_id,
+            organization_id=organization_id,
+            user_id=user_id,
+            user_name=user_name,
+            user_email=user_email,
+        )
+        await websocket.send_json(
+            {
+                "type": "response",
+                "session_id": response.session.id,
+                "text": response.assistant_message.content,
+                "audio_base64": audio_bytes_to_base64(audio_bytes),
+                "audio_mimetype": "audio/mpeg",
+                "memory_count": len(response.memory_results),
+            }
+        )
+
+    try:
+        while True:
+            message = await websocket.receive()
+            if message.get("type") == "websocket.disconnect":
+                return
+            if "bytes" in message and message["bytes"] is not None:
+                audio_buffer.extend(message["bytes"])
+                continue
+
+            raw_text = message.get("text")
+            if raw_text is None:
+                continue
+
+            try:
+                payload = json.loads(raw_text)
+            except ValueError:
+                payload = {"type": "text", "text": raw_text}
+
+            if not isinstance(payload, dict):
+                await websocket.send_json({"type": "error", "detail": "Invalid payload."})
+                continue
+
+            message_type = str(payload.get("type") or "text")
+            if message_type == "start":
+                session_id = _speaker_payload_value(payload, "session_id", session_id)
+                organization_id = _speaker_payload_value(
+                    payload,
+                    "organization_id",
+                    organization_id,
+                )
+                user_id = _speaker_payload_value(payload, "user_id", user_id)
+                user_name = _speaker_payload_value(payload, "user_name", user_name)
+                user_email = _speaker_email_value(payload.get("user_email")) or user_email
+                mimetype = _speaker_payload_value(payload, "mimetype", mimetype)
+                await websocket.send_json(
+                    {"type": "session", "session_id": session_id}
+                )
+                continue
+
+            if message_type == "audio_chunk":
+                chunk = payload.get("audio_base64")
+                if not isinstance(chunk, str) or not chunk.strip():
+                    await websocket.send_json(
+                        {"type": "error", "detail": "audio_base64 is required."}
+                    )
+                    continue
+                try:
+                    audio_buffer.extend(audio_base64_to_bytes(chunk))
+                except Exception:
+                    await websocket.send_json(
+                        {"type": "error", "detail": "Invalid audio_base64."}
+                    )
+                    continue
+                if payload.get("final") is not True:
+                    continue
+                message_type = "audio_commit"
+
+            if message_type == "audio_commit":
+                if not audio_buffer:
+                    await websocket.send_json(
+                        {"type": "error", "detail": "No audio received."}
+                    )
+                    continue
+                audio_bytes = bytes(audio_buffer)
+                audio_buffer.clear()
+                try:
+                    transcript = await transcribe_voice_audio(
+                        settings=settings,
+                        audio_bytes=audio_bytes,
+                        mimetype=mimetype,
+                    )
+                except Exception:
+                    logger.exception("smart speaker audio transcription failed")
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "detail": "Nao consegui transcrever o audio agora.",
+                        }
+                    )
+                    continue
+                await websocket.send_json(
+                    {"type": "transcript", "text": transcript}
+                )
+                try:
+                    await process_text(transcript)
+                except Exception:
+                    logger.exception("smart speaker response failed")
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "detail": "Nao consegui responder por voz agora.",
+                        }
+                    )
+                continue
+
+            if message_type == "text":
+                text = payload.get("text")
+                if not isinstance(text, str):
+                    await websocket.send_json(
+                        {"type": "error", "detail": "text is required."}
+                    )
+                    continue
+                try:
+                    await process_text(text)
+                except Exception:
+                    logger.exception("smart speaker text response failed")
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "detail": "Nao consegui responder agora.",
+                        }
+                    )
+                continue
+
+            if message_type == "clear_audio":
+                audio_buffer.clear()
+                await websocket.send_json({"type": "audio_cleared"})
+                continue
+
+            await websocket.send_json(
+                {"type": "error", "detail": f"Unsupported message type: {message_type}"}
+            )
+    except WebSocketDisconnect:
+        return
 
 
 async def authorize_dev_console_project(
@@ -897,7 +1336,15 @@ async def search_meeting_knowledge_base(
 
 @app.post("/meetings", response_model=Meeting, status_code=201)
 async def create_meeting(payload: CreateMeetingRequest) -> Meeting:
-    meeting = meeting_store.create(payload.title)
+    meeting = meeting_store.create(
+        payload.title,
+        organization_id=payload.organization_id,
+        meeting_type=payload.meeting_type,
+        client_external_id=payload.client_external_id,
+        client_name=payload.client_name,
+        project_external_id=payload.project_external_id,
+        project_name=payload.project_name,
+    )
     return await insert_meeting(settings=settings, meeting=meeting)
 
 
@@ -932,13 +1379,17 @@ async def finalize_meeting(meeting_id: str) -> Meeting:
     except Exception:
         logger.exception("failed to stop active recording during meeting finalization")
 
-    if stopped_recording and not stopped_recording.location:
+    if stopped_recording and (
+        not stopped_recording.location or not stopped_recording.size_bytes
+    ):
         logger.error(
-            "meeting finalized but recording has no saved location",
+            "meeting finalized but recording has no confirmed saved file",
             extra={
                 "meeting_id": meeting_id,
                 "egress_id": stopped_recording.egress_id,
                 "status": stopped_recording.status,
+                "location": stopped_recording.location,
+                "size_bytes": stopped_recording.size_bytes,
                 "error": stopped_recording.error,
             },
         )
@@ -974,11 +1425,13 @@ async def start_recording(
     claims: ParticipantClaims = Depends(get_participant_claims),
 ) -> RecordingStartResponse:
     require_sales_panel_access(claims, meeting_id)
-    await ensure_meeting(settings=settings, meeting_id=meeting_id)
+    meeting = await ensure_meeting(settings=settings, meeting_id=meeting_id)
     try:
         return await start_meeting_recording(
             settings=settings,
             meeting_id=meeting_id,
+            organization_id=meeting.organization_id,
+            client_external_id=meeting.client_external_id,
         )
     except Exception as exc:
         logger.exception("failed to start meeting recording")
@@ -1314,6 +1767,22 @@ async def create_livekit_token(
         )
 
     meeting = await ensure_meeting(settings=settings, meeting_id=meeting_id)
+    if payload.role in ("host", "commercial") and (
+        payload.meeting_type
+        or payload.client_external_id
+        or payload.client_name
+        or payload.project_external_id
+        or payload.project_name
+    ):
+        meeting = await update_meeting_context(
+            settings=settings,
+            meeting_id=meeting.id,
+            meeting_type=payload.meeting_type,
+            client_external_id=payload.client_external_id,
+            client_name=payload.client_name,
+            project_external_id=payload.project_external_id,
+            project_name=payload.project_name,
+        )
 
     now = datetime.now(timezone.utc)
     if (

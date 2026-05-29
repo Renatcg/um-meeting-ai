@@ -100,6 +100,11 @@ def build_allowed_users(participants: list, roles: set[str] | None = None) -> li
 def base_memory_item(
     *,
     meeting_id: str,
+    organization_id: str = "default",
+    client_external_id: str | None = None,
+    client_name: str | None = None,
+    meeting_type: str | None = None,
+    project_name: str | None = None,
     memory_type: str,
     content: str,
     allowed_users: list[str],
@@ -109,9 +114,13 @@ def base_memory_item(
     sensitivity_level: str = "medium",
 ) -> dict[str, Any]:
     return {
-        "organization_id": "default",
+        "organization_id": organization_id,
         "agent_id": "coevo",
         "meeting_id": meeting_id,
+        "client_external_id": client_external_id,
+        "client_name": client_name,
+        "meeting_type": meeting_type,
+        "project_name": project_name,
         "memory_type": memory_type,
         "content": content,
         "metadata": metadata or {},
@@ -226,6 +235,21 @@ async def process_meeting_memory(
     )
     allowed_users = build_allowed_users(participants)
     gatekeeper_users = build_allowed_users(participants, {"host", "commercial"})
+    meeting_context = {
+        "organization_id": meeting.organization_id,
+        "client_external_id": meeting.client_external_id,
+        "client_name": meeting.client_name,
+        "meeting_type": meeting.meeting_type,
+        "project_name": meeting.project_name,
+    }
+    meeting_metadata = {
+        "meeting_title": meeting.title,
+        "client_external_id": meeting.client_external_id,
+        "client_name": meeting.client_name,
+        "meeting_type": meeting.meeting_type,
+        "project_external_id": meeting.project_external_id,
+        "project_name": meeting.project_name,
+    }
 
     transcript_lines = [
         f"[{segment.timestamp_seconds:.0f}s] {segment.speaker_name}: {segment.content}"
@@ -245,10 +269,11 @@ async def process_meeting_memory(
         items.append(
             base_memory_item(
                 meeting_id=meeting_id,
+                **meeting_context,
                 memory_type="transcript_chunk",
                 content=chunk,
                 allowed_users=allowed_users,
-                metadata={"chunk_index": index, "meeting_title": meeting.title},
+                metadata={**meeting_metadata, "chunk_index": index},
                 sensitivity_level="medium",
             )
         )
@@ -258,10 +283,11 @@ async def process_meeting_memory(
         items.append(
             base_memory_item(
                 meeting_id=meeting_id,
+                **meeting_context,
                 memory_type="executive_summary",
                 content=summary,
                 allowed_users=allowed_users,
-                metadata={"meeting_title": meeting.title},
+                metadata=meeting_metadata,
                 visibility="organization",
                 sensitivity_level="medium",
             )
@@ -291,6 +317,7 @@ async def process_meeting_memory(
             items.append(
                 base_memory_item(
                     meeting_id=meeting_id,
+                    **meeting_context,
                     memory_type=memory_type,
                     content=content,
                     allowed_users=(
@@ -299,9 +326,9 @@ async def process_meeting_memory(
                         else allowed_users
                     ),
                     metadata={
+                        **meeting_metadata,
                         **item,
                         "source": source_key,
-                        "meeting_title": meeting.title,
                     },
                     visibility=(
                         "host_commercial"
@@ -360,6 +387,8 @@ async def search_meeting_memory(
         requester_email=requester_email.lower() if requester_email else None,
         requester_role=requester_role,
         meeting_id=payload.meeting_id,
+        client_external_id=payload.client_external_id,
+        meeting_type=payload.meeting_type,
         customer=payload.customer,
     )
     return MeetingMemorySearchResponse(query=payload.query, results=list(results))

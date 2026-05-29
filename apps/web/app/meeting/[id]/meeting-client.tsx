@@ -56,6 +56,8 @@ type MeetingRecording = {
   status: string;
   ended_at?: string | null;
   error?: string | null;
+  location?: string | null;
+  size_bytes?: number | null;
 };
 
 type MeetingJoinRequest = {
@@ -128,12 +130,11 @@ const meetingTypesThatRequireClient = new Set([
   "Feedback Mensal",
   "Operacional",
 ]);
-const clientDirectoryPreview = [
-  "Cliente via integracao",
-  "Grupo Coevo",
-  "Rede Escolar",
-  "Operacao Comercial",
-];
+
+type ClientDirectoryClient = {
+  external_id: string;
+  name: string;
+};
 
 type MeetingParticipantTileProps = ComponentProps<typeof ParticipantTile> & {
   agentParticipant?: {
@@ -190,7 +191,7 @@ type LocalVideoTrackWithProcessor = {
 type LocalParticipantWithPublish = {
   publishTrack: (
     track: MediaStreamTrack,
-    options?: { source?: Track.Source },
+    options?: { source?: Track.Source; name?: string },
   ) => Promise<unknown> | unknown;
 };
 
@@ -634,6 +635,13 @@ function deriveRecordingStatus(
         status.includes(marker),
       ),
     )
+    || recordings.some((recording) => recording.error)
+    || recordings.some(
+      (recording) =>
+        recording.ended_at &&
+        (!recording.location || !recording.size_bytes) &&
+        !recording.status.toUpperCase().includes("FAILED"),
+    )
   ) {
     return "failed";
   }
@@ -958,11 +966,23 @@ function PreviewTrackPublisher({
       hasPublishedRef.current = true;
       const publisher = room.localParticipant as unknown as LocalParticipantWithPublish;
 
-      const tracks = previewStream.getVideoTracks();
+      const tracks = [
+        ...previewStream.getVideoTracks().map((track) => ({
+          track,
+          source: Track.Source.Camera,
+          name: "camera-preview",
+        })),
+        ...previewStream.getAudioTracks().map((track) => ({
+          track,
+          source: Track.Source.Microphone,
+          name: "microphone-preview",
+        })),
+      ];
       const results = await Promise.allSettled(
-        tracks.map((track) =>
-          publisher.publishTrack(track, {
-            source: Track.Source.Camera,
+        tracks.map((item) =>
+          publisher.publishTrack(item.track, {
+            source: item.source,
+            name: item.name,
           }),
         ),
       );
@@ -1216,6 +1236,7 @@ function MeetingGrid({
   onLeaveMeeting,
   participantName,
   previewStream,
+  recordingAlert,
   recordingStatus,
   setVideoEffect,
   setIsDesktopSidePanelVisible,
@@ -1233,6 +1254,7 @@ function MeetingGrid({
   onLeaveMeeting: () => void;
   participantName: string;
   previewStream: MediaStream | null;
+  recordingAlert: string | null;
   recordingStatus: RecordingStatus;
   setVideoEffect: (effect: VideoEffectMode) => void;
   setIsDesktopSidePanelVisible: Dispatch<SetStateAction<boolean>>;
@@ -1460,6 +1482,12 @@ function MeetingGrid({
         <div className="absolute left-4 top-4 z-10 rounded-full border border-[#4FC3F7]/25 bg-[#070A10]/88 px-3 py-2 font-mono text-xs font-semibold text-white shadow-[0_0_34px_rgba(79,195,247,0.14)] backdrop-blur-xl sm:left-6">
           {elapsedTime}
         </div>
+        {recordingAlert ? (
+          <div className="um-recording-alert" role="status">
+            <span className="um-rec-dot" />
+            <span>{recordingAlert}</span>
+          </div>
+        ) : null}
         {isVideoEffectTransitioning ? <div className="um-video-effect-mask" /> : null}
         <div className={`um-meeting-grid um-desktop-grid h-full min-h-0 ${desktopGridDensity}`}>
           {shouldShowLocalPreview && previewStream ? (
@@ -2315,10 +2343,12 @@ function MeetingSidePanel({
 function RecordingStarter({
   connection,
   meetingId,
+  onAlert,
   onStatusChange,
 }: {
   connection: TokenResponse;
   meetingId: string;
+  onAlert: (message: string | null) => void;
   onStatusChange: (status: RecordingStatus) => void;
 }) {
   const room = useRoomContext();
@@ -2343,6 +2373,21 @@ function RecordingStarter({
         const nextStatus = deriveRecordingStatus(recordings);
         if (!cancelled && nextStatus) {
           onStatusChange(nextStatus);
+          const failedRecording = recordings.find(
+            (recording) =>
+              recording.error ||
+              (recording.ended_at &&
+                (!recording.location || !recording.size_bytes) &&
+                !recording.status.toUpperCase().includes("FAILED")),
+          );
+          if (failedRecording) {
+            onAlert(
+              failedRecording.error ||
+                "A gravação terminou, mas o arquivo final não foi confirmado no armazenamento.",
+            );
+          } else if (nextStatus === "active") {
+            onAlert(null);
+          }
         }
       } catch {
         // The starter request below already reports hard failures. Polling is best effort.
@@ -2370,6 +2415,7 @@ function RecordingStarter({
         .then(async (response) => {
           if (!response.ok) {
             onStatusChange("failed");
+            onAlert("Não foi possível iniciar a gravação da reunião.");
             return;
           }
 
@@ -2381,10 +2427,16 @@ function RecordingStarter({
             statusFromRecording ??
               (payload.started || payload.configured ? "starting" : "failed"),
           );
+          if (!payload.started && !payload.configured) {
+            onAlert(payload.detail || "A gravação não está configurada.");
+          } else {
+            onAlert(null);
+          }
           void syncRecordingStatus();
         })
         .catch(() => {
           onStatusChange("failed");
+          onAlert("Falha ao solicitar gravação da reunião.");
         });
     }
 
@@ -2401,7 +2453,7 @@ function RecordingStarter({
       window.clearInterval(intervalId);
       room.off(RoomEvent.Connected, requestRecording);
     };
-  }, [connection, meetingId, onStatusChange, room]);
+  }, [connection, meetingId, onAlert, onStatusChange, room]);
 
   return null;
 }
@@ -2554,6 +2606,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
   const [waitingMessage, setWaitingMessage] = useState<string | null>(null);
   const [recordingStatus, setRecordingStatus] =
     useState<RecordingStatus>("idle");
+  const [recordingAlert, setRecordingAlert] = useState<string | null>(null);
   const [isHostCreator, setIsHostCreator] = useState<boolean | null>(null);
   const [meetingTitle, setMeetingTitle] = useState("");
   const [inviteLink, setInviteLink] = useState("");
@@ -2569,6 +2622,12 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
   );
   const [meetingType, setMeetingType] = useState(meetingTypeOptions[0]);
   const [selectedClient, setSelectedClient] = useState("");
+  const [clientDirectoryClients, setClientDirectoryClients] = useState<
+    ClientDirectoryClient[]
+  >([]);
+  const [clientDirectoryStatus, setClientDirectoryStatus] = useState<string | null>(
+    null,
+  );
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
   const previewStreamRef = useRef<MediaStream | null>(null);
   const preservePreviewStreamRef = useRef(false);
@@ -2586,12 +2645,47 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
   const isConfiguratorLobby = inferredRole === "host" || inferredRole === "commercial";
   const lobbyTitle = meetingTitle || meetingId;
   const shouldSelectClient = meetingTypesThatRequireClient.has(meetingType);
+  const selectedClientName =
+    clientDirectoryClients.find((client) => client.external_id === selectedClient)?.name ??
+    "";
 
   useEffect(() => {
     if (!meetingTypesThatRequireClient.has(meetingType)) {
       setSelectedClient("");
     }
   }, [meetingType]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadClientDirectory() {
+      try {
+        const response = await fetch(`${apiUrl}/clients`);
+        if (!response.ok) {
+          throw new Error("Nao foi possivel carregar clientes.");
+        }
+        const clients = (await response.json()) as ClientDirectoryClient[];
+        if (!cancelled) {
+          setClientDirectoryClients(clients);
+          setClientDirectoryStatus(
+            clients.length > 0
+              ? `${clients.length} clientes sincronizados`
+              : "Nenhum cliente sincronizado ainda.",
+          );
+        }
+      } catch {
+        if (!cancelled) {
+          setClientDirectoryStatus("Diretorio externo indisponivel no momento.");
+        }
+      }
+    }
+
+    void loadClientDirectory();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const canViewSalesPanel =
     connection?.role === "host" || connection?.role === "commercial";
@@ -2663,7 +2757,28 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
     async function startPreview() {
       try {
         let stream: MediaStream;
-        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const videoConstraints: MediaTrackConstraints = {
+          facingMode: "user",
+          height: { ideal: 720 },
+          width: { ideal: 1280 },
+        };
+        const audioConstraints: MediaTrackConstraints = {
+          autoGainControl: true,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+        };
+
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: audioConstraints,
+            video: videoConstraints,
+          });
+        } catch {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: videoConstraints,
+          });
+        }
 
         if (!active) {
           stream.getTracks().forEach((track) => track.stop());
@@ -2671,6 +2786,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
         }
 
         previewStreamRef.current = stream;
+        setCameraError(false);
         setPreviewStream(stream);
         if (previewVideoRef.current) {
           previewVideoRef.current.srcObject = stream;
@@ -2814,6 +2930,11 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
           email: participant.email,
           role: inferredRole,
           lgpd_accepted: acceptedLgpd,
+          meeting_type: isConfiguratorLobby ? meetingType : null,
+          client_external_id:
+            isConfiguratorLobby && shouldSelectClient ? selectedClient || null : null,
+          client_name:
+            isConfiguratorLobby && shouldSelectClient ? selectedClientName || null : null,
         }),
       });
 
@@ -3065,7 +3186,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
   if (step === "room" && connection) {
     return (
         <LiveKitRoom
-          audio
+          audio={!previewStream || previewStream.getAudioTracks().length === 0}
           video={!previewStream || previewStream.getVideoTracks().length === 0}
           token={connection.token}
           serverUrl={connection.url}
@@ -3078,6 +3199,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
           <RecordingStarter
             connection={connection}
             meetingId={meetingId}
+            onAlert={setRecordingAlert}
             onStatusChange={setRecordingStatus}
           />
           <PreviewTrackPublisher
@@ -3099,6 +3221,7 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
               onLeaveMeeting={leaveMeeting}
               participantName={participant.name}
               previewStream={previewStream}
+              recordingAlert={recordingAlert}
               recordingStatus={recordingStatus}
               setVideoEffect={setVideoEffect}
               setIsDesktopSidePanelVisible={setIsDesktopSidePanelVisible}
@@ -3244,14 +3367,15 @@ export default function MeetingClient({ meetingId }: { meetingId: string }) {
                     ? "Selecione um cliente"
                     : "Disponivel para Imersao, Devolutiva, Feedback Mensal e Operacional"}
                 </option>
-                {clientDirectoryPreview.map((client) => (
-                  <option key={client} value={client}>
-                    {client}
+                {clientDirectoryClients.map((client) => (
+                  <option key={client.external_id} value={client.external_id}>
+                    {client.name}
                   </option>
                 ))}
               </select>
               <span className="mt-1 block text-xs text-[#6F8197]">
-                A lista sera alimentada pela integracao externa de clientes.
+                {clientDirectoryStatus ??
+                  "A lista sera alimentada pela integracao externa de clientes."}
               </span>
             </label>
           </section>

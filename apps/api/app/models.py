@@ -83,11 +83,23 @@ class AuthResponse(BaseModel):
 
 class CreateMeetingRequest(BaseModel):
     title: str = Field(default="Reuniao UM", min_length=1, max_length=120)
+    organization_id: str = Field(default="default", min_length=2, max_length=120)
+    meeting_type: str | None = Field(default=None, max_length=120)
+    client_external_id: str | None = Field(default=None, max_length=160)
+    client_name: str | None = Field(default=None, max_length=180)
+    project_external_id: str | None = Field(default=None, max_length=160)
+    project_name: str | None = Field(default=None, max_length=180)
 
 
 class Meeting(BaseModel):
     id: str
     title: str
+    organization_id: str = "default"
+    meeting_type: str | None = None
+    client_external_id: str | None = None
+    client_name: str | None = None
+    project_external_id: str | None = None
+    project_name: str | None = None
     created_at: datetime
     started_at: datetime | None = None
     ended_at: datetime | None = None
@@ -95,10 +107,25 @@ class Meeting(BaseModel):
     copilot_dispatched: bool = False
 
     @classmethod
-    def create(cls, title: str) -> "Meeting":
+    def create(
+        cls,
+        title: str,
+        organization_id: str = "default",
+        meeting_type: str | None = None,
+        client_external_id: str | None = None,
+        client_name: str | None = None,
+        project_external_id: str | None = None,
+        project_name: str | None = None,
+    ) -> "Meeting":
         return cls(
             id=f"meeting-{uuid4().hex[:12]}",
             title=title,
+            organization_id=organization_id,
+            meeting_type=meeting_type,
+            client_external_id=client_external_id,
+            client_name=client_name,
+            project_external_id=project_external_id,
+            project_name=project_name,
             created_at=datetime.now(timezone.utc),
         )
 
@@ -113,9 +140,46 @@ class MeetingParticipant(BaseModel):
     joined_at: datetime
 
 
+class ClientDirectoryClient(BaseModel):
+    id: int
+    external_id: str
+    name: str
+    metadata: dict = Field(default_factory=dict)
+    active: bool = True
+    last_synced_at: datetime
+    created_at: datetime
+    updated_at: datetime
+
+
+class ClientDirectoryClientOption(BaseModel):
+    external_id: str
+    name: str
+
+
+class ClientDirectorySyncResponse(BaseModel):
+    configured: bool
+    synced_count: int = 0
+    clients: list[ClientDirectoryClient] = Field(default_factory=list)
+    detail: str | None = None
+
+
+class ClientDirectoryStatus(BaseModel):
+    configured: bool
+    enabled: bool
+    client_count: int = 0
+    last_synced_at: datetime | None = None
+    provider: str = "API externa"
+
+
 class MeetingRecentSummary(BaseModel):
     id: str
     title: str
+    organization_id: str = "default"
+    meeting_type: str | None = None
+    client_external_id: str | None = None
+    client_name: str | None = None
+    project_external_id: str | None = None
+    project_name: str | None = None
     created_at: datetime
     started_at: datetime | None = None
     ended_at: datetime | None = None
@@ -167,6 +231,11 @@ class CreateTokenRequest(BaseModel):
     email: EmailStr
     role: ParticipantRole
     lgpd_accepted: bool
+    meeting_type: str | None = Field(default=None, max_length=120)
+    client_external_id: str | None = Field(default=None, max_length=160)
+    client_name: str | None = Field(default=None, max_length=180)
+    project_external_id: str | None = Field(default=None, max_length=160)
+    project_name: str | None = Field(default=None, max_length=180)
 
 
 class LiveKitTokenResponse(BaseModel):
@@ -274,6 +343,10 @@ class MeetingMemoryItem(BaseModel):
     organization_id: str
     agent_id: str
     meeting_id: str
+    client_external_id: str | None = None
+    client_name: str | None = None
+    meeting_type: str | None = None
+    project_name: str | None = None
     memory_type: MemoryItemType
     content: str
     metadata: dict = Field(default_factory=dict)
@@ -295,6 +368,8 @@ class MeetingMemorySearchRequest(BaseModel):
     query: str = Field(min_length=3, max_length=1000)
     top_k: int = Field(default=8, ge=1, le=20)
     meeting_id: str | None = Field(default=None, max_length=120)
+    client_external_id: str | None = Field(default=None, max_length=160)
+    meeting_type: str | None = Field(default=None, max_length=120)
     customer: str | None = Field(default=None, max_length=160)
     date_range: str | None = Field(default=None, max_length=80)
 
@@ -303,6 +378,10 @@ class MeetingMemorySearchResult(BaseModel):
     id: int
     meeting_id: str
     meeting_title: str | None = None
+    client_external_id: str | None = None
+    client_name: str | None = None
+    meeting_type: str | None = None
+    project_name: str | None = None
     memory_type: MemoryItemType
     content: str
     metadata: dict = Field(default_factory=dict)
@@ -381,6 +460,8 @@ class ConversationMessage(BaseModel):
 
 class AgentRespondContextScope(BaseModel):
     meeting_id: str | None = Field(default=None, max_length=120)
+    client_external_id: str | None = Field(default=None, max_length=160)
+    meeting_type: str | None = Field(default=None, max_length=120)
     customer: str | None = Field(default=None, max_length=160)
     date_range: str | None = Field(default=None, max_length=80)
 
@@ -624,6 +705,27 @@ class VoiceDemoRequest(BaseModel):
         min_length=3,
         max_length=240,
     )
+
+
+class SmartSpeakerTestRequest(BaseModel):
+    text: str = Field(
+        default="Coevo, responda em uma frase curta confirmando que o smart speaker esta conectado.",
+        min_length=3,
+        max_length=800,
+    )
+    session_id: str = Field(default="smart-speaker-test", min_length=3, max_length=120)
+    organization_id: str = Field(default="default", min_length=1, max_length=120)
+    user_id: str = Field(default="smart-speaker-test-user", min_length=1, max_length=120)
+    user_name: str = Field(default="Smart speaker teste", min_length=1, max_length=120)
+    user_email: str | None = None
+
+
+class SmartSpeakerTestResponse(BaseModel):
+    session_id: str
+    text: str
+    audio_base64: str
+    audio_mimetype: str = "audio/mpeg"
+    memory_count: int = 0
 
 
 class TrialRequestCreate(BaseModel):

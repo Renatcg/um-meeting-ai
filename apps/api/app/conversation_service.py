@@ -59,8 +59,34 @@ def _history_context(messages: list[ConversationMessage]) -> str:
     )
 
 
+def _profile_context(profile) -> str:
+    return "\n".join(
+        [
+            f"Nome: {profile.name}",
+            f"Tom: {profile.tone}",
+            f"Metodo comercial: {profile.sales_method}",
+            (
+                "Parametros: "
+                f"formalidade {profile.formality}/100, energia {profile.energy}/100, "
+                f"empatia {profile.empathy}/100, assertividade {profile.assertiveness}/100, "
+                f"brevidade {profile.brevity}/100"
+            ),
+            f"Palavras-chave: {', '.join(profile.keywords) or 'clareza, contexto, proximo passo'}",
+            f"Evitar: {', '.join(profile.avoid_words) or 'inventar fatos'}",
+            f"Comportamentos: {', '.join(profile.behavior_tags) or 'consultivo e objetivo'}",
+            f"Politica de idioma: {profile.language_policy}",
+            f"Instrucoes adicionais: {profile.custom_instructions or 'nenhuma'}",
+        ]
+    )
+
+
 def _should_search_memory(payload: AgentRespondRequest) -> bool:
-    if payload.context_scope.meeting_id or payload.context_scope.customer:
+    if (
+        payload.context_scope.meeting_id
+        or payload.context_scope.client_external_id
+        or payload.context_scope.meeting_type
+        or payload.context_scope.customer
+    ):
         return True
 
     message = payload.message.strip().lower()
@@ -150,6 +176,8 @@ async def _search_memory(
         requester_email=str(payload.user_email) if payload.user_email else None,
         requester_role=payload.requester_role,
         meeting_id=payload.context_scope.meeting_id,
+        client_external_id=payload.context_scope.client_external_id,
+        meeting_type=payload.context_scope.meeting_type,
         customer=payload.context_scope.customer,
     )
     return list(results)
@@ -165,11 +193,15 @@ async def _generate_answer(
 ) -> str:
     profile = await get_agent_profile(settings=settings)
     history_text = _history_context(history)
+    profile_text = _profile_context(profile)
 
     if not searched_memory:
         prompt = f"""
 Voce e o {profile.name}, assistente corporativo do Coevo Meet.
 Converse de forma fluida, humana, consultiva e breve.
+
+Configuracao atual do agente:
+{profile_text}
 
 Objetivo neste canal:
 - entender a demanda do usuario antes de buscar memorias;
@@ -217,9 +249,10 @@ Se o pedido estiver vago, pergunte qual cliente, projeto, reuniao, prazo ou obje
 Voce e o {profile.name}, assistente corporativo do Coevo Meet.
 Responda em portugues do Brasil, de forma objetiva, consultiva e segura.
 
-Personalidade:
-- Tom: {profile.tone}
-- Palavras-chave: {", ".join(profile.keywords) or "clareza, contexto, proximo passo"}
+Configuracao atual do agente:
+{profile_text}
+
+Regra de seguranca:
 - Evite inventar fatos. Se a memoria nao trouxer suporte, diga que nao encontrou informacao suficiente.
 
 Historico recente do chat:

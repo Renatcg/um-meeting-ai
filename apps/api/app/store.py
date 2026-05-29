@@ -5,8 +5,25 @@ class InMemoryMeetingStore:
     def __init__(self) -> None:
         self._meetings: dict[str, Meeting] = {}
 
-    def create(self, title: str) -> Meeting:
-        meeting = Meeting.create(title)
+    def create(
+        self,
+        title: str,
+        organization_id: str = "default",
+        meeting_type: str | None = None,
+        client_external_id: str | None = None,
+        client_name: str | None = None,
+        project_external_id: str | None = None,
+        project_name: str | None = None,
+    ) -> Meeting:
+        meeting = Meeting.create(
+            title,
+            organization_id=organization_id,
+            meeting_type=meeting_type,
+            client_external_id=client_external_id,
+            client_name=client_name,
+            project_external_id=project_external_id,
+            project_name=project_name,
+        )
         self._meetings[meeting.id] = meeting
         return meeting
 

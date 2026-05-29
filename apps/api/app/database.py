@@ -7,6 +7,9 @@ from psycopg.rows import dict_row
 from app.config import Settings
 from app.models import (
     AgentProfile,
+    ClientDirectoryClient,
+    ClientDirectoryClientOption,
+    ClientDirectoryStatus,
     ConversationMessage,
     ConversationSession,
     DevConsoleProject,
@@ -139,6 +142,10 @@ CREATE TABLE IF NOT EXISTS meeting_memory_items (
     organization_id TEXT NOT NULL DEFAULT 'default',
     agent_id TEXT NOT NULL DEFAULT 'coevo',
     meeting_id TEXT NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+    client_external_id TEXT,
+    client_name TEXT,
+    meeting_type TEXT,
+    project_name TEXT,
     memory_type TEXT NOT NULL CHECK (
         memory_type IN (
             'transcript_chunk',
@@ -166,6 +173,14 @@ CREATE TABLE IF NOT EXISTS meeting_memory_items (
 );
 """
 
+ALTER_MEETING_MEMORY_ITEMS_CONTEXT_SQL = """
+ALTER TABLE meeting_memory_items
+ADD COLUMN IF NOT EXISTS client_external_id TEXT,
+ADD COLUMN IF NOT EXISTS client_name TEXT,
+ADD COLUMN IF NOT EXISTS meeting_type TEXT,
+ADD COLUMN IF NOT EXISTS project_name TEXT;
+"""
+
 CREATE_MEETING_MEMORY_ITEMS_MEETING_INDEX_SQL = """
 CREATE INDEX IF NOT EXISTS idx_meeting_memory_items_meeting
 ON meeting_memory_items (meeting_id, memory_type, id);
@@ -174,6 +189,11 @@ ON meeting_memory_items (meeting_id, memory_type, id);
 CREATE_MEETING_MEMORY_ITEMS_ACL_INDEX_SQL = """
 CREATE INDEX IF NOT EXISTS idx_meeting_memory_items_acl
 ON meeting_memory_items (organization_id, visibility, sensitivity_level);
+"""
+
+CREATE_MEETING_MEMORY_ITEMS_CONTEXT_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_meeting_memory_items_context
+ON meeting_memory_items (organization_id, client_external_id, meeting_type, created_at DESC);
 """
 
 CREATE_MEETING_MEMORY_ITEMS_VECTOR_INDEX_SQL = """
@@ -185,12 +205,33 @@ CREATE_MEETINGS_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS meetings (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
+    organization_id TEXT NOT NULL DEFAULT 'default',
+    meeting_type TEXT,
+    client_external_id TEXT,
+    client_name TEXT,
+    project_external_id TEXT,
+    project_name TEXT,
     created_at TIMESTAMPTZ NOT NULL,
     started_at TIMESTAMPTZ,
     ended_at TIMESTAMPTZ,
     recording_url TEXT,
     copilot_dispatched BOOLEAN NOT NULL DEFAULT FALSE
 );
+"""
+
+ALTER_MEETINGS_CONTEXT_SQL = """
+ALTER TABLE meetings
+ADD COLUMN IF NOT EXISTS organization_id TEXT NOT NULL DEFAULT 'default',
+ADD COLUMN IF NOT EXISTS meeting_type TEXT,
+ADD COLUMN IF NOT EXISTS client_external_id TEXT,
+ADD COLUMN IF NOT EXISTS client_name TEXT,
+ADD COLUMN IF NOT EXISTS project_external_id TEXT,
+ADD COLUMN IF NOT EXISTS project_name TEXT;
+"""
+
+CREATE_MEETINGS_CONTEXT_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_meetings_context
+ON meetings (organization_id, client_external_id, meeting_type, created_at DESC);
 """
 
 CREATE_MEETING_PARTICIPANTS_TABLE_SQL = """
@@ -251,6 +292,29 @@ CREATE TABLE IF NOT EXISTS agent_profile (
     config JSONB NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+"""
+
+CREATE_CLIENT_DIRECTORY_CLIENTS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS client_directory_clients (
+    id BIGSERIAL PRIMARY KEY,
+    external_id TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    last_synced_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
+
+CREATE_CLIENT_DIRECTORY_CLIENTS_NAME_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_client_directory_clients_name
+ON client_directory_clients (lower(name));
+"""
+
+CREATE_CLIENT_DIRECTORY_CLIENTS_SYNC_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_client_directory_clients_sync
+ON client_directory_clients (active, last_synced_at DESC);
 """
 
 CREATE_APP_USERS_TABLE_SQL = """
@@ -527,6 +591,8 @@ async def init_database(settings: Settings) -> None:
     async with await psycopg.AsyncConnection.connect(settings.database_url) as conn:
         await conn.execute(CREATE_VECTOR_EXTENSION_SQL)
         await conn.execute(CREATE_MEETINGS_TABLE_SQL)
+        await conn.execute(ALTER_MEETINGS_CONTEXT_SQL)
+        await conn.execute(CREATE_MEETINGS_CONTEXT_INDEX_SQL)
         await conn.execute(CREATE_MEETING_PARTICIPANTS_TABLE_SQL)
         await conn.execute(ALTER_MEETING_PARTICIPANTS_IDENTITY_SQL)
         await conn.execute(CREATE_MEETING_PARTICIPANTS_INDEX_SQL)
@@ -535,6 +601,9 @@ async def init_database(settings: Settings) -> None:
         await conn.execute(CREATE_MEETING_JOIN_REQUESTS_STATUS_INDEX_SQL)
         await conn.execute(CREATE_MEETING_JOIN_REQUESTS_EMAIL_INDEX_SQL)
         await conn.execute(CREATE_AGENT_PROFILE_TABLE_SQL)
+        await conn.execute(CREATE_CLIENT_DIRECTORY_CLIENTS_TABLE_SQL)
+        await conn.execute(CREATE_CLIENT_DIRECTORY_CLIENTS_NAME_INDEX_SQL)
+        await conn.execute(CREATE_CLIENT_DIRECTORY_CLIENTS_SYNC_INDEX_SQL)
         await conn.execute(CREATE_APP_USERS_TABLE_SQL)
         await conn.execute(CREATE_APP_USERS_EMAIL_INDEX_SQL)
         await conn.execute(CREATE_DEV_CONSOLE_PROJECTS_TABLE_SQL)
@@ -585,8 +654,10 @@ async def init_database(settings: Settings) -> None:
                 dimensions=settings.openai_embedding_dimensions,
             )
         )
+        await conn.execute(ALTER_MEETING_MEMORY_ITEMS_CONTEXT_SQL)
         await conn.execute(CREATE_MEETING_MEMORY_ITEMS_MEETING_INDEX_SQL)
         await conn.execute(CREATE_MEETING_MEMORY_ITEMS_ACL_INDEX_SQL)
+        await conn.execute(CREATE_MEETING_MEMORY_ITEMS_CONTEXT_INDEX_SQL)
         await conn.execute(CREATE_MEETING_MEMORY_ITEMS_VECTOR_INDEX_SQL)
 
 
@@ -746,6 +817,117 @@ async def delete_trial_request(*, settings: Settings, lead_id: int) -> None:
 
     if row is None:
         raise ValueError("Trial request not found.")
+
+
+async def upsert_client_directory_clients(
+    *,
+    settings: Settings,
+    clients: Sequence[dict],
+) -> list[ClientDirectoryClient]:
+    if not clients:
+        return []
+
+    query = """
+    INSERT INTO client_directory_clients (
+        external_id,
+        name,
+        metadata,
+        active,
+        last_synced_at,
+        updated_at
+    )
+    VALUES (%s, %s, %s::jsonb, TRUE, now(), now())
+    ON CONFLICT (external_id) DO UPDATE
+    SET
+        name = EXCLUDED.name,
+        metadata = EXCLUDED.metadata,
+        active = TRUE,
+        last_synced_at = now(),
+        updated_at = now()
+    RETURNING
+        id,
+        external_id,
+        name,
+        metadata,
+        active,
+        last_synced_at,
+        created_at,
+        updated_at;
+    """
+
+    rows = []
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            for client in clients:
+                await cur.execute(
+                    query,
+                    (
+                        client["external_id"],
+                        client["name"],
+                        json.dumps(client.get("metadata") or {}),
+                    ),
+                )
+                row = await cur.fetchone()
+                if row is not None:
+                    rows.append(row)
+
+    return [ClientDirectoryClient.model_validate(row) for row in rows]
+
+
+async def list_client_directory_client_options(
+    *,
+    settings: Settings,
+    limit: int = 500,
+) -> list[ClientDirectoryClientOption]:
+    query = """
+    SELECT external_id, name
+    FROM client_directory_clients
+    WHERE active = TRUE
+    ORDER BY lower(name), id
+    LIMIT %s;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (limit,))
+            rows = await cur.fetchall()
+
+    return [ClientDirectoryClientOption.model_validate(row) for row in rows]
+
+
+async def get_client_directory_status(
+    *,
+    settings: Settings,
+) -> ClientDirectoryStatus:
+    query = """
+    SELECT
+        COUNT(*) FILTER (WHERE active = TRUE)::int AS client_count,
+        MAX(last_synced_at) AS last_synced_at
+    FROM client_directory_clients;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query)
+            row = await cur.fetchone()
+
+    return ClientDirectoryStatus(
+        configured=bool(
+            settings.client_directory_enabled and settings.client_directory_api_url
+        ),
+        enabled=settings.client_directory_enabled,
+        client_count=int(row["client_count"]) if row else 0,
+        last_synced_at=row["last_synced_at"] if row else None,
+    )
 
 
 async def count_app_users(*, settings: Settings) -> int:
@@ -1024,14 +1206,33 @@ async def insert_meeting(*, settings: Settings, meeting: Meeting) -> Meeting:
     INSERT INTO meetings (
         id,
         title,
+        organization_id,
+        meeting_type,
+        client_external_id,
+        client_name,
+        project_external_id,
+        project_name,
         created_at,
         started_at,
         ended_at,
         recording_url,
         copilot_dispatched
     )
-    VALUES (%s, %s, %s, %s, %s, %s, %s)
-    RETURNING id, title, created_at, started_at, ended_at, recording_url, copilot_dispatched;
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    RETURNING
+        id,
+        title,
+        organization_id,
+        meeting_type,
+        client_external_id,
+        client_name,
+        project_external_id,
+        project_name,
+        created_at,
+        started_at,
+        ended_at,
+        recording_url,
+        copilot_dispatched;
     """
 
     async with await psycopg.AsyncConnection.connect(
@@ -1044,6 +1245,12 @@ async def insert_meeting(*, settings: Settings, meeting: Meeting) -> Meeting:
                 (
                     meeting.id,
                     meeting.title,
+                    meeting.organization_id,
+                    meeting.meeting_type,
+                    meeting.client_external_id,
+                    meeting.client_name,
+                    meeting.project_external_id,
+                    meeting.project_name,
                     meeting.created_at,
                     meeting.started_at,
                     meeting.ended_at,
@@ -1061,7 +1268,20 @@ async def insert_meeting(*, settings: Settings, meeting: Meeting) -> Meeting:
 
 async def get_meeting_by_id(*, settings: Settings, meeting_id: str) -> Meeting | None:
     query = """
-    SELECT id, title, created_at, started_at, ended_at, recording_url, copilot_dispatched
+    SELECT
+        id,
+        title,
+        organization_id,
+        meeting_type,
+        client_external_id,
+        client_name,
+        project_external_id,
+        project_name,
+        created_at,
+        started_at,
+        ended_at,
+        recording_url,
+        copilot_dispatched
     FROM meetings
     WHERE id = %s;
     """
@@ -1076,6 +1296,68 @@ async def get_meeting_by_id(*, settings: Settings, meeting_id: str) -> Meeting |
 
     if row is None:
         return None
+
+    return Meeting.model_validate(row)
+
+
+async def update_meeting_context(
+    *,
+    settings: Settings,
+    meeting_id: str,
+    organization_id: str | None = None,
+    meeting_type: str | None = None,
+    client_external_id: str | None = None,
+    client_name: str | None = None,
+    project_external_id: str | None = None,
+    project_name: str | None = None,
+) -> Meeting:
+    query = """
+    UPDATE meetings
+    SET
+        organization_id = COALESCE(%s, organization_id),
+        meeting_type = COALESCE(%s, meeting_type),
+        client_external_id = COALESCE(%s, client_external_id),
+        client_name = COALESCE(%s, client_name),
+        project_external_id = COALESCE(%s, project_external_id),
+        project_name = COALESCE(%s, project_name)
+    WHERE id = %s
+    RETURNING
+        id,
+        title,
+        organization_id,
+        meeting_type,
+        client_external_id,
+        client_name,
+        project_external_id,
+        project_name,
+        created_at,
+        started_at,
+        ended_at,
+        recording_url,
+        copilot_dispatched;
+    """
+
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                query,
+                (
+                    organization_id,
+                    meeting_type,
+                    client_external_id,
+                    client_name,
+                    project_external_id,
+                    project_name,
+                    meeting_id,
+                ),
+            )
+            row = await cur.fetchone()
+
+    if row is None:
+        return await ensure_meeting(settings=settings, meeting_id=meeting_id)
 
     return Meeting.model_validate(row)
 
@@ -1099,6 +1381,12 @@ async def list_recent_meetings(
     SELECT
         m.id,
         m.title,
+        m.organization_id,
+        m.meeting_type,
+        m.client_external_id,
+        m.client_name,
+        m.project_external_id,
+        m.project_name,
         m.created_at,
         m.started_at,
         m.ended_at,
@@ -1728,7 +2016,20 @@ async def mark_meeting_ended(*, settings: Settings, meeting_id: str) -> Meeting:
     UPDATE meetings
     SET ended_at = COALESCE(ended_at, now())
     WHERE id = %s
-    RETURNING id, title, created_at, started_at, ended_at, recording_url, copilot_dispatched;
+    RETURNING
+        id,
+        title,
+        organization_id,
+        meeting_type,
+        client_external_id,
+        client_name,
+        project_external_id,
+        project_name,
+        created_at,
+        started_at,
+        ended_at,
+        recording_url,
+        copilot_dispatched;
     """
 
     async with await psycopg.AsyncConnection.connect(
@@ -3017,6 +3318,10 @@ async def insert_meeting_memory_items(
         organization_id,
         agent_id,
         meeting_id,
+        client_external_id,
+        client_name,
+        meeting_type,
+        project_name,
         memory_type,
         content,
         metadata,
@@ -3026,12 +3331,16 @@ async def insert_meeting_memory_items(
         sensitivity_level,
         embedding
     )
-    VALUES (%s, %s, %s, %s, %s, %s::jsonb, %s, %s::jsonb, %s::jsonb, %s, %s::vector)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s::jsonb, %s::jsonb, %s, %s::vector)
     RETURNING
         id,
         organization_id,
         agent_id,
         meeting_id,
+        client_external_id,
+        client_name,
+        meeting_type,
+        project_name,
         memory_type,
         content,
         metadata,
@@ -3055,6 +3364,10 @@ async def insert_meeting_memory_items(
                         item.get("organization_id", "default"),
                         item.get("agent_id", "coevo"),
                         item["meeting_id"],
+                        item.get("client_external_id"),
+                        item.get("client_name"),
+                        item.get("meeting_type"),
+                        item.get("project_name"),
                         item["memory_type"],
                         item["content"],
                         json.dumps(item.get("metadata", {})),
@@ -3083,6 +3396,10 @@ async def list_meeting_memory_items(
         organization_id,
         agent_id,
         meeting_id,
+        client_external_id,
+        client_name,
+        meeting_type,
+        project_name,
         memory_type,
         content,
         metadata,
@@ -3116,6 +3433,8 @@ async def search_meeting_memory_items(
     requester_email: str | None,
     requester_role: str | None,
     meeting_id: str | None = None,
+    client_external_id: str | None = None,
+    meeting_type: str | None = None,
     customer: str | None = None,
 ) -> Sequence[MeetingMemorySearchResult]:
     filters = ["mmi.organization_id = %s"]
@@ -3125,11 +3444,24 @@ async def search_meeting_memory_items(
         filters.append("mmi.meeting_id = %s")
         params.append(meeting_id)
 
+    if client_external_id:
+        filters.append("mmi.client_external_id = %s")
+        params.append(client_external_id)
+
+    if meeting_type:
+        filters.append("mmi.meeting_type = %s")
+        params.append(meeting_type)
+
     if customer:
         filters.append(
-            "(mmi.metadata->>'customer' ILIKE %s OR mmi.content ILIKE %s)"
+            "("
+            "mmi.client_external_id ILIKE %s "
+            "OR mmi.client_name ILIKE %s "
+            "OR mmi.metadata->>'customer' ILIKE %s "
+            "OR mmi.content ILIKE %s"
+            ")"
         )
-        params.extend((f"%{customer}%", f"%{customer}%"))
+        params.extend((f"%{customer}%", f"%{customer}%", f"%{customer}%", f"%{customer}%"))
 
     acl_filter = """
     (
@@ -3152,6 +3484,10 @@ async def search_meeting_memory_items(
         mmi.id,
         mmi.meeting_id,
         m.title AS meeting_title,
+        mmi.client_external_id,
+        mmi.client_name,
+        mmi.meeting_type,
+        mmi.project_name,
         mmi.memory_type,
         mmi.content,
         mmi.metadata,
