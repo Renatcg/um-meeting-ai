@@ -25,6 +25,9 @@ from app.models import (
     MeetingRecording,
     MeetingRecentSummary,
     SalesRecommendation,
+    SmartSpeakerDevice,
+    SmartSpeakerDeviceBase,
+    SmartSpeakerDeviceUpdate,
     TranscriptSegment,
     TranscriptSegmentCreate,
     TrialRequest,
@@ -586,6 +589,33 @@ CREATE INDEX IF NOT EXISTS idx_whatsapp_webhook_events_created
 ON whatsapp_webhook_events (created_at DESC, id DESC);
 """
 
+CREATE_SMART_SPEAKER_DEVICES_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS smart_speaker_devices (
+    id TEXT PRIMARY KEY,
+    organization_id TEXT NOT NULL DEFAULT 'default',
+    name TEXT NOT NULL,
+    api_key_hash TEXT NOT NULL,
+    agent_id TEXT NOT NULL DEFAULT 'coevo',
+    assigned_user_id TEXT,
+    assigned_user_name TEXT,
+    assigned_user_email TEXT,
+    room_name TEXT,
+    logo_url TEXT,
+    volume INTEGER NOT NULL DEFAULT 70,
+    brightness INTEGER NOT NULL DEFAULT 80,
+    language TEXT NOT NULL DEFAULT 'pt-BR',
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    last_seen_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
+
+CREATE_SMART_SPEAKER_DEVICES_ORG_INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_smart_speaker_devices_org_updated
+ON smart_speaker_devices (organization_id, updated_at DESC);
+"""
+
 
 async def init_database(settings: Settings) -> None:
     async with await psycopg.AsyncConnection.connect(settings.database_url) as conn:
@@ -629,6 +659,8 @@ async def init_database(settings: Settings) -> None:
         await conn.execute(CREATE_WHATSAPP_GROUP_MESSAGES_MESSAGE_ID_INDEX_SQL)
         await conn.execute(CREATE_WHATSAPP_WEBHOOK_EVENTS_TABLE_SQL)
         await conn.execute(CREATE_WHATSAPP_WEBHOOK_EVENTS_CREATED_INDEX_SQL)
+        await conn.execute(CREATE_SMART_SPEAKER_DEVICES_TABLE_SQL)
+        await conn.execute(CREATE_SMART_SPEAKER_DEVICES_ORG_INDEX_SQL)
         await conn.execute(CREATE_TRIAL_REQUESTS_TABLE_SQL)
         await conn.execute(ALTER_TRIAL_REQUESTS_SELECTED_PLAN_SQL)
         await conn.execute(ALTER_TRIAL_REQUESTS_VOLUME_SQL)
@@ -3571,3 +3603,240 @@ async def upsert_agent_profile(
     saved = AgentProfile.model_validate(row["config"])
     saved.updated_at = row["updated_at"]
     return saved
+
+
+SMART_SPEAKER_DEVICE_COLUMNS = """
+    id,
+    organization_id,
+    name,
+    agent_id,
+    assigned_user_id,
+    assigned_user_name,
+    assigned_user_email,
+    room_name,
+    logo_url,
+    volume,
+    brightness,
+    language,
+    active,
+    last_seen_at,
+    created_at,
+    updated_at
+"""
+
+
+async def list_smart_speaker_devices(
+    *,
+    settings: Settings,
+) -> Sequence[SmartSpeakerDevice]:
+    query = f"""
+    SELECT {SMART_SPEAKER_DEVICE_COLUMNS}
+    FROM smart_speaker_devices
+    ORDER BY updated_at DESC, created_at DESC;
+    """
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query)
+            rows = await cur.fetchall()
+    return [SmartSpeakerDevice.model_validate(row) for row in rows]
+
+
+async def get_smart_speaker_device(
+    *,
+    settings: Settings,
+    device_id: str,
+) -> SmartSpeakerDevice | None:
+    query = f"""
+    SELECT {SMART_SPEAKER_DEVICE_COLUMNS}
+    FROM smart_speaker_devices
+    WHERE id = %s;
+    """
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (device_id,))
+            row = await cur.fetchone()
+    return SmartSpeakerDevice.model_validate(row) if row else None
+
+
+async def get_smart_speaker_device_auth_row(
+    *,
+    settings: Settings,
+    device_id: str,
+) -> dict | None:
+    query = f"""
+    SELECT api_key_hash, {SMART_SPEAKER_DEVICE_COLUMNS}
+    FROM smart_speaker_devices
+    WHERE id = %s;
+    """
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (device_id,))
+            return await cur.fetchone()
+
+
+async def insert_smart_speaker_device(
+    *,
+    settings: Settings,
+    device_id: str,
+    api_key_hash: str,
+    payload: SmartSpeakerDeviceBase,
+) -> SmartSpeakerDevice:
+    query = f"""
+    INSERT INTO smart_speaker_devices (
+        id,
+        organization_id,
+        name,
+        api_key_hash,
+        agent_id,
+        assigned_user_id,
+        assigned_user_name,
+        assigned_user_email,
+        room_name,
+        logo_url,
+        volume,
+        brightness,
+        language
+    )
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    RETURNING {SMART_SPEAKER_DEVICE_COLUMNS};
+    """
+    values = (
+        device_id,
+        payload.organization_id,
+        payload.name,
+        api_key_hash,
+        payload.agent_id,
+        payload.assigned_user_id,
+        payload.assigned_user_name,
+        str(payload.assigned_user_email) if payload.assigned_user_email else None,
+        payload.room_name,
+        payload.logo_url,
+        payload.volume,
+        payload.brightness,
+        payload.language,
+    )
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, values)
+            row = await cur.fetchone()
+            await conn.commit()
+    if row is None:
+        raise RuntimeError("Smart speaker insert did not return a row.")
+    return SmartSpeakerDevice.model_validate(row)
+
+
+async def update_smart_speaker_device(
+    *,
+    settings: Settings,
+    device_id: str,
+    payload: SmartSpeakerDeviceUpdate,
+) -> SmartSpeakerDevice | None:
+    values_by_field = payload.model_dump(exclude_unset=True)
+    if not values_by_field:
+        return await get_smart_speaker_device(settings=settings, device_id=device_id)
+
+    columns_by_field = {
+        "name": "name",
+        "organization_id": "organization_id",
+        "agent_id": "agent_id",
+        "assigned_user_id": "assigned_user_id",
+        "assigned_user_name": "assigned_user_name",
+        "assigned_user_email": "assigned_user_email",
+        "room_name": "room_name",
+        "logo_url": "logo_url",
+        "volume": "volume",
+        "brightness": "brightness",
+        "language": "language",
+        "active": "active",
+    }
+    set_clauses: list[str] = []
+    values: list[object] = []
+    for field_name, column_name in columns_by_field.items():
+        if field_name not in values_by_field:
+            continue
+        value = values_by_field[field_name]
+        if field_name == "assigned_user_email" and value is not None:
+            value = str(value)
+        set_clauses.append(f"{column_name} = %s")
+        values.append(value)
+
+    if not set_clauses:
+        return await get_smart_speaker_device(settings=settings, device_id=device_id)
+
+    query = f"""
+    UPDATE smart_speaker_devices
+    SET {", ".join(set_clauses)},
+        updated_at = now()
+    WHERE id = %s
+    RETURNING {SMART_SPEAKER_DEVICE_COLUMNS};
+    """
+    values.append(device_id)
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, tuple(values))
+            row = await cur.fetchone()
+            await conn.commit()
+    return SmartSpeakerDevice.model_validate(row) if row else None
+
+
+async def update_smart_speaker_device_key(
+    *,
+    settings: Settings,
+    device_id: str,
+    api_key_hash: str,
+) -> SmartSpeakerDevice | None:
+    query = f"""
+    UPDATE smart_speaker_devices
+    SET api_key_hash = %s,
+        active = TRUE,
+        updated_at = now()
+    WHERE id = %s
+    RETURNING {SMART_SPEAKER_DEVICE_COLUMNS};
+    """
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (api_key_hash, device_id))
+            row = await cur.fetchone()
+            await conn.commit()
+    return SmartSpeakerDevice.model_validate(row) if row else None
+
+
+async def touch_smart_speaker_device(
+    *,
+    settings: Settings,
+    device_id: str,
+) -> SmartSpeakerDevice | None:
+    query = f"""
+    UPDATE smart_speaker_devices
+    SET last_seen_at = now(),
+        updated_at = now()
+    WHERE id = %s
+    RETURNING {SMART_SPEAKER_DEVICE_COLUMNS};
+    """
+    async with await psycopg.AsyncConnection.connect(
+        settings.database_url,
+        row_factory=dict_row,
+    ) as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(query, (device_id,))
+            row = await cur.fetchone()
+            await conn.commit()
+    return SmartSpeakerDevice.model_validate(row) if row else None

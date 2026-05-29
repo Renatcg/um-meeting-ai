@@ -728,6 +728,79 @@ class SmartSpeakerTestResponse(BaseModel):
     memory_count: int = 0
 
 
+class SmartSpeakerDeviceBase(BaseModel):
+    name: str = Field(min_length=2, max_length=120)
+    organization_id: str = Field(default="default", min_length=1, max_length=120)
+    agent_id: str = Field(default="coevo", min_length=2, max_length=80)
+    assigned_user_id: str | None = Field(default=None, max_length=120)
+    assigned_user_name: str | None = Field(default=None, max_length=120)
+    assigned_user_email: str | None = Field(default=None, max_length=180)
+    room_name: str | None = Field(default=None, max_length=120)
+    logo_url: str | None = Field(default=None, max_length=1000)
+    volume: int = Field(default=70, ge=0, le=100)
+    brightness: int = Field(default=80, ge=0, le=100)
+    language: str = Field(default="pt-BR", min_length=2, max_length=20)
+
+
+class SmartSpeakerDeviceCreate(SmartSpeakerDeviceBase):
+    pass
+
+
+class SmartSpeakerDeviceUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=120)
+    organization_id: str | None = Field(default=None, min_length=1, max_length=120)
+    agent_id: str | None = Field(default=None, min_length=2, max_length=80)
+    assigned_user_id: str | None = Field(default=None, max_length=120)
+    assigned_user_name: str | None = Field(default=None, max_length=120)
+    assigned_user_email: str | None = Field(default=None, max_length=180)
+    room_name: str | None = Field(default=None, max_length=120)
+    logo_url: str | None = Field(default=None, max_length=1000)
+    volume: int | None = Field(default=None, ge=0, le=100)
+    brightness: int | None = Field(default=None, ge=0, le=100)
+    language: str | None = Field(default=None, min_length=2, max_length=20)
+    active: bool | None = None
+
+
+class SmartSpeakerDevice(BaseModel):
+    id: str
+    name: str
+    organization_id: str
+    agent_id: str
+    assigned_user_id: str | None = None
+    assigned_user_name: str | None = None
+    assigned_user_email: str | None = None
+    room_name: str | None = None
+    logo_url: str | None = None
+    volume: int
+    brightness: int
+    language: str
+    active: bool
+    last_seen_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class SmartSpeakerDeviceCreateResponse(BaseModel):
+    device: SmartSpeakerDevice
+    api_key: str
+
+
+class SmartSpeakerDeviceConfig(BaseModel):
+    device_id: str
+    name: str
+    organization_id: str
+    agent_id: str
+    assigned_user_id: str | None = None
+    assigned_user_name: str | None = None
+    assigned_user_email: str | None = None
+    room_name: str | None = None
+    logo_url: str | None = None
+    volume: int
+    brightness: int
+    language: str
+    websocket_url: str = "/agent/speaker/ws"
+
+
 class TrialRequestCreate(BaseModel):
     full_name: str = Field(min_length=3, max_length=120)
     phone: str = Field(min_length=8, max_length=40)

@@ -17,6 +17,30 @@ Em desenvolvimento local:
 ws://localhost:8000/agent/speaker/ws
 ```
 
+## Cadastro do dispositivo
+
+Cada smart speaker deve ser cadastrado no painel Coevo, em **Smart Speakers**.
+Ao cadastrar, o sistema gera:
+
+- `device_id`;
+- `api_key` exclusiva daquele dispositivo.
+
+A `api_key` aparece apenas uma vez. Se ela for perdida, gere um novo token no
+painel e atualize o dispositivo.
+
+O painel também guarda as configurações que o ESP32 deve buscar:
+
+- organização;
+- nome do dispositivo;
+- agente vinculado;
+- logo;
+- volume;
+- brilho;
+- idioma.
+
+O Wi-Fi não é salvo no Coevo. Ele deve ser configurado localmente pelo portal do
+próprio ESP32.
+
 ## Autenticação
 
 Configure no Railway:
@@ -25,7 +49,8 @@ Configure no Railway:
 SMART_SPEAKER_API_KEY=um-token-longo-e-secreto
 ```
 
-Se `SMART_SPEAKER_API_KEY` estiver vazio, a API usa `AGENT_API_KEY` como fallback.
+`SMART_SPEAKER_API_KEY` continua existindo como fallback de desenvolvimento. Em
+produção, prefira sempre `device_id` + `api_key` por dispositivo.
 
 O jeito mais seguro é abrir o WebSocket sem token na URL e mandar a primeira
 mensagem assim:
@@ -33,12 +58,37 @@ mensagem assim:
 ```json
 {
   "type": "auth",
-  "api_key": "um-token-longo-e-secreto"
+  "device_id": "spk_xxxxxxxxxxxx",
+  "api_key": "api-key-do-dispositivo"
 }
 ```
 
-Também funciona enviar o token por header `x-agent-api-key`, quando o dispositivo
-suportar headers customizados.
+Também funciona enviar `device_id` na query string e `api_key` por header
+`x-agent-api-key`, quando o dispositivo suportar headers customizados.
+
+## Buscar configuração
+
+O ESP32 pode buscar sua configuração antes de abrir o WebSocket:
+
+```bash
+curl "https://um-meeting-ai-production.up.railway.app/smart-speakers/spk_xxxxxxxxxxxx/config" \
+  -H "x-agent-api-key: api-key-do-dispositivo"
+```
+
+A resposta traz:
+
+```json
+{
+  "device_id": "spk_xxxxxxxxxxxx",
+  "name": "Sala comercial",
+  "organization_id": "default",
+  "agent_id": "coevo",
+  "logo_url": "https://...",
+  "volume": 70,
+  "brightness": 80,
+  "language": "pt-BR"
+}
+```
 
 ## Protocolo
 
@@ -48,7 +98,14 @@ Depois da autenticação, a API responde:
 {
   "type": "ready",
   "session_id": "voice-...",
-  "output_audio": "mp3_base64"
+  "output_audio": "mp3_base64",
+  "device": {
+    "device_id": "spk_xxxxxxxxxxxx",
+    "name": "Sala comercial",
+    "volume": 70,
+    "brightness": 80,
+    "language": "pt-BR"
+  }
 }
 ```
 
@@ -105,8 +162,9 @@ A resposta vem com texto e áudio:
 - Use sempre `wss://` em produção.
 - Não coloque o token em app público ou firmware distribuído sem proteção.
 - Prefira autenticar na primeira mensagem ou via header, não por query string.
-- Crie um token próprio para smart speaker e rotacione se o dispositivo for
-  perdido ou substituído.
+- Use um token próprio por dispositivo e rotacione se o dispositivo for perdido
+  ou substituído.
+- Revogue o token no painel quando um dispositivo sair de operação.
 - O WebSocket só devolve a fala do Coevo; a memória e permissões continuam
   centralizadas na API.
 

@@ -5,7 +5,14 @@ import { useRouter } from "next/navigation";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-type Section = "meetings" | "memory" | "coevo" | "knowledge" | "leads" | "users";
+type Section =
+  | "meetings"
+  | "memory"
+  | "coevo"
+  | "knowledge"
+  | "devices"
+  | "leads"
+  | "users";
 type CoevoConfigTab =
   | "identity"
   | "voice"
@@ -165,6 +172,38 @@ type AppUser = {
   created_at: string;
 };
 
+type SmartSpeakerDevice = {
+  id: string;
+  name: string;
+  organization_id: string;
+  agent_id: string;
+  assigned_user_id?: string | null;
+  assigned_user_name?: string | null;
+  assigned_user_email?: string | null;
+  room_name?: string | null;
+  logo_url?: string | null;
+  volume: number;
+  brightness: number;
+  language: string;
+  active: boolean;
+  last_seen_at?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type SmartSpeakerForm = {
+  name: string;
+  organizationId: string;
+  agentId: string;
+  assignedUserName: string;
+  assignedUserEmail: string;
+  roomName: string;
+  logoUrl: string;
+  volume: number;
+  brightness: number;
+  language: string;
+};
+
 type AuthForm = {
   name: string;
   email: string;
@@ -205,6 +244,19 @@ const emptyUserForm: UserForm = {
   email: "",
   password: "",
   isAdmin: false,
+};
+
+const emptySmartSpeakerForm: SmartSpeakerForm = {
+  name: "",
+  organizationId: "default",
+  agentId: "coevo",
+  assignedUserName: "",
+  assignedUserEmail: "",
+  roomName: "",
+  logoUrl: "",
+  volume: 70,
+  brightness: 80,
+  language: "pt-BR",
 };
 
 const defaultProfile: AgentProfile = {
@@ -507,6 +559,16 @@ export default function HomePage() {
   const [usersStatus, setUsersStatus] = useState<string | null>(null);
   const [userForm, setUserForm] = useState<UserForm>(emptyUserForm);
   const [isSavingUser, setIsSavingUser] = useState(false);
+  const [smartSpeakers, setSmartSpeakers] = useState<SmartSpeakerDevice[]>([]);
+  const [smartSpeakerForm, setSmartSpeakerForm] =
+    useState<SmartSpeakerForm>(emptySmartSpeakerForm);
+  const [smartSpeakerStatus, setSmartSpeakerStatus] = useState<string | null>(null);
+  const [isSavingSmartSpeaker, setIsSavingSmartSpeaker] = useState(false);
+  const [editingSmartSpeakerId, setEditingSmartSpeakerId] = useState<string | null>(null);
+  const [latestDeviceKey, setLatestDeviceKey] = useState<{
+    deviceId: string;
+    apiKey: string;
+  } | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [currentDate, setCurrentDate] = useState("");
@@ -658,6 +720,190 @@ export default function HomePage() {
       setUsers((await response.json()) as AppUser[]);
     } catch (err) {
       setUsersStatus(err instanceof Error ? err.message : "Erro inesperado.");
+    }
+  }
+
+  function smartSpeakerPayload(form: SmartSpeakerForm) {
+    return {
+      name: form.name,
+      organization_id: form.organizationId || "default",
+      agent_id: form.agentId || "coevo",
+      assigned_user_name: form.assignedUserName || null,
+      assigned_user_email: form.assignedUserEmail || null,
+      room_name: form.roomName || null,
+      logo_url: form.logoUrl || null,
+      volume: form.volume,
+      brightness: form.brightness,
+      language: form.language || "pt-BR",
+    };
+  }
+
+  function smartSpeakerIsOnline(device: SmartSpeakerDevice) {
+    if (!device.active || !device.last_seen_at) {
+      return false;
+    }
+
+    return Date.now() - new Date(device.last_seen_at).getTime() < 2 * 60 * 1000;
+  }
+
+  async function loadSmartSpeakers() {
+    if (!authToken || !sessionUser?.is_admin) {
+      return;
+    }
+
+    setSmartSpeakerStatus(null);
+    try {
+      const response = await fetch(`${apiUrl}/smart-speakers`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (!response.ok) {
+        throw new Error("Nao foi possivel carregar os dispositivos.");
+      }
+      setSmartSpeakers((await response.json()) as SmartSpeakerDevice[]);
+    } catch (err) {
+      setSmartSpeakerStatus(err instanceof Error ? err.message : "Erro inesperado.");
+    }
+  }
+
+  function editSmartSpeaker(device: SmartSpeakerDevice) {
+    setEditingSmartSpeakerId(device.id);
+    setLatestDeviceKey(null);
+    setSmartSpeakerStatus(null);
+    setSmartSpeakerForm({
+      name: device.name,
+      organizationId: device.organization_id,
+      agentId: device.agent_id,
+      assignedUserName: device.assigned_user_name ?? "",
+      assignedUserEmail: device.assigned_user_email ?? "",
+      roomName: device.room_name ?? "",
+      logoUrl: device.logo_url ?? "",
+      volume: device.volume,
+      brightness: device.brightness,
+      language: device.language,
+    });
+  }
+
+  function cancelSmartSpeakerEdit() {
+    setEditingSmartSpeakerId(null);
+    setSmartSpeakerForm(emptySmartSpeakerForm);
+    setLatestDeviceKey(null);
+  }
+
+  async function submitSmartSpeaker(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!authToken || !sessionUser?.is_admin) {
+      return;
+    }
+
+    setIsSavingSmartSpeaker(true);
+    setSmartSpeakerStatus(null);
+    try {
+      const response = await fetch(
+        editingSmartSpeakerId
+          ? `${apiUrl}/smart-speakers/${editingSmartSpeakerId}`
+          : `${apiUrl}/smart-speakers`,
+        {
+          method: editingSmartSpeakerId ? "PUT" : "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify(smartSpeakerPayload(smartSpeakerForm)),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          editingSmartSpeakerId
+            ? "Nao foi possivel atualizar o dispositivo."
+            : "Nao foi possivel cadastrar o dispositivo.",
+        );
+      }
+
+      if (editingSmartSpeakerId) {
+        setSmartSpeakerStatus("Dispositivo atualizado.");
+        setLatestDeviceKey(null);
+      } else {
+        const result = (await response.json()) as {
+          device: SmartSpeakerDevice;
+          api_key: string;
+        };
+        setLatestDeviceKey({ deviceId: result.device.id, apiKey: result.api_key });
+        setSmartSpeakerStatus("Dispositivo cadastrado. Copie a chave agora.");
+      }
+
+      setEditingSmartSpeakerId(null);
+      setSmartSpeakerForm(emptySmartSpeakerForm);
+      await loadSmartSpeakers();
+    } catch (err) {
+      setSmartSpeakerStatus(err instanceof Error ? err.message : "Erro inesperado.");
+    } finally {
+      setIsSavingSmartSpeaker(false);
+    }
+  }
+
+  async function regenerateSmartSpeakerKey(device: SmartSpeakerDevice) {
+    if (!authToken || !sessionUser?.is_admin) {
+      return;
+    }
+
+    const shouldRegenerate = window.confirm(
+      `Gerar novo token para ${device.name}? O token antigo deixara de funcionar.`,
+    );
+    if (!shouldRegenerate) {
+      return;
+    }
+
+    setSmartSpeakerStatus(null);
+    try {
+      const response = await fetch(
+        `${apiUrl}/smart-speakers/${device.id}/regenerate-key`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${authToken}` },
+        },
+      );
+      if (!response.ok) {
+        throw new Error("Nao foi possivel gerar um novo token.");
+      }
+      const result = (await response.json()) as {
+        device: SmartSpeakerDevice;
+        api_key: string;
+      };
+      setLatestDeviceKey({ deviceId: result.device.id, apiKey: result.api_key });
+      setSmartSpeakerStatus("Novo token gerado. Copie a chave agora.");
+      await loadSmartSpeakers();
+    } catch (err) {
+      setSmartSpeakerStatus(err instanceof Error ? err.message : "Erro inesperado.");
+    }
+  }
+
+  async function revokeSmartSpeaker(device: SmartSpeakerDevice) {
+    if (!authToken || !sessionUser?.is_admin) {
+      return;
+    }
+
+    const shouldRevoke = window.confirm(
+      `Revogar o token de ${device.name}? O dispositivo ficara offline ate receber um novo token.`,
+    );
+    if (!shouldRevoke) {
+      return;
+    }
+
+    setSmartSpeakerStatus(null);
+    try {
+      const response = await fetch(`${apiUrl}/smart-speakers/${device.id}/revoke`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (!response.ok) {
+        throw new Error("Nao foi possivel revogar o token.");
+      }
+      setLatestDeviceKey(null);
+      setSmartSpeakerStatus("Token revogado.");
+      await loadSmartSpeakers();
+    } catch (err) {
+      setSmartSpeakerStatus(err instanceof Error ? err.message : "Erro inesperado.");
     }
   }
 
@@ -1038,6 +1284,7 @@ export default function HomePage() {
   useEffect(() => {
     if (sessionUser?.is_admin) {
       void loadUsers();
+      void loadSmartSpeakers();
     }
   }, [sessionUser?.is_admin, authToken]);
 
@@ -1460,6 +1707,21 @@ export default function HomePage() {
             </span>
             Base institucional
           </button>
+          {sessionUser.is_admin ? (
+            <button
+              className={navItemClass("devices")}
+              type="button"
+              onClick={() => {
+                setActiveSection("devices");
+                void loadSmartSpeakers();
+              }}
+            >
+              <span className="flex h-8 w-8 items-center justify-center rounded-md border border-[#E7E7E2] font-mono text-xs">
+                D
+              </span>
+              Smart Speakers
+            </button>
+          ) : null}
           <button
             className={navItemClass("leads")}
             type="button"
@@ -2059,6 +2321,436 @@ export default function HomePage() {
                           </div>
                         </article>
                       ))}
+                    </div>
+                  )}
+                </section>
+              </div>
+            </div>
+          ) : null}
+
+          {activeSection === "devices" && sessionUser.is_admin ? (
+            <div className="space-y-6">
+              <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
+                <div>
+                  <p className="font-mono text-xs uppercase text-[#F97316]">
+                    Dispositivos
+                  </p>
+                  <h1 className="mt-2 font-display text-4xl font-semibold text-[#11110F]">
+                    Smart speakers vinculados ao Coevo
+                  </h1>
+                  <p className="mt-3 max-w-3xl text-sm leading-6 text-[#73736B]">
+                    Cada dispositivo tem device_id e api_key proprios. O Wi-Fi
+                    continua sendo configurado no portal local do ESP32.
+                  </p>
+                </div>
+                <button
+                  className="rounded-lg border border-[#E7E7E2] bg-white px-5 py-3 text-sm font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] transition hover:border-[#F97316] hover:bg-[#FFF3EA]"
+                  onClick={loadSmartSpeakers}
+                  type="button"
+                >
+                  Atualizar status
+                </button>
+              </div>
+
+              {smartSpeakerStatus ? (
+                <p className="rounded-lg border border-[#FDBA74] bg-[#FFF3EA] px-4 py-3 text-sm text-[#8A4B13]">
+                  {smartSpeakerStatus}
+                </p>
+              ) : null}
+
+              {latestDeviceKey ? (
+                <section className="rounded-xl border border-[#BBF7D0] bg-[#F0FDF4] p-5 text-[#14532D] shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                  <p className="font-mono text-xs uppercase">Token gerado</p>
+                  <h2 className="mt-2 text-xl font-bold">
+                    Copie esta chave agora. Ela nao aparece de novo.
+                  </h2>
+                  <div className="mt-4 grid gap-3 lg:grid-cols-[260px_minmax(0,1fr)]">
+                    <div className="rounded-lg border border-[#BBF7D0] bg-white px-4 py-3">
+                      <p className="text-xs font-bold uppercase text-[#15803D]">
+                        device_id
+                      </p>
+                      <p className="mt-1 break-all font-mono text-sm">
+                        {latestDeviceKey.deviceId}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-[#BBF7D0] bg-white px-4 py-3">
+                      <p className="text-xs font-bold uppercase text-[#15803D]">
+                        api_key
+                      </p>
+                      <p className="mt-1 break-all font-mono text-sm">
+                        {latestDeviceKey.apiKey}
+                      </p>
+                    </div>
+                  </div>
+                </section>
+              ) : null}
+
+              <div className="grid gap-5 xl:grid-cols-[420px_minmax(0,1fr)]">
+                <form
+                  className="rounded-xl border border-[#E7E7E2] bg-white p-5 shadow-[0_18px_70px_rgba(17,17,15,0.07)]"
+                  onSubmit={submitSmartSpeaker}
+                >
+                  <p className="font-mono text-xs uppercase text-[#F97316]">
+                    {editingSmartSpeakerId ? "Editar dispositivo" : "Novo dispositivo"}
+                  </p>
+                  <h2 className="mt-2 font-display text-2xl font-semibold">
+                    Configuracao do smart speaker
+                  </h2>
+
+                  <div className="mt-5 grid gap-4">
+                    <label>
+                      <span className="mb-2 block text-sm font-semibold">
+                        Nome do dispositivo
+                      </span>
+                      <input
+                        className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm outline-none focus:border-[#F97316]"
+                        value={smartSpeakerForm.name}
+                        onChange={(event) =>
+                          setSmartSpeakerForm((current) => ({
+                            ...current,
+                            name: event.target.value,
+                          }))
+                        }
+                        placeholder="Recepcao, Sala comercial..."
+                        required
+                      />
+                    </label>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <label>
+                        <span className="mb-2 block text-sm font-semibold">
+                          Organizacao
+                        </span>
+                        <input
+                          className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm outline-none focus:border-[#F97316]"
+                          value={smartSpeakerForm.organizationId}
+                          onChange={(event) =>
+                            setSmartSpeakerForm((current) => ({
+                              ...current,
+                              organizationId: event.target.value,
+                            }))
+                          }
+                          required
+                        />
+                      </label>
+                      <label>
+                        <span className="mb-2 block text-sm font-semibold">
+                          Agente vinculado
+                        </span>
+                        <input
+                          className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm outline-none focus:border-[#F97316]"
+                          value={smartSpeakerForm.agentId}
+                          onChange={(event) =>
+                            setSmartSpeakerForm((current) => ({
+                              ...current,
+                              agentId: event.target.value,
+                            }))
+                          }
+                          required
+                        />
+                      </label>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <label>
+                        <span className="mb-2 block text-sm font-semibold">
+                          Responsavel
+                        </span>
+                        <input
+                          className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm outline-none focus:border-[#F97316]"
+                          value={smartSpeakerForm.assignedUserName}
+                          onChange={(event) =>
+                            setSmartSpeakerForm((current) => ({
+                              ...current,
+                              assignedUserName: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        <span className="mb-2 block text-sm font-semibold">
+                          E-mail do responsavel
+                        </span>
+                        <input
+                          className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm outline-none focus:border-[#F97316]"
+                          type="email"
+                          value={smartSpeakerForm.assignedUserEmail}
+                          onChange={(event) =>
+                            setSmartSpeakerForm((current) => ({
+                              ...current,
+                              assignedUserEmail: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                    </div>
+
+                    <label>
+                      <span className="mb-2 block text-sm font-semibold">
+                        Sala/local
+                      </span>
+                      <input
+                        className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm outline-none focus:border-[#F97316]"
+                        value={smartSpeakerForm.roomName}
+                        onChange={(event) =>
+                          setSmartSpeakerForm((current) => ({
+                            ...current,
+                            roomName: event.target.value,
+                          }))
+                        }
+                        placeholder="Sala 01, diretoria, demo..."
+                      />
+                    </label>
+
+                    <label>
+                      <span className="mb-2 block text-sm font-semibold">
+                        Logo exibida no dispositivo
+                      </span>
+                      <input
+                        className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm outline-none focus:border-[#F97316]"
+                        value={smartSpeakerForm.logoUrl}
+                        onChange={(event) =>
+                          setSmartSpeakerForm((current) => ({
+                            ...current,
+                            logoUrl: event.target.value,
+                          }))
+                        }
+                        placeholder="https://..."
+                      />
+                    </label>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <label className="rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-sm font-semibold">Volume</span>
+                          <span className="font-mono text-xs text-[#F97316]">
+                            {smartSpeakerForm.volume}
+                          </span>
+                        </div>
+                        <input
+                          className="mt-4 w-full accent-[#F97316]"
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={smartSpeakerForm.volume}
+                          onChange={(event) =>
+                            setSmartSpeakerForm((current) => ({
+                              ...current,
+                              volume: Number(event.target.value),
+                            }))
+                          }
+                        />
+                      </label>
+                      <label className="rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-sm font-semibold">Brilho</span>
+                          <span className="font-mono text-xs text-[#F97316]">
+                            {smartSpeakerForm.brightness}
+                          </span>
+                        </div>
+                        <input
+                          className="mt-4 w-full accent-[#F97316]"
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={smartSpeakerForm.brightness}
+                          onChange={(event) =>
+                            setSmartSpeakerForm((current) => ({
+                              ...current,
+                              brightness: Number(event.target.value),
+                            }))
+                          }
+                        />
+                      </label>
+                    </div>
+
+                    <label>
+                      <span className="mb-2 block text-sm font-semibold">Idioma</span>
+                      <select
+                        className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm outline-none focus:border-[#F97316]"
+                        value={smartSpeakerForm.language}
+                        onChange={(event) =>
+                          setSmartSpeakerForm((current) => ({
+                            ...current,
+                            language: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="pt-BR">Portugues Brasil</option>
+                        <option value="en-US">English</option>
+                        <option value="es-ES">Espanol</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                    <button
+                      className="flex-1 rounded-lg bg-[#11110F] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#F97316] disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={isSavingSmartSpeaker}
+                      type="submit"
+                    >
+                      {isSavingSmartSpeaker
+                        ? "Salvando..."
+                        : editingSmartSpeakerId
+                          ? "Salvar dispositivo"
+                          : "Cadastrar dispositivo"}
+                    </button>
+                    {editingSmartSpeakerId ? (
+                      <button
+                        className="rounded-lg border border-[#E7E7E2] bg-white px-5 py-3 text-sm font-bold text-[#73736B] transition hover:border-[#F97316] hover:bg-[#FFF3EA] hover:text-[#11110F]"
+                        onClick={cancelSmartSpeakerEdit}
+                        type="button"
+                      >
+                        Cancelar
+                      </button>
+                    ) : null}
+                  </div>
+                </form>
+
+                <section className="overflow-hidden rounded-xl border border-[#E7E7E2] bg-white shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                  <div className="border-b border-[#E7E7E2] px-5 py-4">
+                    <p className="font-mono text-xs uppercase text-[#F97316]">
+                      Cadastrados
+                    </p>
+                    <h2 className="mt-1 text-xl font-bold">Dispositivos</h2>
+                  </div>
+                  {smartSpeakers.length === 0 ? (
+                    <div className="px-5 py-10 text-center">
+                      <p className="text-sm font-semibold text-[#11110F]">
+                        Nenhum smart speaker cadastrado
+                      </p>
+                      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#73736B]">
+                        Cadastre o primeiro dispositivo para gerar device_id e
+                        api_key proprios.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-[#E7E7E2]">
+                      {smartSpeakers.map((device) => {
+                        const online = smartSpeakerIsOnline(device);
+                        return (
+                          <article className="p-5" key={device.id}>
+                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                              <div className="flex gap-4">
+                                <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-lg border border-[#E7E7E2] bg-[#11110F] text-sm font-bold text-white">
+                                  {device.logo_url ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      alt=""
+                                      className="h-full w-full object-cover"
+                                      src={device.logo_url}
+                                    />
+                                  ) : (
+                                    "C"
+                                  )}
+                                </div>
+                                <div>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <h3 className="text-lg font-bold text-[#11110F]">
+                                      {device.name}
+                                    </h3>
+                                    <span
+                                      className={`rounded-full border px-3 py-1 text-xs font-bold uppercase ${
+                                        !device.active
+                                          ? "border-red-200 bg-red-50 text-red-700"
+                                          : online
+                                            ? "border-[#BBF7D0] bg-[#F0FDF4] text-[#15803D]"
+                                            : "border-[#E7E7E2] bg-[#FCFCFB] text-[#73736B]"
+                                      }`}
+                                    >
+                                      {!device.active
+                                        ? "Revogado"
+                                        : online
+                                          ? "Online"
+                                          : "Offline"}
+                                    </span>
+                                  </div>
+                                  <p className="mt-1 break-all font-mono text-xs text-[#73736B]">
+                                    {device.id}
+                                  </p>
+                                  <div className="mt-3 grid gap-2 text-sm text-[#73736B] md:grid-cols-2">
+                                    <p>
+                                      <strong className="text-[#11110F]">
+                                        Organizacao:
+                                      </strong>{" "}
+                                      {device.organization_id}
+                                    </p>
+                                    <p>
+                                      <strong className="text-[#11110F]">
+                                        Agente:
+                                      </strong>{" "}
+                                      {device.agent_id}
+                                    </p>
+                                    <p>
+                                      <strong className="text-[#11110F]">
+                                        Local:
+                                      </strong>{" "}
+                                      {device.room_name || "Nao informado"}
+                                    </p>
+                                    <p>
+                                      <strong className="text-[#11110F]">
+                                        Ultimo acesso:
+                                      </strong>{" "}
+                                      {device.last_seen_at
+                                        ? formatMeetingDate(device.last_seen_at)
+                                        : "Nunca acessou"}
+                                    </p>
+                                    <p>
+                                      <strong className="text-[#11110F]">
+                                        Volume:
+                                      </strong>{" "}
+                                      {device.volume}
+                                    </p>
+                                    <p>
+                                      <strong className="text-[#11110F]">
+                                        Brilho:
+                                      </strong>{" "}
+                                      {device.brightness}
+                                    </p>
+                                    <p>
+                                      <strong className="text-[#11110F]">
+                                        Idioma:
+                                      </strong>{" "}
+                                      {device.language}
+                                    </p>
+                                    <p>
+                                      <strong className="text-[#11110F]">
+                                        Responsavel:
+                                      </strong>{" "}
+                                      {device.assigned_user_name ||
+                                        device.assigned_user_email ||
+                                        "Nao informado"}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap gap-2 lg:justify-end">
+                                <button
+                                  className="rounded-md border border-[#E7E7E2] bg-white px-3 py-2 text-xs font-bold text-[#11110F] transition hover:border-[#F97316] hover:bg-[#FFF3EA]"
+                                  onClick={() => editSmartSpeaker(device)}
+                                  type="button"
+                                >
+                                  Editar
+                                </button>
+                                <button
+                                  className="rounded-md border border-[#FDBA74] bg-[#FFF3EA] px-3 py-2 text-xs font-bold text-[#F97316] transition hover:bg-[#FFE7D6]"
+                                  onClick={() => regenerateSmartSpeakerKey(device)}
+                                  type="button"
+                                >
+                                  Gerar novo token
+                                </button>
+                                <button
+                                  className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 transition hover:bg-red-100"
+                                  onClick={() => revokeSmartSpeaker(device)}
+                                  type="button"
+                                >
+                                  Revogar token
+                                </button>
+                              </div>
+                            </div>
+                          </article>
+                        );
+                      })}
                     </div>
                   )}
                 </section>

@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 import asyncio
 import json
 import logging
+import secrets
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -68,6 +69,8 @@ from app.database import (
     get_google_calendar_connection,
     get_meeting_join_request_by_email,
     get_meeting_participant_by_identity,
+    get_smart_speaker_device,
+    get_smart_speaker_device_auth_row,
     has_host_or_commercial_joined,
     init_database,
     insert_meeting_agent_action,
@@ -77,6 +80,7 @@ from app.database import (
     insert_transcript_segment,
     insert_meeting,
     insert_app_user,
+    insert_smart_speaker_device,
     insert_trial_request,
     insert_whatsapp_group_message,
     insert_whatsapp_webhook_event,
@@ -93,6 +97,7 @@ from app.database import (
     list_pending_meeting_emails,
     list_meeting_participants,
     list_meeting_processing_jobs,
+    list_smart_speaker_devices,
     list_trial_requests,
     list_whatsapp_webhook_events,
     list_sales_recommendations,
@@ -102,6 +107,9 @@ from app.database import (
     register_meeting_participant,
     update_meeting_join_request_status,
     update_meeting_context,
+    update_smart_speaker_device,
+    update_smart_speaker_device_key,
+    touch_smart_speaker_device,
     update_trial_request,
     upsert_client_directory_clients,
     upsert_dev_console_project_member,
@@ -157,6 +165,11 @@ from app.models import (
     MeetingWebSearchResponse,
     RecordingStartResponse,
     SalesRecommendation,
+    SmartSpeakerDevice,
+    SmartSpeakerDeviceConfig,
+    SmartSpeakerDeviceCreate,
+    SmartSpeakerDeviceCreateResponse,
+    SmartSpeakerDeviceUpdate,
     SmartSpeakerTestRequest,
     SmartSpeakerTestResponse,
     TranscriptSegment,
@@ -249,10 +262,64 @@ def smart_speaker_api_key_is_valid(api_key: str | None) -> bool:
     return api_key == expected
 
 
-def verify_smart_speaker_api_key(
+def generate_device_id() -> str:
+    return f"spk_{secrets.token_urlsafe(9).replace('-', '').replace('_', '')[:12]}"
+
+
+def generate_device_api_key() -> str:
+    return secrets.token_urlsafe(36)
+
+
+def smart_speaker_device_config(device: SmartSpeakerDevice) -> SmartSpeakerDeviceConfig:
+    return SmartSpeakerDeviceConfig(
+        device_id=device.id,
+        name=device.name,
+        organization_id=device.organization_id,
+        agent_id=device.agent_id,
+        assigned_user_id=device.assigned_user_id,
+        assigned_user_name=device.assigned_user_name,
+        assigned_user_email=device.assigned_user_email,
+        room_name=device.room_name,
+        logo_url=device.logo_url,
+        volume=device.volume,
+        brightness=device.brightness,
+        language=device.language,
+    )
+
+
+async def authenticate_smart_speaker_device(
+    *,
+    device_id: str | None,
+    api_key: str | None,
+) -> SmartSpeakerDevice | None:
+    if not device_id or not api_key:
+        return None
+    row = await get_smart_speaker_device_auth_row(
+        settings=settings,
+        device_id=device_id,
+    )
+    if not row or not row.get("active"):
+        return None
+    if not verify_password(api_key, row["api_key_hash"]):
+        return None
+    device = SmartSpeakerDevice.model_validate(
+        {key: value for key, value in row.items() if key != "api_key_hash"}
+    )
+    touched = await touch_smart_speaker_device(settings=settings, device_id=device.id)
+    return touched or device
+
+
+async def verify_smart_speaker_api_key(
     x_agent_api_key: str | None = Header(default=None),
+    x_device_id: str | None = Header(default=None),
 ) -> None:
     if smart_speaker_api_key_is_valid(x_agent_api_key):
+        return
+    device = await authenticate_smart_speaker_device(
+        device_id=x_device_id,
+        api_key=x_agent_api_key,
+    )
+    if device:
         return
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -741,19 +808,31 @@ async def respond_with_agent(payload: AgentRespondRequest) -> AgentRespondRespon
     return await respond_with_agent_memory(settings=settings, payload=payload)
 
 
-async def authorize_smart_speaker_websocket(websocket: WebSocket) -> bool:
+async def authorize_smart_speaker_websocket(
+    websocket: WebSocket,
+) -> SmartSpeakerDevice | None | bool:
     api_key = (
         websocket.headers.get("x-agent-api-key")
         or websocket.query_params.get("api_key")
         or websocket.query_params.get("token")
     )
+    device_id = (
+        websocket.headers.get("x-device-id")
+        or websocket.query_params.get("device_id")
+    )
+    device = await authenticate_smart_speaker_device(
+        device_id=device_id,
+        api_key=api_key,
+    )
+    if device:
+        return device
     if smart_speaker_api_key_is_valid(api_key):
         return True
 
     await websocket.send_json(
         {
             "type": "auth_required",
-            "detail": "Send {\"type\":\"auth\",\"api_key\":\"...\"} before audio.",
+            "detail": "Send {\"type\":\"auth\",\"device_id\":\"...\",\"api_key\":\"...\"} before audio.",
         }
     )
     try:
@@ -762,11 +841,17 @@ async def authorize_smart_speaker_websocket(websocket: WebSocket) -> bool:
     except (TimeoutError, ValueError, WebSocketDisconnect):
         return False
 
-    return (
-        isinstance(message, dict)
-        and message.get("type") == "auth"
-        and smart_speaker_api_key_is_valid(str(message.get("api_key") or ""))
+    if not isinstance(message, dict) or message.get("type") != "auth":
+        return False
+
+    device = await authenticate_smart_speaker_device(
+        device_id=str(message.get("device_id") or ""),
+        api_key=str(message.get("api_key") or ""),
     )
+    if device:
+        return device
+
+    return smart_speaker_api_key_is_valid(str(message.get("api_key") or ""))
 
 
 def _speaker_payload_value(payload: dict, key: str, fallback: str) -> str:
@@ -793,13 +878,14 @@ async def answer_smart_speaker_text(
     user_id: str,
     user_name: str,
     user_email: str | None,
+    agent_id: str = "coevo",
 ) -> tuple[AgentRespondResponse, bytes]:
     response = await respond_with_agent_memory(
         settings=settings,
         payload=AgentRespondRequest(
             message=text,
             session_id=session_id,
-            agent_id="coevo",
+            agent_id=agent_id,
             organization_id=organization_id,
             channel="voice",
             user_id=user_id,
@@ -828,6 +914,7 @@ async def test_smart_speaker_channel(
     response, audio_bytes = await answer_smart_speaker_text(
         text=payload.text,
         session_id=payload.session_id,
+        agent_id="coevo",
         organization_id=payload.organization_id,
         user_id=payload.user_id,
         user_name=payload.user_name,
@@ -841,35 +928,154 @@ async def test_smart_speaker_channel(
     )
 
 
+@app.get(
+    "/smart-speakers",
+    response_model=list[SmartSpeakerDevice],
+    dependencies=[Depends(require_admin_user)],
+)
+async def list_smart_speakers() -> list[SmartSpeakerDevice]:
+    return list(await list_smart_speaker_devices(settings=settings))
+
+
+@app.post(
+    "/smart-speakers",
+    response_model=SmartSpeakerDeviceCreateResponse,
+    dependencies=[Depends(require_admin_user)],
+)
+async def create_smart_speaker(
+    payload: SmartSpeakerDeviceCreate,
+) -> SmartSpeakerDeviceCreateResponse:
+    api_key = generate_device_api_key()
+    device = await insert_smart_speaker_device(
+        settings=settings,
+        device_id=generate_device_id(),
+        api_key_hash=hash_password(api_key),
+        payload=payload,
+    )
+    return SmartSpeakerDeviceCreateResponse(device=device, api_key=api_key)
+
+
+@app.put(
+    "/smart-speakers/{device_id}",
+    response_model=SmartSpeakerDevice,
+    dependencies=[Depends(require_admin_user)],
+)
+async def update_smart_speaker(
+    device_id: str,
+    payload: SmartSpeakerDeviceUpdate,
+) -> SmartSpeakerDevice:
+    device = await update_smart_speaker_device(
+        settings=settings,
+        device_id=device_id,
+        payload=payload,
+    )
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Smart speaker not found.",
+        )
+    return device
+
+
+@app.post(
+    "/smart-speakers/{device_id}/regenerate-key",
+    response_model=SmartSpeakerDeviceCreateResponse,
+    dependencies=[Depends(require_admin_user)],
+)
+async def regenerate_smart_speaker_key(
+    device_id: str,
+) -> SmartSpeakerDeviceCreateResponse:
+    api_key = generate_device_api_key()
+    device = await update_smart_speaker_device_key(
+        settings=settings,
+        device_id=device_id,
+        api_key_hash=hash_password(api_key),
+    )
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Smart speaker not found.",
+        )
+    return SmartSpeakerDeviceCreateResponse(device=device, api_key=api_key)
+
+
+@app.post(
+    "/smart-speakers/{device_id}/revoke",
+    response_model=SmartSpeakerDevice,
+    dependencies=[Depends(require_admin_user)],
+)
+async def revoke_smart_speaker(
+    device_id: str,
+) -> SmartSpeakerDevice:
+    device = await update_smart_speaker_device(
+        settings=settings,
+        device_id=device_id,
+        payload=SmartSpeakerDeviceUpdate(active=False),
+    )
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Smart speaker not found.",
+        )
+    return device
+
+
+@app.get("/smart-speakers/{device_id}/config", response_model=SmartSpeakerDeviceConfig)
+async def read_smart_speaker_config(
+    device_id: str,
+    x_agent_api_key: str | None = Header(default=None),
+) -> SmartSpeakerDeviceConfig:
+    device = await authenticate_smart_speaker_device(
+        device_id=device_id,
+        api_key=x_agent_api_key,
+    )
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid smart speaker credentials.",
+        )
+    return smart_speaker_device_config(device)
+
+
 @app.websocket("/agent/speaker/ws")
 async def smart_speaker_websocket(websocket: WebSocket) -> None:
     await websocket.accept()
 
-    if not smart_speaker_expected_api_key():
-        await websocket.send_json(
-            {
-                "type": "error",
-                "detail": "SMART_SPEAKER_API_KEY or AGENT_API_KEY is required.",
-            }
-        )
-        await websocket.close(code=1008)
-        return
-
-    authorized = await authorize_smart_speaker_websocket(websocket)
-    if not authorized:
+    authorization = await authorize_smart_speaker_websocket(websocket)
+    if not authorization:
         await websocket.send_json({"type": "error", "detail": "Unauthorized."})
         await websocket.close(code=1008)
         return
 
+    device = authorization if isinstance(authorization, SmartSpeakerDevice) else None
     profile = await get_agent_profile(settings=settings)
     session_id = (
         websocket.query_params.get("session_id")
+        or (f"voice-{device.id}" if device else None)
         or f"voice-{uuid4().hex[:12]}"
     )
-    organization_id = websocket.query_params.get("organization_id") or profile.organization_id
-    user_id = websocket.query_params.get("user_id") or "smart-speaker"
-    user_name = websocket.query_params.get("user_name") or "Smart speaker"
-    user_email = websocket.query_params.get("user_email") or None
+    organization_id = (
+        websocket.query_params.get("organization_id")
+        or (device.organization_id if device else None)
+        or profile.organization_id
+    )
+    user_id = (
+        websocket.query_params.get("user_id")
+        or (device.assigned_user_id if device else None)
+        or (device.id if device else None)
+        or "smart-speaker"
+    )
+    user_name = (
+        websocket.query_params.get("user_name")
+        or (device.assigned_user_name if device else None)
+        or (device.name if device else None)
+        or "Smart speaker"
+    )
+    user_email = (
+        websocket.query_params.get("user_email")
+        or (device.assigned_user_email if device else None)
+        or None
+    )
     mimetype = (
         websocket.query_params.get("mimetype")
         or settings.smart_speaker_default_mimetype
@@ -886,6 +1092,7 @@ async def smart_speaker_websocket(websocket: WebSocket) -> None:
                 "organization_id": profile.organization_id,
             },
             "session_id": session_id,
+            "device": smart_speaker_device_config(device).model_dump() if device else None,
             "input": "binary frames, audio_chunk JSON, audio_commit JSON, or text JSON",
             "output_audio": "mp3_base64",
         }
@@ -906,6 +1113,7 @@ async def smart_speaker_websocket(websocket: WebSocket) -> None:
         response, audio_bytes = await answer_smart_speaker_text(
             text=clean_text,
             session_id=session_id,
+            agent_id=device.agent_id if device else "coevo",
             organization_id=organization_id,
             user_id=user_id,
             user_name=user_name,
