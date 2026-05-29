@@ -157,6 +157,38 @@ A resposta vem com texto e áudio:
 }
 ```
 
+Para dispositivos com pouca memória, como ESP32, envie a mensagem com
+`audio_mode: "chunked"`:
+
+```json
+{
+  "type": "text",
+  "text": "Diga conectado.",
+  "audio_mode": "chunked"
+}
+```
+
+Nesse modo, o Coevo responde primeiro com texto:
+
+```json
+{
+  "type": "response",
+  "text": "Conectado.",
+  "audio_mode": "chunked"
+}
+```
+
+Depois envia o áudio em partes:
+
+```json
+{ "type": "audio_generating" }
+{ "type": "audio_start", "audio_mimetype": "audio/mpeg", "chunk_count": 12 }
+{ "type": "audio_chunk", "index": 0, "chunk_count": 12, "audio_base64": "..." }
+{ "type": "audio_end", "audio_mimetype": "audio/mpeg", "chunk_count": 12 }
+```
+
+Também é possível pedir somente texto com `audio_mode: "none"`.
+
 ## Segurança
 
 - Use sempre `wss://` em produção.

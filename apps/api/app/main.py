@@ -903,6 +903,32 @@ async def answer_smart_speaker_text(
     return response, audio_bytes
 
 
+async def answer_smart_speaker_text_only(
+    *,
+    text: str,
+    session_id: str,
+    organization_id: str,
+    user_id: str,
+    user_name: str,
+    user_email: str | None,
+    agent_id: str = "coevo",
+) -> AgentRespondResponse:
+    return await respond_with_agent_memory(
+        settings=settings,
+        payload=AgentRespondRequest(
+            message=text,
+            session_id=session_id,
+            agent_id=agent_id,
+            organization_id=organization_id,
+            channel="voice",
+            user_id=user_id,
+            user_name=user_name,
+            user_email=_speaker_email_value(user_email),
+            requester_role="host",
+        ),
+    )
+
+
 @app.post(
     "/agent/speaker/test",
     response_model=SmartSpeakerTestResponse,
@@ -1082,6 +1108,54 @@ async def smart_speaker_websocket(websocket: WebSocket) -> None:
     )
     audio_buffer = bytearray()
 
+    async def send_audio_payload(
+        *,
+        audio_bytes: bytes,
+        audio_mode: str,
+    ) -> None:
+        if audio_mode == "chunked":
+            audio_base64 = audio_bytes_to_base64(audio_bytes)
+            chunk_size = 4096
+            total_chunks = (len(audio_base64) + chunk_size - 1) // chunk_size
+            await websocket.send_json(
+                {
+                    "type": "audio_start",
+                    "audio_mimetype": "audio/mpeg",
+                    "encoding": "base64",
+                    "chunk_count": total_chunks,
+                    "byte_length": len(audio_bytes),
+                }
+            )
+            for index in range(total_chunks):
+                start = index * chunk_size
+                await websocket.send_json(
+                    {
+                        "type": "audio_chunk",
+                        "index": index,
+                        "chunk_count": total_chunks,
+                        "audio_base64": audio_base64[start : start + chunk_size],
+                    }
+                )
+                await asyncio.sleep(0)
+            await websocket.send_json(
+                {
+                    "type": "audio_end",
+                    "audio_mimetype": "audio/mpeg",
+                    "chunk_count": total_chunks,
+                    "byte_length": len(audio_bytes),
+                }
+            )
+            return
+
+        await websocket.send_json(
+            {
+                "type": "audio",
+                "audio_base64": audio_bytes_to_base64(audio_bytes),
+                "audio_mimetype": "audio/mpeg",
+                "byte_length": len(audio_bytes),
+            }
+        )
+
     await websocket.send_json(
         {
             "type": "ready",
@@ -1094,11 +1168,11 @@ async def smart_speaker_websocket(websocket: WebSocket) -> None:
             "session_id": session_id,
             "device": smart_speaker_device_config(device).model_dump() if device else None,
             "input": "binary frames, audio_chunk JSON, audio_commit JSON, or text JSON",
-            "output_audio": "mp3_base64",
+            "output_audio": "mp3_base64 or chunked mp3_base64",
         }
     )
 
-    async def process_text(text: str) -> None:
+    async def process_text(text: str, audio_mode: str = "inline") -> None:
         clean_text = " ".join(text.strip().split())
         if len(clean_text) < 3:
             await websocket.send_json(
@@ -1110,7 +1184,7 @@ async def smart_speaker_websocket(websocket: WebSocket) -> None:
             return
 
         await websocket.send_json({"type": "thinking", "transcript": clean_text})
-        response, audio_bytes = await answer_smart_speaker_text(
+        response = await answer_smart_speaker_text_only(
             text=clean_text,
             session_id=session_id,
             agent_id=device.agent_id if device else "coevo",
@@ -1124,11 +1198,20 @@ async def smart_speaker_websocket(websocket: WebSocket) -> None:
                 "type": "response",
                 "session_id": response.session.id,
                 "text": response.assistant_message.content,
-                "audio_base64": audio_bytes_to_base64(audio_bytes),
-                "audio_mimetype": "audio/mpeg",
+                "audio_mode": audio_mode,
                 "memory_count": len(response.memory_results),
             }
         )
+        if audio_mode == "none":
+            return
+        profile = await get_agent_profile(settings=settings)
+        await websocket.send_json({"type": "audio_generating"})
+        audio_bytes = await synthesize_voice_audio(
+            settings=settings,
+            text=response.assistant_message.content,
+            voice=profile.voice,
+        )
+        await send_audio_payload(audio_bytes=audio_bytes, audio_mode=audio_mode)
 
     try:
         while True:
@@ -1214,7 +1297,10 @@ async def smart_speaker_websocket(websocket: WebSocket) -> None:
                     {"type": "transcript", "text": transcript}
                 )
                 try:
-                    await process_text(transcript)
+                    await process_text(
+                        transcript,
+                        audio_mode=str(payload.get("audio_mode") or "inline"),
+                    )
                 except Exception:
                     logger.exception("smart speaker response failed")
                     await websocket.send_json(
@@ -1233,7 +1319,10 @@ async def smart_speaker_websocket(websocket: WebSocket) -> None:
                     )
                     continue
                 try:
-                    await process_text(text)
+                    await process_text(
+                        text,
+                        audio_mode=str(payload.get("audio_mode") or "inline"),
+                    )
                 except Exception:
                     logger.exception("smart speaker text response failed")
                     await websocket.send_json(
