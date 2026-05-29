@@ -1,1 +1,2 @@
 web: uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+xiaozhi-mcp: python -m app.xiaozhi_mcp_bridge

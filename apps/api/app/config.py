@@ -59,6 +59,14 @@ class Settings(BaseSettings):
     smart_speaker_api_key: str | None = None
     smart_speaker_tts_model: str = "gpt-4o-mini-tts"
     smart_speaker_default_mimetype: str = "audio/wav"
+    xiaozhi_mcp_endpoint: str | None = None
+    xiaozhi_mcp_organization_id: str = "default"
+    xiaozhi_mcp_agent_id: str = "coevo"
+    xiaozhi_mcp_user_id: str = "xiaozhi-device"
+    xiaozhi_mcp_user_name: str = "Smart speaker XiaoZhi"
+    xiaozhi_mcp_user_email: str | None = None
+    xiaozhi_mcp_session_prefix: str = "xiaozhi"
+    xiaozhi_mcp_reconnect_seconds: int = 8
     client_directory_enabled: bool = False
     client_directory_api_url: str | None = None
     client_directory_api_key: str | None = None
