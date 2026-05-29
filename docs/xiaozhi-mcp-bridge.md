@@ -87,6 +87,33 @@ A ferramenta registrada e:
 }
 ```
 
+O bridge tambem registra uma ferramenta especifica para Google Agenda:
+
+```json
+{
+  "name": "coevo.schedule_meeting",
+  "description": "Cria um evento no Google Agenda conectado ao Coevo.",
+  "inputSchema": {
+    "type": "object",
+    "required": ["title", "start_time"],
+    "properties": {
+      "title": { "type": "string" },
+      "start_time": {
+        "type": "string",
+        "description": "ISO 8601. Exemplo: 2026-05-30T14:00:00-03:00"
+      },
+      "duration_minutes": { "type": "integer" },
+      "attendees": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "description": { "type": "string" },
+      "user_name": { "type": "string" }
+    }
+  }
+}
+```
+
 ## Prompt recomendado no agente original
 
 No painel do agente original, use uma instrucao parecida:
@@ -95,14 +122,19 @@ No painel do agente original, use uma instrucao parecida:
 Seu nome de chamada e Coevo.
 
 Quando o usuario pedir algo sobre reunioes, memoria, clientes, decisoes,
-pendencias, follow-up, agenda, e-mail, tarefas, propostas ou informacoes da
-empresa, chame a ferramenta coevo.ask.
+pendencias, follow-up, e-mail, tarefas, propostas ou informacoes da empresa,
+chame a ferramenta coevo.ask.
 
 Passe para coevo.ask a fala completa do usuario no campo message. Se houver
 contexto adicional que voce percebeu, envie no campo context.
 
 Quando coevo.ask retornar uma resposta, fale essa resposta ao usuario sem
 inventar detalhes adicionais.
+
+Quando o usuario pedir para agendar, marcar ou criar uma reuniao futura, colete
+título, data, horario, duracao e convidados. Antes de criar, confirme por voz
+com o usuario. Depois da confirmacao, chame coevo.schedule_meeting. Use
+start_time em ISO 8601, por exemplo 2026-05-30T14:00:00-03:00.
 ```
 
 ## Observacoes

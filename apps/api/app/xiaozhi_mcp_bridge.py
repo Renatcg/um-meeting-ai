@@ -3,14 +3,22 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from datetime import datetime
 from typing import Any
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import websockets
 from websockets.exceptions import ConnectionClosed
 
+from app.calendar_service import (
+    GoogleCalendarAPIError,
+    create_google_calendar_event,
+    google_calendar_can_create_events,
+)
 from app.config import Settings, get_settings
 from app.conversation_service import respond_with_agent_memory
+from app.database import get_agent_profile, get_google_calendar_connection
 from app.models import AgentRespondRequest
 
 logger = logging.getLogger(__name__)
@@ -24,7 +32,8 @@ COEVO_ASK_TOOL = {
         "Converse com o Coevo, usando a mesma personalidade, memoria, "
         "permissoes e configuracoes do sistema Coevo Meet. Use esta ferramenta "
         "para perguntas sobre reunioes, clientes, decisoes, pendencias, "
-        "follow-ups, agenda, e-mails e memoria corporativa."
+        "follow-ups, e-mails e memoria corporativa. Para criar eventos no "
+        "Google Agenda, use a ferramenta coevo.schedule_meeting."
     ),
     "inputSchema": {
         "type": "object",
@@ -53,6 +62,54 @@ COEVO_ASK_TOOL = {
         "required": ["message"],
     },
 }
+
+
+COEVO_SCHEDULE_MEETING_TOOL = {
+    "name": "coevo.schedule_meeting",
+    "description": (
+        "Cria um evento no Google Agenda conectado ao Coevo. Use somente quando "
+        "o usuario tiver pedido para agendar e confirmado por voz. Antes de "
+        "chamar, colete titulo, data, horario, duracao e convidados."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "title": {
+                "type": "string",
+                "description": "Titulo do evento.",
+            },
+            "start_time": {
+                "type": "string",
+                "description": (
+                    "Data e hora de inicio em ISO 8601. Exemplo: "
+                    "2026-05-30T14:00:00-03:00."
+                ),
+            },
+            "duration_minutes": {
+                "type": "integer",
+                "description": "Duracao do evento em minutos.",
+                "default": 30,
+            },
+            "attendees": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Lista de e-mails dos convidados.",
+            },
+            "description": {
+                "type": "string",
+                "description": "Descricao opcional do evento.",
+            },
+            "user_name": {
+                "type": "string",
+                "description": "Nome de quem pediu o agendamento.",
+            },
+        },
+        "required": ["title", "start_time"],
+    },
+}
+
+
+MCP_TOOLS = [COEVO_ASK_TOOL, COEVO_SCHEDULE_MEETING_TOOL]
 
 
 def _json_dumps(payload: dict[str, Any]) -> str:
@@ -121,11 +178,49 @@ def _merge_message(arguments: dict[str, Any]) -> str:
     return message
 
 
+def _string_value(value: object, fallback: str = "") -> str:
+    if value is None:
+        return fallback
+    return str(value).strip() or fallback
+
+
 def _email_or_none(value: object) -> str | None:
     if value is None:
         return None
     email = str(value).strip()
     return email if "@" in email else None
+
+
+def _attendee_list(value: object) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        raw_items = value.replace(";", ",").split(",")
+    elif isinstance(value, list):
+        raw_items = value
+    else:
+        return []
+
+    emails: list[str] = []
+    seen: set[str] = set()
+    for item in raw_items:
+        email = str(item).strip().lower()
+        if "@" not in email or email in seen:
+            continue
+        seen.add(email)
+        emails.append(email)
+    return emails
+
+
+def _parse_start_time(settings: Settings, value: object) -> datetime:
+    raw = _string_value(value)
+    if not raw:
+        raise ValueError("start_time is required.")
+
+    parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=ZoneInfo(settings.google_calendar_time_zone))
+    return parsed
 
 
 async def _call_coevo(*, settings: Settings, arguments: dict[str, Any]) -> str:
@@ -163,6 +258,80 @@ async def _call_coevo(*, settings: Settings, arguments: dict[str, Any]) -> str:
     return response.assistant_message.content
 
 
+async def _schedule_meeting(*, settings: Settings, arguments: dict[str, Any]) -> str:
+    profile = await get_agent_profile(settings=settings)
+    if "schedule_meeting" not in profile.enabled_actions:
+        return "O agendamento por voz esta desativado nas configuracoes do Coevo."
+
+    if "google_calendar" not in profile.enabled_integrations:
+        return "A integracao com Google Agenda esta desativada nas configuracoes do Coevo."
+
+    connection = await get_google_calendar_connection(settings=settings)
+    if not google_calendar_can_create_events(connection):
+        return (
+            "O Google Agenda precisa ser reconectado antes de eu conseguir criar "
+            "eventos."
+        )
+
+    title = _string_value(arguments.get("title"), "Reuniao agendada pelo Coevo")
+    try:
+        start_time = _parse_start_time(settings, arguments.get("start_time"))
+    except ValueError:
+        return (
+            "Nao consegui entender a data e o horario do evento. Envie a data e "
+            "hora no formato ISO, por exemplo 2026-05-30T14:00:00-03:00."
+        )
+
+    try:
+        duration_minutes = int(arguments.get("duration_minutes") or 30)
+    except (TypeError, ValueError):
+        duration_minutes = 30
+    duration_minutes = max(15, min(duration_minutes, 480))
+
+    attendees = _attendee_list(arguments.get("attendees"))
+    requester_name = _string_value(arguments.get("user_name"), settings.xiaozhi_mcp_user_name)
+    description = _string_value(arguments.get("description"))
+    if description:
+        description = f"{description}\n\nCriado pelo Coevo a pedido de {requester_name}."
+    else:
+        description = f"Criado pelo Coevo a pedido de {requester_name}."
+
+    try:
+        event = await create_google_calendar_event(
+            settings=settings,
+            title=title,
+            description=description,
+            start_time=start_time,
+            duration_minutes=duration_minutes,
+            attendees=attendees,
+        )
+    except GoogleCalendarAPIError as exc:
+        logger.exception("xiaozhi mcp calendar action failed")
+        return exc.public_detail
+    except Exception:
+        logger.exception("xiaozhi mcp calendar action failed")
+        return "Nao consegui criar o evento no Google Agenda agora."
+
+    start_text = start_time.astimezone(
+        ZoneInfo(settings.google_calendar_time_zone)
+    ).strftime("%d/%m/%Y as %H:%M")
+    attendee_text = (
+        f" com {len(attendees)} convidado{'s' if len(attendees) != 1 else ''}"
+        if attendees
+        else " sem convidados"
+    )
+    html_link = event.get("htmlLink")
+    if html_link:
+        return (
+            f"Evento criado no Google Agenda: {title}, em {start_text}, "
+            f"por {duration_minutes} minutos{attendee_text}. Link: {html_link}"
+        )
+    return (
+        f"Evento criado no Google Agenda: {title}, em {start_text}, "
+        f"por {duration_minutes} minutos{attendee_text}."
+    )
+
+
 async def handle_mcp_request(
     *,
     settings: Settings,
@@ -189,11 +358,11 @@ async def handle_mcp_request(
         )
 
     if method in {"tools/list", "list_tools"}:
-        return _json_rpc_response(request_id, {"tools": [COEVO_ASK_TOOL]})
+        return _json_rpc_response(request_id, {"tools": MCP_TOOLS})
 
     if method in {"tools/call", "call_tool"}:
         name, arguments = _extract_tool_arguments(params)
-        if name != COEVO_ASK_TOOL["name"]:
+        if name not in {tool["name"] for tool in MCP_TOOLS}:
             return _json_rpc_error(
                 request_id,
                 -32602,
@@ -201,9 +370,12 @@ async def handle_mcp_request(
             )
 
         try:
-            answer = await _call_coevo(settings=settings, arguments=arguments)
+            if name == COEVO_SCHEDULE_MEETING_TOOL["name"]:
+                answer = await _schedule_meeting(settings=settings, arguments=arguments)
+            else:
+                answer = await _call_coevo(settings=settings, arguments=arguments)
         except Exception:
-            logger.exception("xiaozhi mcp coevo.ask failed")
+            logger.exception("xiaozhi mcp tool failed: %s", name)
             return _json_rpc_error(
                 request_id,
                 -32000,
