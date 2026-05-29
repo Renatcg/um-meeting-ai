@@ -3,9 +3,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    livekit_url: str
-    livekit_api_key: str
-    livekit_api_secret: str
+    livekit_url: str = ""
+    livekit_api_key: str = ""
+    livekit_api_secret: str = ""
+    api_url: str = "http://localhost:8000"
     database_url: str = "postgresql://postgres:postgres@localhost:5432/um_meeting_ai"
     app_jwt_secret: str = "dev-only-change-me"
     openai_api_key: str | None = None

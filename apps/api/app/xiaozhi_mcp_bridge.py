@@ -3,23 +3,15 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime
 from typing import Any
 from uuid import uuid4
-from zoneinfo import ZoneInfo
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 import websockets
 from websockets.exceptions import ConnectionClosed
 
-from app.calendar_service import (
-    GoogleCalendarAPIError,
-    create_google_calendar_event,
-    google_calendar_can_create_events,
-)
 from app.config import Settings, get_settings
-from app.conversation_service import respond_with_agent_memory
-from app.database import get_agent_profile, get_google_calendar_connection
-from app.models import AgentRespondRequest
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +106,70 @@ MCP_TOOLS = [COEVO_ASK_TOOL, COEVO_SCHEDULE_MEETING_TOOL]
 
 def _json_dumps(payload: dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
+class CoevoAPIError(RuntimeError):
+    def __init__(self, detail: str, status_code: int | None = None) -> None:
+        super().__init__(detail)
+        self.detail = detail
+        self.status_code = status_code
+
+
+def _api_base_url(settings: Settings) -> str:
+    return settings.api_url.rstrip("/")
+
+
+def _request_json_sync(
+    *,
+    settings: Settings,
+    path: str,
+    payload: dict[str, Any],
+    authenticated: bool = False,
+) -> dict[str, Any]:
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "CoevoXiaoZhiMCP/0.1",
+    }
+    if authenticated and settings.agent_api_key:
+        headers["X-Agent-API-Key"] = settings.agent_api_key
+
+    request = Request(
+        f"{_api_base_url(settings)}{path}",
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=30) as response:
+            body = response.read().decode("utf-8", errors="replace")
+            return json.loads(body) if body else {}
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        detail = body
+        try:
+            parsed = json.loads(body)
+            detail = str(parsed.get("detail") or parsed)
+        except json.JSONDecodeError:
+            pass
+        raise CoevoAPIError(detail=detail, status_code=exc.code) from exc
+    except URLError as exc:
+        raise CoevoAPIError(detail=f"Nao consegui acessar a API principal: {exc.reason}") from exc
+
+
+async def _request_json(
+    *,
+    settings: Settings,
+    path: str,
+    payload: dict[str, Any],
+    authenticated: bool = False,
+) -> dict[str, Any]:
+    return await asyncio.to_thread(
+        _request_json_sync,
+        settings=settings,
+        path=path,
+        payload=payload,
+        authenticated=authenticated,
+    )
 
 
 def _json_rpc_response(request_id: Any, result: dict[str, Any]) -> dict[str, Any]:
@@ -212,17 +268,6 @@ def _attendee_list(value: object) -> list[str]:
     return emails
 
 
-def _parse_start_time(settings: Settings, value: object) -> datetime:
-    raw = _string_value(value)
-    if not raw:
-        raise ValueError("start_time is required.")
-
-    parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=ZoneInfo(settings.google_calendar_time_zone))
-    return parsed
-
-
 async def _call_coevo(*, settings: Settings, arguments: dict[str, Any]) -> str:
     message = _merge_message(arguments)
     if not message:
@@ -240,43 +285,30 @@ async def _call_coevo(*, settings: Settings, arguments: dict[str, Any]) -> str:
         arguments.get("organization_id") or settings.xiaozhi_mcp_organization_id
     )
 
-    response = await respond_with_agent_memory(
+    response = await _request_json(
         settings=settings,
-        payload=AgentRespondRequest(
-            agent_id=settings.xiaozhi_mcp_agent_id,
-            organization_id=organization_id,
-            channel="voice",
-            user_id=user_id,
-            user_name=user_name,
-            user_email=_email_or_none(
+        path="/agent/respond",
+        payload={
+            "agent_id": settings.xiaozhi_mcp_agent_id,
+            "organization_id": organization_id,
+            "channel": "voice",
+            "user_id": user_id,
+            "user_name": user_name,
+            "user_email": _email_or_none(
                 arguments.get("user_email") or settings.xiaozhi_mcp_user_email
             ),
-            message=message,
-            session_id=f"{settings.xiaozhi_mcp_session_prefix}-{session_seed}",
-        ),
+            "message": message,
+            "session_id": f"{settings.xiaozhi_mcp_session_prefix}-{session_seed}",
+            "requester_role": "host",
+        },
     )
-    return response.assistant_message.content
+    return str(response.get("assistant_message", {}).get("content") or "").strip()
 
 
 async def _schedule_meeting(*, settings: Settings, arguments: dict[str, Any]) -> str:
-    profile = await get_agent_profile(settings=settings)
-    if "schedule_meeting" not in profile.enabled_actions:
-        return "O agendamento por voz esta desativado nas configuracoes do Coevo."
-
-    if "google_calendar" not in profile.enabled_integrations:
-        return "A integracao com Google Agenda esta desativada nas configuracoes do Coevo."
-
-    connection = await get_google_calendar_connection(settings=settings)
-    if not google_calendar_can_create_events(connection):
-        return (
-            "O Google Agenda precisa ser reconectado antes de eu conseguir criar "
-            "eventos."
-        )
-
     title = _string_value(arguments.get("title"), "Reuniao agendada pelo Coevo")
-    try:
-        start_time = _parse_start_time(settings, arguments.get("start_time"))
-    except ValueError:
+    start_time = _string_value(arguments.get("start_time"))
+    if not start_time:
         return (
             "Nao consegui entender a data e o horario do evento. Envie a data e "
             "hora no formato ISO, por exemplo 2026-05-30T14:00:00-03:00."
@@ -291,43 +323,37 @@ async def _schedule_meeting(*, settings: Settings, arguments: dict[str, Any]) ->
     attendees = _attendee_list(arguments.get("attendees"))
     requester_name = _string_value(arguments.get("user_name"), settings.xiaozhi_mcp_user_name)
     description = _string_value(arguments.get("description"))
-    if description:
-        description = f"{description}\n\nCriado pelo Coevo a pedido de {requester_name}."
-    else:
-        description = f"Criado pelo Coevo a pedido de {requester_name}."
-
     try:
-        event = await create_google_calendar_event(
+        response = await _request_json(
             settings=settings,
-            title=title,
-            description=description,
-            start_time=start_time,
-            duration_minutes=duration_minutes,
-            attendees=attendees,
+            path="/agent/actions/calendar-event",
+            authenticated=True,
+            payload={
+                "title": title,
+                "description": description,
+                "start_time": start_time,
+                "duration_minutes": duration_minutes,
+                "attendees": attendees,
+                "requester_name": requester_name,
+            },
         )
-    except GoogleCalendarAPIError as exc:
+    except CoevoAPIError as exc:
         logger.exception("xiaozhi mcp calendar action failed")
-        return exc.public_detail
-    except Exception:
-        logger.exception("xiaozhi mcp calendar action failed")
-        return "Nao consegui criar o evento no Google Agenda agora."
+        return exc.detail or "Nao consegui criar o evento no Google Agenda agora."
 
-    start_text = start_time.astimezone(
-        ZoneInfo(settings.google_calendar_time_zone)
-    ).strftime("%d/%m/%Y as %H:%M")
     attendee_text = (
         f" com {len(attendees)} convidado{'s' if len(attendees) != 1 else ''}"
         if attendees
         else " sem convidados"
     )
-    html_link = event.get("htmlLink")
+    html_link = response.get("html_link")
     if html_link:
         return (
-            f"Evento criado no Google Agenda: {title}, em {start_text}, "
+            f"Evento criado no Google Agenda: {title}, em {start_time}, "
             f"por {duration_minutes} minutos{attendee_text}. Link: {html_link}"
         )
     return (
-        f"Evento criado no Google Agenda: {title}, em {start_text}, "
+        f"Evento criado no Google Agenda: {title}, em {start_time}, "
         f"por {duration_minutes} minutos{attendee_text}."
     )
 

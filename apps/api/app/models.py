@@ -488,6 +488,24 @@ class AgentRespondResponse(BaseModel):
     memory_results: list[MeetingMemorySearchResult] = Field(default_factory=list)
 
 
+class AgentCalendarActionRequest(BaseModel):
+    title: str = Field(min_length=2, max_length=160)
+    description: str = Field(default="", max_length=1200)
+    start_time: datetime
+    duration_minutes: int = Field(default=30, ge=15, le=480)
+    attendees: list[EmailStr] = Field(default_factory=list, max_length=30)
+    requester_name: str = Field(default="Smart speaker", min_length=1, max_length=120)
+
+
+class AgentCalendarActionResponse(BaseModel):
+    created: bool
+    event_id: str
+    html_link: str | None = None
+    attendee_count: int
+    attendees: list[EmailStr]
+    organizer_email: EmailStr | None = None
+
+
 class DevConsoleMessage(BaseModel):
     id: int
     author: str

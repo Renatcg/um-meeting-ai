@@ -32,6 +32,8 @@ Configure no ambiente do servico que vai rodar o bridge:
 
 ```env
 XIAOZHI_MCP_ENDPOINT=wss://api.xiaozhi.me/mcp/?token=seu-token
+API_URL=https://um-meeting-ai-production.up.railway.app
+AGENT_API_KEY=mesmo-agent-api-key-da-api-principal
 XIAOZHI_MCP_ORGANIZATION_ID=default
 XIAOZHI_MCP_AGENT_ID=coevo
 XIAOZHI_MCP_USER_ID=xiaozhi-device
@@ -43,6 +45,10 @@ XIAOZHI_MCP_RECONNECT_SECONDS=8
 
 Nunca commite a URL real com token. O endpoint MCP deve ficar apenas nas
 variaveis do Railway ou no ambiente local de teste.
+
+O bridge e apenas um adaptador. Ele nao acessa banco, OpenAI ou Google Agenda
+diretamente. Ele chama a API principal usando `API_URL` e `AGENT_API_KEY`.
+Por isso, as variaveis completas continuam concentradas na API principal.
 
 ## Como rodar
 
@@ -58,6 +64,14 @@ O `Procfile` tambem expoe o processo:
 ```text
 xiaozhi-mcp: python -m app.xiaozhi_mcp_bridge
 ```
+
+Variaveis minimas desse servico:
+
+- `XIAOZHI_MCP_ENDPOINT`
+- `API_URL`
+- `AGENT_API_KEY`
+
+As demais variaveis do Coevo ficam na API principal.
 
 ## O que o bridge responde
 
@@ -141,6 +155,6 @@ start_time em ISO 8601, por exemplo 2026-05-30T14:00:00-03:00.
 
 - Este modo nao substitui o firmware proprietario do Coevo.
 - A voz e o wake word continuam sob controle do agente original.
-- O Coevo usa o mesmo `/agent/respond`, portanto acessa memoria, personalidade
-  e configuracoes ja existentes.
+- O bridge chama a API principal em `/agent/respond`, portanto acessa memoria,
+  personalidade e configuracoes ja existentes sem duplicar o cerebro do Coevo.
 - Acoes sensiveis continuam dependendo das politicas do backend Coevo.

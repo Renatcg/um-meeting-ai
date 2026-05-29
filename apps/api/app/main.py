@@ -120,6 +120,8 @@ from app.email_service import send_meeting_action_email, send_trial_confirmation
 from app.intervention_service import evaluate_intervention
 from app.models import (
     AgentProfile,
+    AgentCalendarActionRequest,
+    AgentCalendarActionResponse,
     AgentRespondRequest,
     AgentRespondResponse,
     AuthResponse,
@@ -806,6 +808,69 @@ async def read_conversation_messages(session_id: str) -> list[ConversationMessag
 @app.post("/agent/respond", response_model=AgentRespondResponse)
 async def respond_with_agent(payload: AgentRespondRequest) -> AgentRespondResponse:
     return await respond_with_agent_memory(settings=settings, payload=payload)
+
+
+@app.post(
+    "/agent/actions/calendar-event",
+    response_model=AgentCalendarActionResponse,
+    dependencies=[Depends(verify_agent_api_key)],
+)
+async def create_agent_calendar_action(
+    payload: AgentCalendarActionRequest,
+) -> AgentCalendarActionResponse:
+    profile = await get_agent_profile(settings=settings)
+    if "schedule_meeting" not in profile.enabled_actions:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Calendar action is disabled in agent settings.",
+        )
+
+    if "google_calendar" not in profile.enabled_integrations:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Google Calendar integration is disabled in agent settings.",
+        )
+
+    connection = await get_google_calendar_connection(settings=settings)
+    if not google_calendar_can_create_events(connection):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Google Calendar must be reconnected to authorize event creation.",
+        )
+
+    attendees = dedupe_emails([str(email) for email in payload.attendees])
+    try:
+        event = await create_google_calendar_event(
+            settings=settings,
+            title=payload.title,
+            description=(
+                f"{payload.description.strip()}\n\n"
+                f"Criado pelo Coevo a pedido de {payload.requester_name}."
+            ).strip(),
+            start_time=payload.start_time,
+            duration_minutes=payload.duration_minutes,
+            attendees=attendees,
+        )
+    except GoogleCalendarAPIError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=exc.public_detail,
+        ) from exc
+    except Exception as exc:
+        logger.exception("agent calendar action failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Calendar event could not be created.",
+        ) from exc
+
+    return AgentCalendarActionResponse(
+        created=True,
+        event_id=event.get("id", ""),
+        html_link=event.get("htmlLink"),
+        attendee_count=len(attendees),
+        attendees=attendees,
+        organizer_email=connection.get("calendar_email") if connection else None,
+    )
 
 
 async def authorize_smart_speaker_websocket(
