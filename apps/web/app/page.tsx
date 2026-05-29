@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -746,6 +746,64 @@ export default function HomePage() {
     return Date.now() - new Date(device.last_seen_at).getTime() < 2 * 60 * 1000;
   }
 
+  function resizeSmartSpeakerLogo(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      if (!file.type.startsWith("image/")) {
+        reject(new Error("Envie uma imagem valida."));
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("Nao foi possivel ler a imagem."));
+      reader.onload = () => {
+        const image = new Image();
+        image.onerror = () => reject(new Error("Nao foi possivel processar a imagem."));
+        image.onload = () => {
+          const size = 280;
+          const canvas = document.createElement("canvas");
+          canvas.width = size;
+          canvas.height = size;
+          const context = canvas.getContext("2d");
+          if (!context) {
+            reject(new Error("Nao foi possivel preparar a imagem."));
+            return;
+          }
+
+          context.clearRect(0, 0, size, size);
+          const scale = Math.min(size / image.width, size / image.height);
+          const width = image.width * scale;
+          const height = image.height * scale;
+          const x = (size - width) / 2;
+          const y = (size - height) / 2;
+          context.drawImage(image, x, y, width, height);
+          resolve(canvas.toDataURL("image/png"));
+        };
+        image.src = String(reader.result);
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleSmartSpeakerLogoUpload(
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setSmartSpeakerStatus(null);
+    try {
+      const logoUrl = await resizeSmartSpeakerLogo(file);
+      setSmartSpeakerForm((current) => ({ ...current, logoUrl }));
+      setSmartSpeakerStatus("Logo carregada. Salve o dispositivo para aplicar.");
+    } catch (err) {
+      setSmartSpeakerStatus(err instanceof Error ? err.message : "Erro inesperado.");
+    } finally {
+      event.target.value = "";
+    }
+  }
+
   async function loadSmartSpeakers() {
     if (!authToken || !sessionUser?.is_admin) {
       return;
@@ -1479,8 +1537,12 @@ export default function HomePage() {
   const navItemClass = (section: Section) =>
     `flex w-full items-center gap-4 rounded-lg px-4 py-3 text-left text-sm transition ${
       activeSection === section
-        ? "border border-[#FDBA74] bg-[#FFF3EA] font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)]"
-        : "font-medium text-[#73736B] hover:bg-[#F8F8F6] hover:text-[#11110F]"
+        ? activeSection === "meetings"
+          ? "border border-[#4FC3F7]/35 bg-[#4FC3F7]/10 font-semibold text-white shadow-[0_0_28px_rgba(79,195,247,0.18)]"
+          : "border border-[#FDBA74] bg-[#FFF3EA] font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)]"
+        : activeSection === "meetings"
+          ? "font-medium text-[#8EA2BA] hover:bg-white/5 hover:text-white"
+          : "font-medium text-[#73736B] hover:bg-[#F8F8F6] hover:text-[#11110F]"
     }`;
 
   if (!sessionUser) {
@@ -1621,39 +1683,88 @@ export default function HomePage() {
     );
   }
 
+  const isMeetingsHome = activeSection === "meetings";
+
   return (
-    <main className="min-h-screen overflow-hidden bg-white text-[#11110F]">
+    <main
+      className={`min-h-screen overflow-hidden ${
+        isMeetingsHome ? "bg-[#05070B] text-white" : "bg-white text-[#11110F]"
+      }`}
+    >
       <div
-        className="pointer-events-none fixed inset-0 opacity-60"
+        className={`pointer-events-none fixed inset-0 ${
+          isMeetingsHome ? "opacity-35" : "opacity-60"
+        }`}
         style={{
-          backgroundImage:
-            "linear-gradient(rgba(17,17,15,.055) 1px, transparent 1px), linear-gradient(90deg, rgba(17,17,15,.055) 1px, transparent 1px)",
+          backgroundImage: isMeetingsHome
+            ? "linear-gradient(rgba(79,195,247,.075) 1px, transparent 1px), linear-gradient(90deg, rgba(79,195,247,.075) 1px, transparent 1px)"
+            : "linear-gradient(rgba(17,17,15,.055) 1px, transparent 1px), linear-gradient(90deg, rgba(17,17,15,.055) 1px, transparent 1px)",
           backgroundSize: "42px 42px",
         }}
       />
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_70%_0%,rgba(249,115,22,0.12),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.86),#FFFFFF_72%)]" />
+      <div
+        className={`pointer-events-none fixed inset-0 ${
+          isMeetingsHome
+            ? "bg-[radial-gradient(circle_at_72%_0%,rgba(79,195,247,0.20),transparent_34%),radial-gradient(circle_at_15%_82%,rgba(79,195,247,0.10),transparent_30%),linear-gradient(180deg,rgba(5,7,11,0.78),#05070B_72%)]"
+            : "bg-[radial-gradient(circle_at_70%_0%,rgba(249,115,22,0.12),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.86),#FFFFFF_72%)]"
+        }`}
+      />
 
-      <header className="fixed left-0 right-0 top-0 z-20 flex min-h-20 items-center justify-between border-b border-[#E7E7E2] bg-white/85 px-4 py-4 backdrop-blur-xl lg:left-72 lg:px-8">
+      <header
+        className={`fixed left-0 right-0 top-0 z-20 flex min-h-20 items-center justify-between border-b px-4 py-4 backdrop-blur-xl lg:left-72 lg:px-8 ${
+          isMeetingsHome
+            ? "border-white/10 bg-[#070A10]/88"
+            : "border-[#E7E7E2] bg-white/85"
+        }`}
+      >
         <div className="flex items-center gap-4 lg:hidden">
           <p className="font-display text-lg font-semibold">Coevo</p>
         </div>
 
         <div className="hidden lg:block">
-          <p className="font-mono text-xs uppercase text-[#F97316]">Dashboard</p>
-          <p className="mt-1 text-sm text-[#73736B]">Videochamadas com Coevo</p>
+          <p
+            className={`font-mono text-xs uppercase ${
+              isMeetingsHome ? "text-[#4FC3F7]" : "text-[#F97316]"
+            }`}
+          >
+            Dashboard
+          </p>
+          <p className={`mt-1 text-sm ${isMeetingsHome ? "text-[#8EA2BA]" : "text-[#73736B]"}`}>
+            Videochamadas com Coevo
+          </p>
         </div>
 
         <div className="ml-auto flex items-center gap-3 sm:gap-5">
-          <p className="hidden font-mono text-xs text-[#73736B] sm:block">{currentDate}</p>
+          <p
+            className={`hidden font-mono text-xs sm:block ${
+              isMeetingsHome ? "text-[#B8C7D9]" : "text-[#73736B]"
+            }`}
+          >
+            {currentDate}
+          </p>
           <div className="hidden text-right sm:block">
-            <p className="text-sm font-semibold text-[#11110F]">{displayUser.name}</p>
-            <p className="text-xs text-[#73736B]">{displayUser.email}</p>
+            <p className={`text-sm font-semibold ${isMeetingsHome ? "text-white" : "text-[#11110F]"}`}>
+              {displayUser.name}
+            </p>
+            <p className={`text-xs ${isMeetingsHome ? "text-[#8EA2BA]" : "text-[#73736B]"}`}>
+              {displayUser.email}
+            </p>
           </div>
-          <div className="flex h-11 w-11 items-center justify-center rounded-full border border-[#FDBA74] bg-[#FFF3EA] text-sm font-bold text-[#F97316] shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+          <div
+            className={`flex h-11 w-11 items-center justify-center rounded-full border text-sm font-bold shadow-[0_18px_70px_rgba(17,17,15,0.07)] ${
+              isMeetingsHome
+                ? "border-[#4FC3F7]/50 bg-[#4FC3F7]/10 text-[#BFEFFF] shadow-[0_0_28px_rgba(79,195,247,0.22)]"
+                : "border-[#FDBA74] bg-[#FFF3EA] text-[#F97316]"
+            }`}
+          >
             {getInitials(displayUser.name)}
           </div>
           <button
-            className="hidden rounded-lg border border-[#E7E7E2] bg-white px-3 py-2 text-xs font-bold text-[#73736B] transition hover:border-[#F97316] hover:bg-[#FFF3EA] hover:text-[#11110F] sm:block"
+            className={`hidden rounded-lg border px-3 py-2 text-xs font-bold transition sm:block ${
+              isMeetingsHome
+                ? "border-white/10 bg-white/5 text-[#B8C7D9] hover:border-[#4FC3F7] hover:bg-[#4FC3F7]/10 hover:text-white"
+                : "border-[#E7E7E2] bg-white text-[#73736B] hover:border-[#F97316] hover:bg-[#FFF3EA] hover:text-[#11110F]"
+            }`}
             onClick={logout}
             type="button"
           >
@@ -1662,22 +1773,50 @@ export default function HomePage() {
         </div>
       </header>
 
-      <aside className="fixed bottom-0 left-0 top-0 z-30 hidden w-72 border-r border-[#E7E7E2] bg-white/90 p-5 backdrop-blur-xl lg:block">
-        <div className="flex items-center gap-3 border-b border-[#E7E7E2] pb-7">
-          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#11110F] font-display text-xl font-bold text-white shadow-[0_20px_80px_rgba(249,115,22,0.22)]">
+      <aside
+        className={`fixed bottom-0 left-0 top-0 z-30 hidden w-72 border-r p-5 backdrop-blur-xl lg:block ${
+          isMeetingsHome ? "border-white/10 bg-[#070A10]/92" : "border-[#E7E7E2] bg-white/90"
+        }`}
+      >
+        <div
+          className={`flex items-center gap-3 border-b pb-7 ${
+            isMeetingsHome ? "border-white/10" : "border-[#E7E7E2]"
+          }`}
+        >
+          <div
+            className={`flex h-12 w-12 items-center justify-center rounded-lg font-display text-xl font-bold text-white ${
+              isMeetingsHome
+                ? "border border-[#4FC3F7]/35 bg-[#05070B] shadow-[0_0_34px_rgba(79,195,247,0.22)]"
+                : "bg-[#11110F] shadow-[0_20px_80px_rgba(249,115,22,0.22)]"
+            }`}
+          >
             C
           </div>
           <div>
-            <p className="font-display text-xl font-semibold leading-tight text-[#11110F]">
+            <p
+              className={`font-display text-xl font-semibold leading-tight ${
+                isMeetingsHome ? "text-white" : "text-[#11110F]"
+              }`}
+            >
               Coevo
             </p>
-            <p className="font-mono text-xs uppercase text-[#F97316]">Grupo Coevo</p>
+            <p
+              className={`font-mono text-xs uppercase ${
+                isMeetingsHome ? "text-[#4FC3F7]" : "text-[#F97316]"
+              }`}
+            >
+              Grupo Coevo
+            </p>
           </div>
         </div>
 
         <nav className="mt-7 space-y-2">
           <button className={navItemClass("meetings")} type="button" onClick={() => setActiveSection("meetings")}>
-            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-[#F97316] font-mono text-xs font-bold text-white">
+            <span
+              className={`flex h-8 w-8 items-center justify-center rounded-md font-mono text-xs font-bold ${
+                isMeetingsHome ? "bg-[#4FC3F7] text-[#05070B]" : "bg-[#F97316] text-white"
+              }`}
+            >
               M
             </span>
             Reunioes
@@ -1752,10 +1891,24 @@ export default function HomePage() {
           ) : null}
         </nav>
 
-        <div className="absolute bottom-5 left-5 right-5 rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">
-          <p className="font-mono text-xs uppercase text-[#F97316]">Status</p>
-          <p className="mt-2 text-sm font-medium text-[#11110F]">Coevo pronto</p>
-          <p className="mt-1 text-xs leading-5 text-[#73736B]">
+        <div
+          className={`absolute bottom-5 left-5 right-5 rounded-lg border p-4 ${
+            isMeetingsHome
+              ? "border-[#4FC3F7]/25 bg-[#4FC3F7]/10 shadow-[0_0_28px_rgba(79,195,247,0.14)]"
+              : "border-[#E7E7E2] bg-[#FCFCFB]"
+          }`}
+        >
+          <p
+            className={`font-mono text-xs uppercase ${
+              isMeetingsHome ? "text-[#4FC3F7]" : "text-[#F97316]"
+            }`}
+          >
+            Status
+          </p>
+          <p className={`mt-2 text-sm font-medium ${isMeetingsHome ? "text-white" : "text-[#11110F]"}`}>
+            Coevo pronto
+          </p>
+          <p className={`mt-1 text-xs leading-5 ${isMeetingsHome ? "text-[#8EA2BA]" : "text-[#73736B]"}`}>
             A personalidade salva sera usada nas proximas reunioes.
           </p>
         </div>
@@ -1765,19 +1918,19 @@ export default function HomePage() {
         <div className="mx-auto max-w-6xl">
           {activeSection === "meetings" ? (
             <div className="text-center">
-              <p className="mx-auto mb-5 inline-flex rounded-full border border-[#FDBA74] bg-[#FFF3EA] px-4 py-2 font-mono text-xs uppercase text-[#F97316]">
+              <p className="mx-auto mb-5 inline-flex rounded-full border border-[#4FC3F7]/35 bg-[#4FC3F7]/10 px-4 py-2 font-mono text-xs uppercase text-[#BFEFFF] shadow-[0_0_24px_rgba(79,195,247,0.12)]">
                 Reunioes Coevo
               </p>
-              <h1 className="mx-auto max-w-4xl font-display text-5xl font-semibold leading-tight text-[#11110F] md:text-6xl">
+              <h1 className="mx-auto max-w-4xl font-display text-5xl font-semibold leading-tight text-white md:text-6xl">
                 Videochamadas Assistidas
               </h1>
-              <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-[#73736B]">
+              <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-[#8EA2BA]">
                 Grupo Coevo
               </p>
 
               <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
                 <button
-                  className="rounded-lg bg-[#11110F] px-7 py-4 text-base font-bold text-white shadow-[0_20px_80px_rgba(249,115,22,0.22)] transition hover:translate-y-[-1px] hover:bg-[#F97316] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded-lg bg-[#4FC3F7] px-7 py-4 text-base font-bold text-[#05070B] shadow-[0_0_34px_rgba(79,195,247,0.24)] transition hover:translate-y-[-1px] hover:shadow-[0_0_48px_rgba(79,195,247,0.38)] disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={isCreating}
                   onClick={createInstantMeeting}
                   type="button"
@@ -1785,7 +1938,7 @@ export default function HomePage() {
                   {isCreating ? "Criando..." : "Criar Reuniao Instantanea"}
                 </button>
                 <button
-                  className="rounded-lg border border-[#E7E7E2] bg-white px-7 py-4 text-base font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)] transition hover:border-[#F97316] hover:bg-[#FFF3EA]"
+                  className="rounded-lg border border-white/10 bg-white/5 px-7 py-4 text-base font-semibold text-white shadow-[0_18px_70px_rgba(0,0,0,0.25)] transition hover:border-[#4FC3F7] hover:bg-[#4FC3F7]/10 hover:shadow-[0_0_30px_rgba(79,195,247,0.16)]"
                   onClick={scheduleMeeting}
                   type="button"
                 >
@@ -1799,25 +1952,25 @@ export default function HomePage() {
                 </p>
               ) : null}
 
-              <div className="mx-auto mt-12 h-px max-w-3xl bg-gradient-to-r from-transparent via-[#E7E7E2] to-transparent" />
+              <div className="mx-auto mt-12 h-px max-w-3xl bg-gradient-to-r from-transparent via-[#4FC3F7]/25 to-transparent" />
 
               <section className="mx-auto mt-10 max-w-3xl text-left">
                 <div className="mb-4 flex items-center justify-between gap-4">
-                  <h2 className="font-display text-xl font-semibold text-[#11110F]">
+                  <h2 className="font-display text-xl font-semibold text-white">
                     Reunioes para as quais voce foi convidado
                   </h2>
-                  <p className="font-mono text-xs uppercase text-[#73736B]">
+                  <p className="font-mono text-xs uppercase text-[#8EA2BA]">
                     {invitedMeetings.length} convites
                   </p>
                 </div>
 
-                <div className="overflow-hidden rounded-lg border border-[#E7E7E2] bg-white shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                <div className="overflow-hidden rounded-xl border border-white/10 bg-[#070A10]/92 shadow-[0_24px_90px_rgba(0,0,0,0.35)] backdrop-blur-xl">
                   {invitedMeetings.length === 0 ? (
                     <div className="px-5 py-7 text-center">
-                      <p className="text-sm font-semibold text-[#11110F]">
+                      <p className="text-sm font-semibold text-white">
                         Nenhum convite encontrado
                       </p>
-                      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#73736B]">
+                      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#8EA2BA]">
                         Quando voce for convidado para uma reuniao, ela aparecera aqui.
                       </p>
                     </div>
@@ -1827,11 +1980,11 @@ export default function HomePage() {
 
               <section className="mx-auto mt-8 max-w-3xl text-left">
                 <div className="mb-4 flex items-center justify-between gap-4">
-                  <h2 className="font-display text-xl font-semibold text-[#11110F]">
+                  <h2 className="font-display text-xl font-semibold text-white">
                     Historico das reunioes que participou
                   </h2>
                   <button
-                    className="rounded-md border border-[#E7E7E2] bg-white px-3 py-2 font-mono text-xs uppercase text-[#73736B] transition hover:border-[#F97316] hover:bg-[#FFF3EA] hover:text-[#11110F]"
+                    className="rounded-md border border-white/10 bg-white/5 px-3 py-2 font-mono text-xs uppercase text-[#B8C7D9] transition hover:border-[#4FC3F7] hover:bg-[#4FC3F7]/10 hover:text-white"
                     disabled={isLoadingMeetingHistory}
                     onClick={loadMeetingHistory}
                     type="button"
@@ -1840,7 +1993,7 @@ export default function HomePage() {
                   </button>
                 </div>
 
-                <div className="overflow-hidden rounded-lg border border-[#E7E7E2] bg-white shadow-[0_18px_70px_rgba(17,17,15,0.07)]">
+                <div className="overflow-hidden rounded-xl border border-white/10 bg-[#070A10]/92 shadow-[0_24px_90px_rgba(0,0,0,0.35)] backdrop-blur-xl">
                   {meetingHistoryStatus ? (
                     <div className="border-b border-red-100 bg-red-50 px-5 py-3 text-sm text-red-700">
                       {meetingHistoryStatus}
@@ -1848,38 +2001,38 @@ export default function HomePage() {
                   ) : null}
                   {meetingHistory.length === 0 ? (
                     <div className="px-5 py-7 text-center">
-                      <p className="text-sm font-semibold text-[#11110F]">
+                      <p className="text-sm font-semibold text-white">
                         Nenhuma reuniao no historico
                       </p>
-                      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#73736B]">
+                      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#8EA2BA]">
                         As reunioes encerradas em que voce participou serao listadas aqui.
                       </p>
                     </div>
                   ) : (
-                    <div className="divide-y divide-[#E7E7E2]">
+                    <div className="divide-y divide-white/10">
                       {meetingHistory.map((meeting) => (
                         <article
-                          className="grid gap-4 px-5 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
+                          className="grid gap-4 px-5 py-4 transition hover:bg-white/[0.03] md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
                           key={meeting.id}
                         >
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
-                              <p className="truncate text-sm font-bold text-[#11110F]">
+                              <p className="truncate text-sm font-bold text-white">
                                 {meeting.title}
                               </p>
-                              <span className="rounded-full border border-[#E7E7E2] bg-[#FCFCFB] px-2 py-1 text-[11px] font-bold uppercase text-[#73736B]">
+                              <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-bold uppercase text-[#B8C7D9]">
                                 {meetingStatusLabel(meeting)}
                               </span>
                               {meeting.recording_url ? (
-                                <span className="rounded-full border border-[#FDBA74] bg-[#FFF3EA] px-2 py-1 text-[11px] font-bold uppercase text-[#F97316]">
+                                <span className="rounded-full border border-[#4FC3F7]/35 bg-[#4FC3F7]/10 px-2 py-1 text-[11px] font-bold uppercase text-[#8EDCFF]">
                                   Gravada
                                 </span>
                               ) : null}
                             </div>
-                            <p className="mt-2 font-mono text-xs text-[#73736B]">
+                            <p className="mt-2 font-mono text-xs text-[#8EA2BA]">
                               {meeting.id}
                             </p>
-                            <p className="mt-2 text-xs text-[#73736B]">
+                            <p className="mt-2 text-xs text-[#8EA2BA]">
                               Criada em {formatMeetingDate(meeting.created_at)}
                               {meeting.ended_at
                                 ? ` - encerrada em ${formatMeetingDate(meeting.ended_at)}`
@@ -1887,15 +2040,15 @@ export default function HomePage() {
                             </p>
                           </div>
                           <div className="flex flex-wrap gap-2 md:justify-end">
-                            <span className="rounded-md bg-[#FCFCFB] px-3 py-2 text-xs font-semibold text-[#73736B]">
+                            <span className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-[#B8C7D9]">
                               {meeting.participant_count} participante
                               {meeting.participant_count === 1 ? "" : "s"}
                             </span>
-                            <span className="rounded-md bg-[#FCFCFB] px-3 py-2 text-xs font-semibold text-[#73736B]">
+                            <span className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-[#B8C7D9]">
                               {meeting.transcript_count} transcricao
                               {meeting.transcript_count === 1 ? "" : "s"}
                             </span>
-                            <span className="rounded-md bg-[#FCFCFB] px-3 py-2 text-xs font-semibold text-[#73736B]">
+                            <span className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-[#B8C7D9]">
                               {meeting.memory_count} memoria
                               {meeting.memory_count === 1 ? "" : "s"}
                             </span>
@@ -2502,22 +2655,55 @@ export default function HomePage() {
                       />
                     </label>
 
-                    <label>
-                      <span className="mb-2 block text-sm font-semibold">
+                    <div className="rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">
+                      <span className="mb-3 block text-sm font-semibold">
                         Logo exibida no dispositivo
                       </span>
-                      <input
-                        className="w-full rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] px-4 py-3 text-sm outline-none focus:border-[#F97316]"
-                        value={smartSpeakerForm.logoUrl}
-                        onChange={(event) =>
-                          setSmartSpeakerForm((current) => ({
-                            ...current,
-                            logoUrl: event.target.value,
-                          }))
-                        }
-                        placeholder="https://..."
-                      />
-                    </label>
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                        <div className="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-xl border border-[#E7E7E2] bg-[#11110F] text-lg font-bold text-white">
+                          {smartSpeakerForm.logoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              alt=""
+                              className="h-full w-full object-contain"
+                              src={smartSpeakerForm.logoUrl}
+                            />
+                          ) : (
+                            "C"
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <label className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-[#F97316] bg-[#FFF3EA] px-4 py-3 text-sm font-bold text-[#C2410C] transition hover:bg-[#F97316] hover:text-white">
+                            Enviar logo
+                            <input
+                              accept="image/png,image/jpeg,image/webp"
+                              className="sr-only"
+                              onChange={handleSmartSpeakerLogoUpload}
+                              type="file"
+                            />
+                          </label>
+                          <p className="mt-2 text-xs leading-5 text-[#73736B]">
+                            A imagem sera reduzida e salva junto da configuracao do
+                            dispositivo. Ela passa a aparecer no painel e na proxima
+                            configuracao carregada pelo ESP32.
+                          </p>
+                        </div>
+                        {smartSpeakerForm.logoUrl ? (
+                          <button
+                            className="rounded-lg border border-[#E7E7E2] bg-white px-4 py-3 text-sm font-bold text-[#73736B] transition hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+                            onClick={() =>
+                              setSmartSpeakerForm((current) => ({
+                                ...current,
+                                logoUrl: "",
+                              }))
+                            }
+                            type="button"
+                          >
+                            Remover
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
 
                     <div className="grid gap-4 sm:grid-cols-2">
                       <label className="rounded-lg border border-[#E7E7E2] bg-[#FCFCFB] p-4">

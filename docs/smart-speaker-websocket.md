@@ -41,6 +41,12 @@ O painel também guarda as configurações que o ESP32 deve buscar:
 O Wi-Fi não é salvo no Coevo. Ele deve ser configurado localmente pelo portal do
 próprio ESP32.
 
+A logo pode ser enviada pelo painel administrativo como arquivo de imagem. O
+frontend reduz a imagem e salva como `data:image/png;base64,...` no cadastro do
+dispositivo. O ESP32 recebe esse valor no campo `logo_url` ao buscar a
+configuração. Para exibir a logo na tela, o firmware precisa ler esse campo e
+desenhar a imagem no display.
+
 ## Autenticação
 
 Configure no Railway:
@@ -124,7 +130,9 @@ Para configurar a sessão:
 ```
 
 O padrão do canal é `audio/wav`, porque é o formato mais simples para o ESP32
-enviar no primeiro MVP. Depois podemos otimizar para Opus/streaming.
+enviar no primeiro MVP. A resposta de voz é `audio/mpeg`/MP3. Depois podemos
+otimizar a entrada para Opus/OGG ou streaming, mas isso exige mais trabalho no
+firmware e não é necessário para validar o ciclo principal.
 
 Para enviar áudio, o dispositivo pode mandar frames binários e, ao fim da fala,
 confirmar:
@@ -145,7 +153,7 @@ Também pode mandar áudio em base64:
 }
 ```
 
-A resposta vem com texto e áudio:
+A resposta pode vir com texto e áudio inline:
 
 ```json
 {
@@ -158,7 +166,7 @@ A resposta vem com texto e áudio:
 ```
 
 Para dispositivos com pouca memória, como ESP32, envie a mensagem com
-`audio_mode: "chunked"`:
+`audio_mode: "chunked"`. Este é o modo recomendado para o firmware atual:
 
 ```json
 {
