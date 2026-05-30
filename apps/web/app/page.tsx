@@ -590,6 +590,7 @@ export default function HomePage() {
   const [meetingHistoryStatus, setMeetingHistoryStatus] = useState<string | null>(null);
   const [isLoadingMeetingHistory, setIsLoadingMeetingHistory] = useState(false);
   const [visibleMeetingHistoryCount, setVisibleMeetingHistoryCount] = useState(3);
+  const [isMeetingHistoryOpen, setIsMeetingHistoryOpen] = useState(false);
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [editingLeadId, setEditingLeadId] = useState<number | null>(null);
   const [leadForm, setLeadForm] = useState<LeadForm>(emptyLeadForm);
@@ -1925,7 +1926,7 @@ export default function HomePage() {
 
       <section
         className={`relative z-10 min-h-screen px-5 sm:px-8 lg:ml-72 ${
-          isMeetingsHome ? "flex items-start pb-6 pt-28 lg:pt-28" : "pb-16 pt-32 lg:pt-32"
+          isMeetingsHome ? "flex items-start pb-6 pt-40 lg:pt-40" : "pb-16 pt-32 lg:pt-32"
         }`}
       >
         <div className="mx-auto w-full max-w-6xl">
@@ -1935,7 +1936,7 @@ export default function HomePage() {
                 Videochamadas Assistidas
               </h1>
 
-              <div className="mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
+              <div className="mt-24 flex flex-col items-center justify-center gap-4 sm:flex-row">
                 <button
                   className="rounded-lg bg-[#4FC3F7] px-7 py-4 text-base font-bold text-[#05070B] shadow-[0_0_34px_rgba(79,195,247,0.24)] transition hover:translate-y-[-1px] hover:shadow-[0_0_48px_rgba(79,195,247,0.38)] disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={isCreating}
@@ -1986,37 +1987,65 @@ export default function HomePage() {
               </section>
 
               <section className="mx-auto mt-6 max-w-4xl text-left">
-                <div className="mb-4 flex items-center justify-between gap-4">
-                  <h2 className="font-display text-xl font-semibold text-white">
-                    Historico das reunioes que participou
-                  </h2>
-                  <p className="font-mono text-xs uppercase text-[#8EA2BA]">
-                    {meetingHistory.length} registros
-                  </p>
-                </div>
+                <button
+                  aria-expanded={isMeetingHistoryOpen}
+                  className="mb-4 flex w-full items-center justify-between gap-4 rounded-xl border border-white/10 bg-[#070A10]/75 px-5 py-4 text-left shadow-[0_18px_70px_rgba(0,0,0,0.25)] transition hover:border-[#4FC3F7]/40 hover:bg-[#4FC3F7]/10"
+                  onClick={() => {
+                    setIsMeetingHistoryOpen((current) => !current);
+                    setVisibleMeetingHistoryCount(3);
+                  }}
+                  type="button"
+                >
+                  <span>
+                    <span className="block font-display text-xl font-semibold text-white">
+                      Historico das reunioes que participou
+                    </span>
+                    <span className="mt-1 block font-mono text-xs uppercase text-[#8EA2BA]">
+                      {isMeetingHistoryOpen
+                        ? `${Math.min(visibleMeetingHistoryCount, meetingHistory.length)} de ${meetingHistory.length} registros`
+                        : `${meetingHistory.length} registros colapsados`}
+                    </span>
+                  </span>
+                  <span
+                    className={`flex h-10 w-10 items-center justify-center rounded-full border border-[#4FC3F7]/35 bg-[#4FC3F7]/10 text-[#BFEFFF] transition ${
+                      isMeetingHistoryOpen ? "rotate-90" : ""
+                    }`}
+                  >
+                    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <path
+                        d="M9 6l6 6-6 6"
+                        stroke="currentColor"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="1.8"
+                      />
+                    </svg>
+                  </span>
+                </button>
 
-                <div className="overflow-hidden rounded-xl border border-white/10 bg-[#070A10]/92 shadow-[0_24px_90px_rgba(0,0,0,0.35)] backdrop-blur-xl">
-                  {meetingHistoryStatus ? (
-                    <div className="border-b border-red-100 bg-red-50 px-5 py-3 text-sm text-red-700">
-                      {meetingHistoryStatus}
-                    </div>
-                  ) : null}
-                  {meetingHistory.length === 0 ? (
-                    <div className="px-5 py-7 text-center">
-                      <p className="text-sm font-semibold text-white">
-                        Nenhuma reuniao no historico
-                      </p>
-                      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#8EA2BA]">
-                        As reunioes encerradas em que voce participou serao listadas aqui.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-white/10">
-                      {visibleMeetingHistory.map((meeting) => (
-                        <article
-                          className="grid gap-4 px-5 py-4 transition hover:bg-white/[0.03] md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
-                          key={meeting.id}
-                        >
+                {isMeetingHistoryOpen ? (
+                  <div className="overflow-hidden rounded-xl border border-white/10 bg-[#070A10]/92 shadow-[0_24px_90px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+                    {meetingHistoryStatus ? (
+                      <div className="border-b border-red-100 bg-red-50 px-5 py-3 text-sm text-red-700">
+                        {meetingHistoryStatus}
+                      </div>
+                    ) : null}
+                    {meetingHistory.length === 0 ? (
+                      <div className="px-5 py-7 text-center">
+                        <p className="text-sm font-semibold text-white">
+                          Nenhuma reuniao no historico
+                        </p>
+                        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#8EA2BA]">
+                          As reunioes encerradas em que voce participou serao listadas aqui.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-white/10">
+                        {visibleMeetingHistory.map((meeting) => (
+                          <article
+                            className="grid gap-4 px-5 py-4 transition hover:bg-white/[0.03] md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
+                            key={meeting.id}
+                          >
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
                               <p className="truncate text-sm font-bold text-white">
@@ -2119,24 +2148,25 @@ export default function HomePage() {
                               </svg>
                             </span>
                           </div>
-                        </article>
-                      ))}
-                      {hasMoreMeetingHistory ? (
-                        <div className="px-5 py-4 text-center">
-                          <button
-                            className="rounded-md border border-[#4FC3F7]/35 bg-[#4FC3F7]/10 px-4 py-2 font-mono text-xs uppercase text-[#BFEFFF] transition hover:bg-[#4FC3F7]/20"
-                            onClick={() =>
-                              setVisibleMeetingHistoryCount((current) => current + 3)
-                            }
-                            type="button"
-                          >
-                            Carregar mais
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                  )}
-                </div>
+                          </article>
+                        ))}
+                        {hasMoreMeetingHistory ? (
+                          <div className="px-5 py-4 text-center">
+                            <button
+                              className="rounded-md border border-[#4FC3F7]/35 bg-[#4FC3F7]/10 px-4 py-2 font-mono text-xs uppercase text-[#BFEFFF] transition hover:bg-[#4FC3F7]/20"
+                              onClick={() =>
+                                setVisibleMeetingHistoryCount((current) => current + 3)
+                              }
+                              type="button"
+                            >
+                              Carregar mais
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
               </section>
             </div>
           ) : null}
