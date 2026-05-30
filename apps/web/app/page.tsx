@@ -13,6 +13,7 @@ type Section =
   | "devices"
   | "leads"
   | "users";
+type Environment = "select" | "desktop" | "coevo";
 type CoevoConfigTab =
   | "identity"
   | "voice"
@@ -553,6 +554,7 @@ function Slider({
 export default function HomePage() {
   const router = useRouter();
   const [activeSection, setActiveSection] = useState<Section>("meetings");
+  const [activeEnvironment, setActiveEnvironment] = useState<Environment>("select");
   const [activeCoevoTab, setActiveCoevoTab] = useState<CoevoConfigTab>("identity");
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [authToken, setAuthToken] = useState<string | null>(null);
@@ -654,6 +656,7 @@ export default function HomePage() {
         return;
       }
       setSessionUser((await response.json()) as AppUser);
+      setActiveEnvironment("select");
     } catch {
       window.localStorage.removeItem("coevo-auth-token");
       setAuthToken(null);
@@ -697,6 +700,7 @@ export default function HomePage() {
       window.localStorage.setItem("coevo-auth-token", result.access_token);
       setAuthToken(result.access_token);
       setSessionUser(result.user);
+      setActiveEnvironment("select");
       setAuthForm(emptyAuthForm);
       setAuthStatus(null);
     } catch (err) {
@@ -710,6 +714,7 @@ export default function HomePage() {
     window.localStorage.removeItem("coevo-auth-token");
     setAuthToken(null);
     setSessionUser(null);
+    setActiveEnvironment("select");
     setActiveSection("meetings");
   }
 
@@ -1069,7 +1074,9 @@ export default function HomePage() {
     setMeetingHistoryStatus(null);
 
     try {
-      const response = await fetch(`${apiUrl}/meetings/history?limit=50`);
+      const response = await fetch(`${apiUrl}/meetings/history?limit=50`, {
+        headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+      });
       if (!response.ok) {
         throw new Error("Nao foi possivel carregar o historico.");
       }
@@ -1331,6 +1338,10 @@ export default function HomePage() {
   }
 
   useEffect(() => {
+    if (!authToken || !sessionUser) {
+      return;
+    }
+
     let cancelled = false;
 
     async function loadProfile() {
@@ -1358,7 +1369,7 @@ export default function HomePage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authToken, sessionUser]);
 
   useEffect(() => {
     if (sessionUser?.is_admin) {
@@ -1566,6 +1577,17 @@ export default function HomePage() {
           : "font-medium text-[#73736B] hover:bg-[#F8F8F6] hover:text-[#11110F]"
     }`;
 
+  function openDesktopEnvironment() {
+    setActiveEnvironment("desktop");
+    setActiveSection("meetings");
+  }
+
+  function openCoevoEnvironment() {
+    setActiveEnvironment("coevo");
+    setActiveSection("coevo");
+    setActiveCoevoTab("identity");
+  }
+
   if (!sessionUser) {
     return (
       <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-white px-5 py-10 text-[#11110F]">
@@ -1704,7 +1726,9 @@ export default function HomePage() {
     );
   }
 
-  const isMeetingsHome = activeSection === "meetings";
+  const isEnvironmentSelector = activeEnvironment === "select";
+  const showSidebar = !isEnvironmentSelector;
+  const isMeetingsHome = isEnvironmentSelector || activeSection === "meetings";
 
   return (
     <main
@@ -1732,7 +1756,9 @@ export default function HomePage() {
       />
 
       <header
-        className={`fixed left-0 right-0 top-0 z-20 flex items-center justify-between border-b px-4 backdrop-blur-xl lg:left-72 lg:px-8 ${
+        className={`fixed left-0 right-0 top-0 z-20 flex items-center justify-between border-b px-4 backdrop-blur-xl lg:px-8 ${
+          showSidebar ? "lg:left-72" : ""
+        } ${
           isMeetingsHome
             ? "min-h-16 border-white/10 bg-[#070A10]/88 py-3"
             : "min-h-20 border-[#E7E7E2] bg-white/85 py-4"
@@ -1742,7 +1768,12 @@ export default function HomePage() {
           <p className="font-display text-lg font-semibold">Coevo</p>
         </div>
 
-        {isMeetingsHome ? (
+        {isEnvironmentSelector ? (
+          <div className="hidden lg:block">
+            <p className="font-mono text-xs uppercase text-[#4FC3F7]">Ambientes</p>
+            <p className="mt-1 text-sm text-[#8EA2BA]">Selecione onde deseja trabalhar</p>
+          </div>
+        ) : isMeetingsHome ? (
           <div className="hidden lg:block" />
         ) : (
           <div className="hidden lg:block">
@@ -1790,6 +1821,7 @@ export default function HomePage() {
         </div>
       </header>
 
+      {showSidebar ? (
       <aside
         className={`fixed bottom-0 left-0 top-0 z-30 hidden w-72 border-r p-5 backdrop-blur-xl lg:block ${
           isMeetingsHome ? "border-white/10 bg-[#070A10]/92" : "border-[#E7E7E2] bg-white/90"
@@ -1923,14 +1955,100 @@ export default function HomePage() {
           </p>
         </div>
       </aside>
+      ) : null}
 
       <section
-        className={`relative z-10 min-h-screen px-5 sm:px-8 lg:ml-72 ${
+        className={`relative z-10 min-h-screen px-5 sm:px-8 ${
+          showSidebar ? "lg:ml-72" : ""
+        } ${
           isMeetingsHome ? "flex items-start pb-6 pt-40 lg:pt-40" : "pb-16 pt-32 lg:pt-32"
         }`}
       >
         <div className="mx-auto w-full max-w-6xl">
-          {activeSection === "meetings" ? (
+          {isEnvironmentSelector ? (
+            <div className="mx-auto max-w-5xl">
+              <div className="grid gap-5 md:grid-cols-2">
+                <button
+                  className="group min-h-[300px] rounded-2xl border border-[#4FC3F7]/25 bg-[#070A10]/88 p-6 text-left shadow-[0_30px_120px_rgba(0,0,0,0.36)] transition hover:-translate-y-1 hover:border-[#4FC3F7]/70 hover:bg-[#4FC3F7]/10 hover:shadow-[0_0_54px_rgba(79,195,247,0.22)]"
+                  onClick={openDesktopEnvironment}
+                  type="button"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-[#4FC3F7]/35 bg-[#4FC3F7]/10 text-[#BFEFFF] shadow-[0_0_30px_rgba(79,195,247,0.20)]">
+                      <svg aria-hidden="true" className="h-7 w-7" fill="none" viewBox="0 0 24 24">
+                        <rect
+                          height="11"
+                          rx="2"
+                          stroke="currentColor"
+                          strokeWidth="1.7"
+                          width="16"
+                          x="4"
+                          y="5"
+                        />
+                        <path
+                          d="M9 20h6M12 16v4"
+                          stroke="currentColor"
+                          strokeLinecap="round"
+                          strokeWidth="1.7"
+                        />
+                      </svg>
+                    </div>
+                    <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 font-mono text-[11px] uppercase text-[#8EA2BA]">
+                      Operacao
+                    </span>
+                  </div>
+                  <h2 className="mt-10 font-display text-3xl font-semibold text-white">
+                    Desktop
+                  </h2>
+                  <p className="mt-4 max-w-md text-sm leading-7 text-[#8EA2BA]">
+                    Reunioes, memoria, leads, historico e tudo o que o
+                    funcionario precisa para trabalhar no dia a dia.
+                  </p>
+                  <span className="mt-8 inline-flex items-center gap-2 font-mono text-xs uppercase text-[#4FC3F7]">
+                    Entrar no Desktop
+                    <span className="transition group-hover:translate-x-1">→</span>
+                  </span>
+                </button>
+
+                <button
+                  className="group min-h-[300px] rounded-2xl border border-white/10 bg-[#070A10]/70 p-6 text-left shadow-[0_30px_120px_rgba(0,0,0,0.28)] transition hover:-translate-y-1 hover:border-[#4FC3F7]/70 hover:bg-[#4FC3F7]/10 hover:shadow-[0_0_54px_rgba(79,195,247,0.18)]"
+                  onClick={openCoevoEnvironment}
+                  type="button"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="relative flex h-14 w-14 items-center justify-center rounded-full border border-[#4FC3F7]/35 bg-[#4FC3F7]/10 text-[#BFEFFF] shadow-[0_0_34px_rgba(79,195,247,0.20)]">
+                      <span className="absolute inset-[-8px] rounded-full border border-[#4FC3F7]/15" />
+                      <svg aria-hidden="true" className="relative h-7 w-7" fill="none" viewBox="0 0 24 24">
+                        <path
+                          d="M12 3v3M12 18v3M4.8 7.2l2.1 2.1M17.1 14.7l2.1 2.1M3 12h3M18 12h3M4.8 16.8l2.1-2.1M17.1 9.3l2.1-2.1"
+                          stroke="currentColor"
+                          strokeLinecap="round"
+                          strokeWidth="1.6"
+                        />
+                        <circle cx="12" cy="12" r="3.2" stroke="currentColor" strokeWidth="1.6" />
+                      </svg>
+                    </div>
+                    <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 font-mono text-[11px] uppercase text-[#8EA2BA]">
+                      IA
+                    </span>
+                  </div>
+                  <h2 className="mt-10 font-display text-3xl font-semibold text-white">
+                    Configurar Coevo
+                  </h2>
+                  <p className="mt-4 max-w-md text-sm leading-7 text-[#8EA2BA]">
+                    Personalidade, voz, acoes, integracoes, tipos de reuniao,
+                    idiomas e dispositivos conectados.
+                  </p>
+                  <span className="mt-8 inline-flex items-center gap-2 font-mono text-xs uppercase text-[#4FC3F7]">
+                    Abrir configuracoes
+                    <span className="transition group-hover:translate-x-1">→</span>
+                  </span>
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {!isEnvironmentSelector && activeSection === "meetings" ? (
             <div className="text-center">
               <h1 className="mx-auto max-w-4xl font-display text-4xl font-semibold leading-tight text-white md:text-5xl">
                 Videochamadas Assistidas

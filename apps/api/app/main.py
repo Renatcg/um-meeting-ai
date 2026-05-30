@@ -1721,7 +1721,11 @@ async def get_recent_meetings(limit: int = 20) -> list[MeetingRecentSummary]:
 
 
 @app.get("/meetings/history", response_model=list[MeetingRecentSummary])
-async def get_meeting_history(limit: int = 20) -> list[MeetingRecentSummary]:
+async def get_meeting_history(
+    limit: int = 20,
+    claims: AppUserClaims = Depends(get_current_user_claims),
+) -> list[MeetingRecentSummary]:
+    _ = claims
     safe_limit = min(max(limit, 1), 50)
     return list(await list_recent_meetings(settings=settings, limit=safe_limit))
 
