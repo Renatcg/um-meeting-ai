@@ -585,6 +585,7 @@ class AgentProfile(BaseModel):
     id: str = Field(default="coevo", min_length=2, max_length=80)
     organization_id: str = Field(default="default", min_length=2, max_length=120)
     name: str = Field(default="Coevo", min_length=2, max_length=40)
+    logo_url: str | None = Field(default=None, max_length=300000)
     gender: AgentGender = "masculine"
     voice: AgentVoice = "marin"
     tone: str = Field(default="consultivo", max_length=80)

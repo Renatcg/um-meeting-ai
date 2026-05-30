@@ -50,6 +50,7 @@ type AgentVoice =
 
 type AgentProfile = {
   name: string;
+  logo_url?: string | null;
   gender: AgentGender;
   voice: AgentVoice;
   tone: string;
@@ -267,6 +268,7 @@ const emptySmartSpeakerForm: SmartSpeakerForm = {
 
 const defaultProfile: AgentProfile = {
   name: "Coevo",
+  logo_url: null,
   gender: "masculine",
   voice: "marin",
   tone: "consultivo",
@@ -581,6 +583,7 @@ export default function HomePage() {
   const [currentDate, setCurrentDate] = useState("");
   const [profile, setProfile] = useState<AgentProfile>(defaultProfile);
   const [profileStatus, setProfileStatus] = useState<string | null>(null);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [voiceDemoUrl, setVoiceDemoUrl] = useState<string | null>(null);
   const [isGeneratingVoice, setIsGeneratingVoice] = useState<AgentVoice | null>(null);
   const [knowledgeStatus, setKnowledgeStatus] = useState<string | null>(null);
@@ -619,6 +622,7 @@ export default function HomePage() {
   const companyMediaRef = useRef<HTMLInputElement | null>(null);
   const companyLinksRef = useRef<HTMLTextAreaElement | null>(null);
   const companyNotesRef = useRef<HTMLTextAreaElement | null>(null);
+  const coevoLogoRef = useRef<HTMLInputElement | null>(null);
   const displayUser = sessionUser ?? defaultSessionUser;
   const visibleMeetingHistory = meetingHistory.slice(0, visibleMeetingHistoryCount);
   const hasMoreMeetingHistory = visibleMeetingHistoryCount < meetingHistory.length;
@@ -796,6 +800,24 @@ export default function HomePage() {
       };
       reader.readAsDataURL(file);
     });
+  }
+
+  async function handleCoevoLogoUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setProfileStatus(null);
+    try {
+      const logoUrl = await resizeSmartSpeakerLogo(file);
+      setProfile((current) => ({ ...current, logo_url: logoUrl }));
+      setProfileStatus("Logo carregada. Salve as configuracoes para aplicar no cabecalho.");
+    } catch (err) {
+      setProfileStatus(err instanceof Error ? err.message : "Erro inesperado.");
+    } finally {
+      event.target.value = "";
+    }
   }
 
   async function handleSmartSpeakerLogoUpload(
@@ -1346,7 +1368,9 @@ export default function HomePage() {
 
     async function loadProfile() {
       try {
-        const response = await fetch(`${apiUrl}/agent/profile`);
+        const response = await fetch(`${apiUrl}/agent/profile`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
         if (!response.ok) {
           return;
         }
@@ -1450,7 +1474,10 @@ export default function HomePage() {
     try {
       const response = await fetch(`${apiUrl}/agent/profile`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(profile),
       });
 
@@ -1473,7 +1500,12 @@ export default function HomePage() {
     try {
       const response = await fetch(`${apiUrl}/agent/voice-demo`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authToken
+          ? {
+              Authorization: `Bearer ${authToken}`,
+              "Content-Type": "application/json",
+            }
+          : { "Content-Type": "application/json" },
         body: JSON.stringify({
           voice,
           text: "Ola, eu sou o Coevo. Vou acompanhar a reuniao com clareza, calma e foco no que importa.",
@@ -1567,11 +1599,11 @@ export default function HomePage() {
   }
 
   const navItemClass = (section: Section) =>
-    `flex w-full items-center gap-4 rounded-lg px-4 py-3 text-left text-sm transition ${
+    `flex w-full items-center gap-4 rounded-r-full px-4 py-3 text-left text-[15px] transition ${
       activeSection === section
         ? activeSection === "meetings"
-          ? "border border-[#4FC3F7]/35 bg-[#4FC3F7]/10 font-semibold text-white shadow-[0_0_28px_rgba(79,195,247,0.18)]"
-          : "border border-[#FDBA74] bg-[#FFF3EA] font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)]"
+          ? "bg-[#4FC3F7]/10 font-semibold text-white shadow-[0_0_28px_rgba(79,195,247,0.16)]"
+          : "bg-[#FFF3EA] font-semibold text-[#11110F] shadow-[0_18px_70px_rgba(17,17,15,0.07)]"
         : activeSection === "meetings"
           ? "font-medium text-[#8EA2BA] hover:bg-white/5 hover:text-white"
           : "font-medium text-[#73736B] hover:bg-[#F8F8F6] hover:text-[#11110F]"
@@ -1764,23 +1796,37 @@ export default function HomePage() {
             : "min-h-20 border-[#E7E7E2] bg-white/85 py-4"
         }`}
       >
-        <div className="flex items-center gap-4 lg:hidden">
-          <p className="font-display text-lg font-semibold">Coevo</p>
-        </div>
-
-        {isEnvironmentSelector ? (
-          <div className="hidden lg:block">
-            <p className="font-mono text-xs uppercase text-[#4FC3F7]">Ambientes</p>
-            <p className="mt-1 text-sm text-[#8EA2BA]">Selecione onde deseja trabalhar</p>
-          </div>
-        ) : isMeetingsHome ? (
-          <div className="hidden lg:block" />
-        ) : (
-          <div className="hidden lg:block">
-            <p className="font-mono text-xs uppercase text-[#F97316]">Dashboard</p>
-            <p className="mt-1 text-sm text-[#73736B]">Videochamadas com Coevo</p>
-          </div>
-        )}
+        <button
+          className={`mr-auto flex items-center gap-3 rounded-xl px-2 py-1.5 text-left transition ${
+            isMeetingsHome ? "text-white hover:bg-white/5" : "text-[#11110F] hover:bg-[#F8F8F6]"
+          }`}
+          onClick={() => setActiveEnvironment("select")}
+          type="button"
+        >
+          <span
+            className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border text-sm font-bold ${
+              isMeetingsHome
+                ? "border-[#4FC3F7]/35 bg-[#05070B] text-[#BFEFFF] shadow-[0_0_26px_rgba(79,195,247,0.18)]"
+                : "border-[#E7E7E2] bg-white text-[#11110F]"
+            }`}
+          >
+            {profile.logo_url ? (
+              <img alt="Logo" className="h-full w-full object-cover" src={profile.logo_url} />
+            ) : (
+              "C"
+            )}
+          </span>
+          <span className="hidden sm:block">
+            <span className="block text-sm font-bold leading-tight">Coevo</span>
+            <span className={`mt-0.5 block text-xs ${isMeetingsHome ? "text-[#8EA2BA]" : "text-[#73736B]"}`}>
+              {isEnvironmentSelector
+                ? "Selecionar ambiente"
+                : activeEnvironment === "coevo"
+                  ? "Configurar Coevo"
+                  : "Desktop"}
+            </span>
+          </span>
+        </button>
 
         <div className="ml-auto flex items-center gap-3 sm:gap-5">
           <p
@@ -1790,34 +1836,87 @@ export default function HomePage() {
           >
             {currentDate}
           </p>
-          <div className="hidden text-right sm:block">
-            <p className={`text-sm font-semibold ${isMeetingsHome ? "text-white" : "text-[#11110F]"}`}>
-              {displayUser.name}
-            </p>
-            <p className={`text-xs ${isMeetingsHome ? "text-[#8EA2BA]" : "text-[#73736B]"}`}>
-              {displayUser.email}
-            </p>
+          <div className="relative">
+            <button
+              className={`flex items-center gap-3 rounded-xl border px-2 py-2 text-left transition ${
+                isMeetingsHome
+                  ? "border-white/10 bg-white/5 hover:border-[#4FC3F7]/50 hover:bg-[#4FC3F7]/10"
+                  : "border-[#E7E7E2] bg-white hover:border-[#FDBA74] hover:bg-[#FFF3EA]"
+              }`}
+              onClick={() => setIsProfileMenuOpen((current) => !current)}
+              type="button"
+            >
+              <span className="hidden text-right sm:block">
+                <span className={`block text-sm font-semibold ${isMeetingsHome ? "text-white" : "text-[#11110F]"}`}>
+                  {displayUser.name}
+                </span>
+                <span className={`block text-xs ${isMeetingsHome ? "text-[#8EA2BA]" : "text-[#73736B]"}`}>
+                  {displayUser.email}
+                </span>
+              </span>
+              <span
+                className={`flex h-10 w-10 items-center justify-center rounded-full border text-sm font-bold shadow-[0_18px_70px_rgba(17,17,15,0.07)] ${
+                  isMeetingsHome
+                    ? "border-[#4FC3F7]/50 bg-[#4FC3F7]/10 text-[#BFEFFF] shadow-[0_0_28px_rgba(79,195,247,0.22)]"
+                    : "border-[#FDBA74] bg-[#FFF3EA] text-[#F97316]"
+                }`}
+              >
+                {getInitials(displayUser.name)}
+              </span>
+              <svg
+                aria-hidden="true"
+                className={`h-4 w-4 transition ${isProfileMenuOpen ? "rotate-180" : ""} ${
+                  isMeetingsHome ? "text-[#8EA2BA]" : "text-[#73736B]"
+                }`}
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  d="M7 10l5 5 5-5"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="1.8"
+                />
+              </svg>
+            </button>
+            {isProfileMenuOpen ? (
+              <div
+                className={`absolute right-0 top-[calc(100%+10px)] w-64 overflow-hidden rounded-xl border shadow-[0_24px_90px_rgba(0,0,0,0.24)] ${
+                  isMeetingsHome
+                    ? "border-white/10 bg-[#070A10] text-white"
+                    : "border-[#E7E7E2] bg-white text-[#11110F]"
+                }`}
+              >
+                <div className={`border-b px-4 py-3 ${isMeetingsHome ? "border-white/10" : "border-[#E7E7E2]"}`}>
+                  <p className="text-sm font-bold">{displayUser.name}</p>
+                  <p className={`mt-1 truncate text-xs ${isMeetingsHome ? "text-[#8EA2BA]" : "text-[#73736B]"}`}>
+                    {displayUser.email}
+                  </p>
+                </div>
+                <button
+                  className={`flex w-full items-center gap-3 px-4 py-3 text-sm font-semibold transition ${
+                    isMeetingsHome
+                      ? "text-[#B8C7D9] hover:bg-white/5 hover:text-white"
+                      : "text-[#73736B] hover:bg-[#FFF3EA] hover:text-[#11110F]"
+                  }`}
+                  onClick={logout}
+                  type="button"
+                >
+                  <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <path
+                      d="M10 6H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h4M15 8l4 4-4 4M19 12H9"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="1.8"
+                    />
+                  </svg>
+                  Sair
+                </button>
+              </div>
+            ) : null}
           </div>
-          <div
-            className={`flex h-11 w-11 items-center justify-center rounded-full border text-sm font-bold shadow-[0_18px_70px_rgba(17,17,15,0.07)] ${
-              isMeetingsHome
-                ? "border-[#4FC3F7]/50 bg-[#4FC3F7]/10 text-[#BFEFFF] shadow-[0_0_28px_rgba(79,195,247,0.22)]"
-                : "border-[#FDBA74] bg-[#FFF3EA] text-[#F97316]"
-            }`}
-          >
-            {getInitials(displayUser.name)}
-          </div>
-          <button
-            className={`hidden rounded-lg border px-3 py-2 text-xs font-bold transition sm:block ${
-              isMeetingsHome
-                ? "border-white/10 bg-white/5 text-[#B8C7D9] hover:border-[#4FC3F7] hover:bg-[#4FC3F7]/10 hover:text-white"
-                : "border-[#E7E7E2] bg-white text-[#73736B] hover:border-[#F97316] hover:bg-[#FFF3EA] hover:text-[#11110F]"
-            }`}
-            onClick={logout}
-            type="button"
-          >
-            Sair
-          </button>
         </div>
       </header>
 
@@ -1854,12 +1953,11 @@ export default function HomePage() {
 
         <nav className="mt-5 space-y-2">
           <button className={navItemClass("meetings")} type="button" onClick={() => setActiveSection("meetings")}>
-            <span
-              className={`flex h-8 w-8 items-center justify-center rounded-md font-mono text-xs font-bold ${
-                isMeetingsHome ? "bg-[#4FC3F7] text-[#05070B]" : "bg-[#F97316] text-white"
-              }`}
-            >
-              M
+            <span className="flex h-8 w-8 items-center justify-center text-current">
+              <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
+                <rect height="14" rx="2" stroke="currentColor" strokeWidth="1.7" width="16" x="4" y="5" />
+                <path d="M8 9h8M8 13h5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.7" />
+              </svg>
             </span>
             Reunioes
           </button>
@@ -1871,20 +1969,28 @@ export default function HomePage() {
               void loadConversationSessions();
             }}
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-md border border-[#E7E7E2] font-mono text-xs">
-              C
+            <span className="flex h-8 w-8 items-center justify-center text-current">
+              <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
+                <path d="M7 8h10M7 12h6M6 18l-2 2V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" />
+              </svg>
             </span>
             Conversar com Coevo
           </button>
           <button className={navItemClass("coevo")} type="button" onClick={() => setActiveSection("coevo")}>
-            <span className="flex h-8 w-8 items-center justify-center rounded-md border border-[#E7E7E2] font-mono text-xs">
-              IA
+            <span className="flex h-8 w-8 items-center justify-center text-current">
+              <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
+                <path d="M12 3v3M12 18v3M4.8 7.2l2.1 2.1M17.1 14.7l2.1 2.1M3 12h3M18 12h3M4.8 16.8l2.1-2.1M17.1 9.3l2.1-2.1" stroke="currentColor" strokeLinecap="round" strokeWidth="1.7" />
+                <circle cx="12" cy="12" r="3.2" stroke="currentColor" strokeWidth="1.7" />
+              </svg>
             </span>
             Configurar Coevo
           </button>
           <button className={navItemClass("knowledge")} type="button" onClick={() => setActiveSection("knowledge")}>
-            <span className="flex h-8 w-8 items-center justify-center rounded-md border border-[#E7E7E2] font-mono text-xs">
-              B
+            <span className="flex h-8 w-8 items-center justify-center text-current">
+              <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
+                <path d="M6 5.5A2.5 2.5 0 0 1 8.5 3H19v16H8.5A2.5 2.5 0 0 0 6 21V5.5Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.7" />
+                <path d="M6 18.5A2.5 2.5 0 0 1 8.5 16H19" stroke="currentColor" strokeLinecap="round" strokeWidth="1.7" />
+              </svg>
             </span>
             Base institucional
           </button>
@@ -1897,8 +2003,11 @@ export default function HomePage() {
                 void loadSmartSpeakers();
               }}
             >
-              <span className="flex h-8 w-8 items-center justify-center rounded-md border border-[#E7E7E2] font-mono text-xs">
-                D
+              <span className="flex h-8 w-8 items-center justify-center text-current">
+                <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
+                  <rect height="14" rx="3" stroke="currentColor" strokeWidth="1.7" width="10" x="7" y="5" />
+                  <path d="M10 18h4M10 8h4M12 12v.01" stroke="currentColor" strokeLinecap="round" strokeWidth="1.7" />
+                </svg>
               </span>
               Smart Speakers
             </button>
@@ -1911,8 +2020,10 @@ export default function HomePage() {
               void loadTrialRequests();
             }}
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-md border border-[#E7E7E2] font-mono text-xs">
-              L
+            <span className="flex h-8 w-8 items-center justify-center text-current">
+              <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
+                <path d="M8 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM2 21c.7-3.6 2.8-6 6-6s5.3 2.4 6 6M16 7h6M19 4v6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" />
+              </svg>
             </span>
             Leads de teste
           </button>
@@ -1925,8 +2036,10 @@ export default function HomePage() {
                 void loadUsers();
               }}
             >
-              <span className="flex h-8 w-8 items-center justify-center rounded-md border border-[#E7E7E2] font-mono text-xs">
-                U
+              <span className="flex h-8 w-8 items-center justify-center text-current">
+                <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
+                  <path d="M16 19c0-2.2-1.8-4-4-4s-4 1.8-4 4M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM20 20c-.3-2.2-1.5-3.7-3.2-4.4M17 4.5a3 3 0 0 1 0 5.8" stroke="currentColor" strokeLinecap="round" strokeWidth="1.7" />
+                </svg>
               </span>
               Usuarios
             </button>
@@ -3356,7 +3469,53 @@ export default function HomePage() {
                       <h2 className="mt-2 font-display text-2xl font-semibold">
                         Como o Coevo se apresenta
                       </h2>
-                    <div className="grid gap-4 md:grid-cols-3">
+                      <div className="mt-5 flex flex-col gap-4 rounded-xl border border-[#E7E7E2] bg-[#FCFCFB] p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border border-[#E7E7E2] bg-white text-lg font-bold text-[#11110F]">
+                            {profile.logo_url ? (
+                              <img
+                                alt="Logo do cabecalho"
+                                className="h-full w-full object-cover"
+                                src={profile.logo_url}
+                              />
+                            ) : (
+                              "C"
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-[#11110F]">Logo do cabecalho</p>
+                            <p className="mt-1 max-w-md text-xs leading-5 text-[#73736B]">
+                              Esta imagem aparece no canto esquerdo do cabecalho apos o login.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <input
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handleCoevoLogoUpload}
+                            ref={coevoLogoRef}
+                            type="file"
+                          />
+                          <button
+                            className="rounded-lg border border-[#E7E7E2] bg-white px-4 py-2 text-xs font-bold text-[#11110F] transition hover:border-[#F97316] hover:bg-[#FFF3EA]"
+                            onClick={() => coevoLogoRef.current?.click()}
+                            type="button"
+                          >
+                            Enviar logo
+                          </button>
+                          {profile.logo_url ? (
+                            <button
+                              className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-xs font-bold text-red-700 transition hover:bg-red-100"
+                              onClick={() => setProfile((current) => ({ ...current, logo_url: null }))}
+                              type="button"
+                            >
+                              Remover
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    <div className="mt-5 grid gap-4 md:grid-cols-3">
                       <label>
                         <span className="mb-2 block text-sm font-semibold">Nome publico</span>
                         <input

@@ -253,6 +253,16 @@ def verify_agent_api_key(
         )
 
 
+def verify_app_or_agent_access(
+    authorization: str | None = Header(default=None),
+    x_agent_api_key: str | None = Header(default=None),
+) -> None:
+    if settings.agent_api_key and x_agent_api_key == settings.agent_api_key:
+        return
+
+    get_current_user_claims(authorization=authorization)
+
+
 def smart_speaker_expected_api_key() -> str | None:
     return settings.smart_speaker_api_key or settings.agent_api_key
 
@@ -734,17 +744,27 @@ async def upload_knowledge_media(
 
 
 @app.get("/agent/profile", response_model=AgentProfile)
-async def read_agent_profile() -> AgentProfile:
+async def read_agent_profile(
+    _: None = Depends(verify_app_or_agent_access),
+) -> AgentProfile:
     return await get_agent_profile(settings=settings)
 
 
 @app.put("/agent/profile", response_model=AgentProfile)
-async def save_agent_profile(profile: AgentProfile) -> AgentProfile:
+async def save_agent_profile(
+    profile: AgentProfile,
+    claims: AppUserClaims = Depends(get_current_user_claims),
+) -> AgentProfile:
+    _ = claims
     return await upsert_agent_profile(settings=settings, profile=profile)
 
 
 @app.post("/agent/voice-demo")
-async def create_voice_demo(payload: VoiceDemoRequest) -> Response:
+async def create_voice_demo(
+    payload: VoiceDemoRequest,
+    claims: AppUserClaims = Depends(get_current_user_claims),
+) -> Response:
+    _ = claims
     if not settings.openai_api_key:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
