@@ -589,7 +589,7 @@ export default function HomePage() {
   const [meetingHistory, setMeetingHistory] = useState<MeetingHistoryItem[]>([]);
   const [meetingHistoryStatus, setMeetingHistoryStatus] = useState<string | null>(null);
   const [isLoadingMeetingHistory, setIsLoadingMeetingHistory] = useState(false);
-  const [visibleMeetingHistoryCount, setVisibleMeetingHistoryCount] = useState(5);
+  const [visibleMeetingHistoryCount, setVisibleMeetingHistoryCount] = useState(3);
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [editingLeadId, setEditingLeadId] = useState<number | null>(null);
   const [leadForm, setLeadForm] = useState<LeadForm>(emptyLeadForm);
@@ -1073,7 +1073,7 @@ export default function HomePage() {
         throw new Error("Nao foi possivel carregar o historico.");
       }
       setMeetingHistory((await response.json()) as MeetingHistoryItem[]);
-      setVisibleMeetingHistoryCount(5);
+      setVisibleMeetingHistoryCount(3);
     } catch (err) {
       setMeetingHistoryStatus(err instanceof Error ? err.message : "Erro inesperado.");
     } finally {
@@ -1925,7 +1925,7 @@ export default function HomePage() {
 
       <section
         className={`relative z-10 min-h-screen px-5 sm:px-8 lg:ml-72 ${
-          isMeetingsHome ? "flex items-start pb-6 pt-20 lg:pt-20" : "pb-16 pt-32 lg:pt-32"
+          isMeetingsHome ? "flex items-start pb-6 pt-28 lg:pt-28" : "pb-16 pt-32 lg:pt-32"
         }`}
       >
         <div className="mx-auto w-full max-w-6xl">
@@ -1935,7 +1935,7 @@ export default function HomePage() {
                 Videochamadas Assistidas
               </h1>
 
-              <div className="mt-7 flex flex-col items-center justify-center gap-4 sm:flex-row">
+              <div className="mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
                 <button
                   className="rounded-lg bg-[#4FC3F7] px-7 py-4 text-base font-bold text-[#05070B] shadow-[0_0_34px_rgba(79,195,247,0.24)] transition hover:translate-y-[-1px] hover:shadow-[0_0_48px_rgba(79,195,247,0.38)] disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={isCreating}
@@ -2014,7 +2014,7 @@ export default function HomePage() {
                     <div className="divide-y divide-white/10">
                       {visibleMeetingHistory.map((meeting) => (
                         <article
-                          className="grid gap-4 px-5 py-3 transition hover:bg-white/[0.03] md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
+                          className="grid gap-4 px-5 py-4 transition hover:bg-white/[0.03] md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
                           key={meeting.id}
                         >
                           <div className="min-w-0">
@@ -2035,9 +2035,6 @@ export default function HomePage() {
                               <span className="text-white/25">|</span>
                               <span>{meetingMetaValue(meeting.client_name, "Cliente nao definido")}</span>
                             </div>
-                            <p className="mt-1 truncate font-mono text-[11px] text-[#5F7186]">
-                              {meeting.id}
-                            </p>
                           </div>
                           <div className="flex items-center gap-2 md:justify-end">
                             <span
@@ -2129,7 +2126,7 @@ export default function HomePage() {
                           <button
                             className="rounded-md border border-[#4FC3F7]/35 bg-[#4FC3F7]/10 px-4 py-2 font-mono text-xs uppercase text-[#BFEFFF] transition hover:bg-[#4FC3F7]/20"
                             onClick={() =>
-                              setVisibleMeetingHistoryCount((current) => current + 5)
+                              setVisibleMeetingHistoryCount((current) => current + 3)
                             }
                             type="button"
                           >
