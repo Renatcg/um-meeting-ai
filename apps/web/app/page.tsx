@@ -83,6 +83,11 @@ type MeetingListItem = {
 type MeetingHistoryItem = {
   id: string;
   title: string;
+  meeting_type?: string | null;
+  client_external_id?: string | null;
+  client_name?: string | null;
+  project_external_id?: string | null;
+  project_name?: string | null;
   created_at: string;
   started_at?: string | null;
   ended_at?: string | null;
@@ -584,6 +589,7 @@ export default function HomePage() {
   const [meetingHistory, setMeetingHistory] = useState<MeetingHistoryItem[]>([]);
   const [meetingHistoryStatus, setMeetingHistoryStatus] = useState<string | null>(null);
   const [isLoadingMeetingHistory, setIsLoadingMeetingHistory] = useState(false);
+  const [visibleMeetingHistoryCount, setVisibleMeetingHistoryCount] = useState(5);
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
   const [editingLeadId, setEditingLeadId] = useState<number | null>(null);
   const [leadForm, setLeadForm] = useState<LeadForm>(emptyLeadForm);
@@ -611,6 +617,8 @@ export default function HomePage() {
   const companyLinksRef = useRef<HTMLTextAreaElement | null>(null);
   const companyNotesRef = useRef<HTMLTextAreaElement | null>(null);
   const displayUser = sessionUser ?? defaultSessionUser;
+  const visibleMeetingHistory = meetingHistory.slice(0, visibleMeetingHistoryCount);
+  const hasMoreMeetingHistory = visibleMeetingHistoryCount < meetingHistory.length;
 
   useEffect(() => {
     const formattedDate = new Intl.DateTimeFormat("pt-BR", {
@@ -1060,11 +1068,12 @@ export default function HomePage() {
     setMeetingHistoryStatus(null);
 
     try {
-      const response = await fetch(`${apiUrl}/meetings/history?limit=12`);
+      const response = await fetch(`${apiUrl}/meetings/history?limit=50`);
       if (!response.ok) {
         throw new Error("Nao foi possivel carregar o historico.");
       }
       setMeetingHistory((await response.json()) as MeetingHistoryItem[]);
+      setVisibleMeetingHistoryCount(5);
     } catch (err) {
       setMeetingHistoryStatus(err instanceof Error ? err.message : "Erro inesperado.");
     } finally {
@@ -1193,14 +1202,25 @@ export default function HomePage() {
     }).format(new Date(value));
   }
 
-  function meetingStatusLabel(meeting: MeetingHistoryItem) {
-    if (meeting.ended_at) {
-      return "Encerrada";
+  function shortMeetingDate(value?: string | null) {
+    if (!value) {
+      return "Sem data";
     }
-    if (meeting.started_at) {
-      return "Em andamento";
-    }
-    return "Criada";
+
+    return new Intl.DateTimeFormat("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(value));
+  }
+
+  function metricTitle(label: string, count: number) {
+    return `${count} ${label}${count === 1 ? "" : "s"}`;
+  }
+
+  function meetingMetaValue(value?: string | null, fallback = "Nao informado") {
+    return value && value.trim() ? value : fallback;
   }
 
   function openNewLeadModal() {
@@ -1711,28 +1731,24 @@ export default function HomePage() {
       />
 
       <header
-        className={`fixed left-0 right-0 top-0 z-20 flex min-h-20 items-center justify-between border-b px-4 py-4 backdrop-blur-xl lg:left-72 lg:px-8 ${
+        className={`fixed left-0 right-0 top-0 z-20 flex items-center justify-between border-b px-4 backdrop-blur-xl lg:left-72 lg:px-8 ${
           isMeetingsHome
-            ? "border-white/10 bg-[#070A10]/88"
-            : "border-[#E7E7E2] bg-white/85"
+            ? "min-h-16 border-white/10 bg-[#070A10]/88 py-3"
+            : "min-h-20 border-[#E7E7E2] bg-white/85 py-4"
         }`}
       >
         <div className="flex items-center gap-4 lg:hidden">
           <p className="font-display text-lg font-semibold">Coevo</p>
         </div>
 
-        <div className="hidden lg:block">
-          <p
-            className={`font-mono text-xs uppercase ${
-              isMeetingsHome ? "text-[#4FC3F7]" : "text-[#F97316]"
-            }`}
-          >
-            Dashboard
-          </p>
-          <p className={`mt-1 text-sm ${isMeetingsHome ? "text-[#8EA2BA]" : "text-[#73736B]"}`}>
-            Videochamadas com Coevo
-          </p>
-        </div>
+        {isMeetingsHome ? (
+          <div className="hidden lg:block" />
+        ) : (
+          <div className="hidden lg:block">
+            <p className="font-mono text-xs uppercase text-[#F97316]">Dashboard</p>
+            <p className="mt-1 text-sm text-[#73736B]">Videochamadas com Coevo</p>
+          </div>
+        )}
 
         <div className="ml-auto flex items-center gap-3 sm:gap-5">
           <p
@@ -1779,7 +1795,7 @@ export default function HomePage() {
         }`}
       >
         <div
-          className={`flex items-center gap-3 border-b pb-7 ${
+          className={`flex items-center gap-3 border-b pb-5 ${
             isMeetingsHome ? "border-white/10" : "border-[#E7E7E2]"
           }`}
         >
@@ -1800,17 +1816,10 @@ export default function HomePage() {
             >
               Coevo
             </p>
-            <p
-              className={`font-mono text-xs uppercase ${
-                isMeetingsHome ? "text-[#4FC3F7]" : "text-[#F97316]"
-              }`}
-            >
-              Grupo Coevo
-            </p>
           </div>
         </div>
 
-        <nav className="mt-7 space-y-2">
+        <nav className="mt-5 space-y-2">
           <button className={navItemClass("meetings")} type="button" onClick={() => setActiveSection("meetings")}>
             <span
               className={`flex h-8 w-8 items-center justify-center rounded-md font-mono text-xs font-bold ${
@@ -1914,21 +1923,19 @@ export default function HomePage() {
         </div>
       </aside>
 
-      <section className="relative z-10 min-h-screen px-5 pb-16 pt-32 sm:px-8 lg:ml-72 lg:pt-32">
-        <div className="mx-auto max-w-6xl">
+      <section
+        className={`relative z-10 min-h-screen px-5 sm:px-8 lg:ml-72 ${
+          isMeetingsHome ? "flex items-start pb-6 pt-20 lg:pt-20" : "pb-16 pt-32 lg:pt-32"
+        }`}
+      >
+        <div className="mx-auto w-full max-w-6xl">
           {activeSection === "meetings" ? (
             <div className="text-center">
-              <p className="mx-auto mb-5 inline-flex rounded-full border border-[#4FC3F7]/35 bg-[#4FC3F7]/10 px-4 py-2 font-mono text-xs uppercase text-[#BFEFFF] shadow-[0_0_24px_rgba(79,195,247,0.12)]">
-                Reunioes Coevo
-              </p>
-              <h1 className="mx-auto max-w-4xl font-display text-5xl font-semibold leading-tight text-white md:text-6xl">
+              <h1 className="mx-auto max-w-4xl font-display text-4xl font-semibold leading-tight text-white md:text-5xl">
                 Videochamadas Assistidas
               </h1>
-              <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-[#8EA2BA]">
-                Grupo Coevo
-              </p>
 
-              <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+              <div className="mt-7 flex flex-col items-center justify-center gap-4 sm:flex-row">
                 <button
                   className="rounded-lg bg-[#4FC3F7] px-7 py-4 text-base font-bold text-[#05070B] shadow-[0_0_34px_rgba(79,195,247,0.24)] transition hover:translate-y-[-1px] hover:shadow-[0_0_48px_rgba(79,195,247,0.38)] disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={isCreating}
@@ -1952,9 +1959,9 @@ export default function HomePage() {
                 </p>
               ) : null}
 
-              <div className="mx-auto mt-12 h-px max-w-3xl bg-gradient-to-r from-transparent via-[#4FC3F7]/25 to-transparent" />
+              <div className="mx-auto mt-8 h-px max-w-3xl bg-gradient-to-r from-transparent via-[#4FC3F7]/25 to-transparent" />
 
-              <section className="mx-auto mt-10 max-w-3xl text-left">
+              <section className="mx-auto mt-7 max-w-4xl text-left">
                 <div className="mb-4 flex items-center justify-between gap-4">
                   <h2 className="font-display text-xl font-semibold text-white">
                     Reunioes para as quais voce foi convidado
@@ -1978,19 +1985,14 @@ export default function HomePage() {
                 </div>
               </section>
 
-              <section className="mx-auto mt-8 max-w-3xl text-left">
+              <section className="mx-auto mt-6 max-w-4xl text-left">
                 <div className="mb-4 flex items-center justify-between gap-4">
                   <h2 className="font-display text-xl font-semibold text-white">
                     Historico das reunioes que participou
                   </h2>
-                  <button
-                    className="rounded-md border border-white/10 bg-white/5 px-3 py-2 font-mono text-xs uppercase text-[#B8C7D9] transition hover:border-[#4FC3F7] hover:bg-[#4FC3F7]/10 hover:text-white"
-                    disabled={isLoadingMeetingHistory}
-                    onClick={loadMeetingHistory}
-                    type="button"
-                  >
-                    {isLoadingMeetingHistory ? "Atualizando" : "Atualizar"}
-                  </button>
+                  <p className="font-mono text-xs uppercase text-[#8EA2BA]">
+                    {meetingHistory.length} registros
+                  </p>
                 </div>
 
                 <div className="overflow-hidden rounded-xl border border-white/10 bg-[#070A10]/92 shadow-[0_24px_90px_rgba(0,0,0,0.35)] backdrop-blur-xl">
@@ -2010,9 +2012,9 @@ export default function HomePage() {
                     </div>
                   ) : (
                     <div className="divide-y divide-white/10">
-                      {meetingHistory.map((meeting) => (
+                      {visibleMeetingHistory.map((meeting) => (
                         <article
-                          className="grid gap-4 px-5 py-4 transition hover:bg-white/[0.03] md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
+                          className="grid gap-4 px-5 py-3 transition hover:bg-white/[0.03] md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
                           key={meeting.id}
                         >
                           <div className="min-w-0">
@@ -2020,41 +2022,121 @@ export default function HomePage() {
                               <p className="truncate text-sm font-bold text-white">
                                 {meeting.title}
                               </p>
-                              <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-bold uppercase text-[#B8C7D9]">
-                                {meetingStatusLabel(meeting)}
-                              </span>
                               {meeting.recording_url ? (
                                 <span className="rounded-full border border-[#4FC3F7]/35 bg-[#4FC3F7]/10 px-2 py-1 text-[11px] font-bold uppercase text-[#8EDCFF]">
                                   Gravada
                                 </span>
                               ) : null}
                             </div>
-                            <p className="mt-2 font-mono text-xs text-[#8EA2BA]">
+                            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#8EA2BA]">
+                              <span className="font-mono">{shortMeetingDate(meeting.created_at)}</span>
+                              <span className="text-white/25">|</span>
+                              <span>{meetingMetaValue(meeting.meeting_type, "Tipo nao definido")}</span>
+                              <span className="text-white/25">|</span>
+                              <span>{meetingMetaValue(meeting.client_name, "Cliente nao definido")}</span>
+                            </div>
+                            <p className="mt-1 truncate font-mono text-[11px] text-[#5F7186]">
                               {meeting.id}
                             </p>
-                            <p className="mt-2 text-xs text-[#8EA2BA]">
-                              Criada em {formatMeetingDate(meeting.created_at)}
-                              {meeting.ended_at
-                                ? ` - encerrada em ${formatMeetingDate(meeting.ended_at)}`
-                                : ""}
-                            </p>
                           </div>
-                          <div className="flex flex-wrap gap-2 md:justify-end">
-                            <span className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-[#B8C7D9]">
-                              {meeting.participant_count} participante
-                              {meeting.participant_count === 1 ? "" : "s"}
+                          <div className="flex items-center gap-2 md:justify-end">
+                            <span
+                              className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-xs text-[#B8C7D9] transition hover:border-[#4FC3F7]/60 hover:bg-[#4FC3F7]/10 hover:text-[#BFEFFF]"
+                              title={metricTitle("participante", meeting.participant_count)}
+                            >
+                              <svg
+                                aria-hidden="true"
+                                className="h-4 w-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  d="M16 19c0-2.2-1.8-4-4-4s-4 1.8-4 4"
+                                  stroke="currentColor"
+                                  strokeLinecap="round"
+                                  strokeWidth="1.6"
+                                />
+                                <circle
+                                  cx="12"
+                                  cy="8"
+                                  r="3"
+                                  stroke="currentColor"
+                                  strokeWidth="1.6"
+                                />
+                                <path
+                                  d="M19 18c-.2-1.7-1.3-3.1-2.8-3.7M17 6.5a2.5 2.5 0 0 1 0 5"
+                                  stroke="currentColor"
+                                  strokeLinecap="round"
+                                  strokeWidth="1.6"
+                                />
+                              </svg>
                             </span>
-                            <span className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-[#B8C7D9]">
-                              {meeting.transcript_count} transcricao
-                              {meeting.transcript_count === 1 ? "" : "s"}
+                            <span
+                              className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-xs text-[#B8C7D9] transition hover:border-[#4FC3F7]/60 hover:bg-[#4FC3F7]/10 hover:text-[#BFEFFF]"
+                              title={metricTitle("transcricao", meeting.transcript_count)}
+                            >
+                              <svg
+                                aria-hidden="true"
+                                className="h-4 w-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  d="M7 7h10M7 11h10M7 15h6"
+                                  stroke="currentColor"
+                                  strokeLinecap="round"
+                                  strokeWidth="1.6"
+                                />
+                                <rect
+                                  height="16"
+                                  rx="3"
+                                  stroke="currentColor"
+                                  strokeWidth="1.6"
+                                  width="14"
+                                  x="5"
+                                  y="4"
+                                />
+                              </svg>
                             </span>
-                            <span className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-[#B8C7D9]">
-                              {meeting.memory_count} memoria
-                              {meeting.memory_count === 1 ? "" : "s"}
+                            <span
+                              className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-xs text-[#B8C7D9] transition hover:border-[#4FC3F7]/60 hover:bg-[#4FC3F7]/10 hover:text-[#BFEFFF]"
+                              title={metricTitle("memoria", meeting.memory_count)}
+                            >
+                              <svg
+                                aria-hidden="true"
+                                className="h-4 w-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  d="M8 8a4 4 0 0 1 8 0v8a4 4 0 0 1-8 0V8Z"
+                                  stroke="currentColor"
+                                  strokeWidth="1.6"
+                                />
+                                <path
+                                  d="M8 11H5m14 0h-3M8 15H5m14 0h-3M10 6V3m4 3V3m-4 18v-3m4 3v-3"
+                                  stroke="currentColor"
+                                  strokeLinecap="round"
+                                  strokeWidth="1.6"
+                                />
+                              </svg>
                             </span>
                           </div>
                         </article>
                       ))}
+                      {hasMoreMeetingHistory ? (
+                        <div className="px-5 py-4 text-center">
+                          <button
+                            className="rounded-md border border-[#4FC3F7]/35 bg-[#4FC3F7]/10 px-4 py-2 font-mono text-xs uppercase text-[#BFEFFF] transition hover:bg-[#4FC3F7]/20"
+                            onClick={() =>
+                              setVisibleMeetingHistoryCount((current) => current + 5)
+                            }
+                            type="button"
+                          >
+                            Carregar mais
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   )}
                 </div>
